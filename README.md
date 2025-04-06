@@ -15,13 +15,18 @@ A low-latency guitar amp pass-through with gain control, built in Rust using JAC
 
 ## Running
 
-Run with default gain (1.5x):  
-`./target/release/rustortion`
+Run with default gain (1x):  
+`cargo run`
 
 Or specify a custom gain:  
-`./target/release/rustortion 2.0`
+`cargo run -- --gain 2.0`
 
 💡 Gain values around `1.0`–`2.0` work well. Values above `1.0` will boost volume and distortion.
+
+Use the recording flag to save the output to a file:
+`cargo run -- --recording`
+
+Recordings are saved in the /recordings directory with a timestamp in the filename.
 
 ## Notes
 
@@ -34,3 +39,4 @@ Or specify a custom gain:
 - Add real distortion effects (soft/hard clipping)
 - Real-time gain control
 - Cabinet IR loading
+- Load amp settings from config file (e.g. gain, EQ, filters)
