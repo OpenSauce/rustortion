@@ -23,7 +23,7 @@ Or specify a custom gain:
 
 💡 Gain values around `1.0`–`2.0` work well. Values above `1.0` will boost volume and distortion.
 
-Use the recording flag to save the output to a file:
+Use the recording flag to save the output to a file:  
 `cargo run -- --recording`
 
 Recordings are saved in the /recordings directory with a timestamp in the filename.
