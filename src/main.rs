@@ -14,20 +14,30 @@ mod processor;
 
 use processor::Processor;
 
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(name = "rustortion")]
+#[command(author = "OpenSauce")]
+#[command(version = "0.1")]
+#[command(about = "A metal-mode JACK amp sim with optional WAV recording.")]
+struct Args {
+    #[arg(long, default_value_t = 1.0)]
+    gain: f32,
+
+    #[arg(long)]
+    recording: bool,
+}
+
 fn main() {
     unsafe {
         env::set_var("PIPEWIRE_LATENCY", "64/48000");
         env::set_var("JACK_PROMISCUOUS_SERVER", "pipewire");
     }
 
-    let args: Vec<String> = env::args().skip(1).collect();
-
-    let gain: f32 = args
-        .iter()
-        .find_map(|arg| arg.parse::<f32>().ok())
-        .unwrap_or(1.0);
-
-    let recording = args.iter().any(|arg| arg == "--recording");
+    let args = Args::parse();
+    let gain = args.gain;
+    let recording = args.recording;
 
     if recording {
         std::fs::create_dir_all("./recordings").unwrap();
