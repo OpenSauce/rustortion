@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 jack = "0.10"
+hound = "3.5"
+ctrlc = "3.4"
+chrono = "0.4"

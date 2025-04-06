@@ -1,57 +1,74 @@
-use jack::{AudioIn, AudioOut, Client, ClientOptions, Control, ProcessScope};
-use std::{env, thread, time::Duration};
+use jack::{Client, ClientOptions};
+use std::{
+    env,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::Duration,
+};
+
+mod amp;
+mod processor;
+
+use processor::Processor;
 
 fn main() {
-    // Set latency env vars early
     unsafe {
         env::set_var("PIPEWIRE_LATENCY", "64/48000");
         env::set_var("JACK_PROMISCUOUS_SERVER", "pipewire");
     }
 
-    // Optional gain factor from CLI
-    let gain: f32 = env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(1.5); // default to 1.5x gain
+    let args: Vec<String> = env::args().skip(1).collect();
+
+    let gain: f32 = args
+        .iter()
+        .find_map(|arg| arg.parse::<f32>().ok())
+        .unwrap_or(1.0);
+
+    let recording = args.iter().any(|arg| arg == "--recording");
+
+    if recording {
+        std::fs::create_dir_all("./recordings").unwrap();
+    }
 
     let (client, _status) = Client::new("rustortion", ClientOptions::NO_START_SERVER).unwrap();
-    let in_port = client.register_port("in", AudioIn).unwrap();
-    let mut out_l = client.register_port("out_l", AudioOut).unwrap();
-    let mut out_r = client.register_port("out_r", AudioOut).unwrap();
 
-    // Auto-connect
-    let _ = client.connect_ports_by_name("system:capture_1", "rustortion:in");
-    let _ = client.connect_ports_by_name("rustortion:out_l", "system:playback_1");
-    let _ = client.connect_ports_by_name("rustortion:out_r", "system:playback_2");
-
-    // DSP process callback
-    let process = move |_: &jack::Client, ps: &ProcessScope| -> Control {
-        let in_buf = in_port.as_slice(ps);
-        let out_buf_l = out_l.as_mut_slice(ps);
-        let out_buf_r = out_r.as_mut_slice(ps);
-
-        for ((l, r), input) in out_buf_l
-            .iter_mut()
-            .zip(out_buf_r.iter_mut())
-            .zip(in_buf.iter())
-        {
-            // Apply gain and clamp to avoid hard clipping
-            let boosted = *input * gain;
-            let clamped = boosted.clamp(-1.0, 1.0);
-            *l = clamped;
-            *r = clamped;
-        }
-
-        Control::Continue
-    };
+    let (processor, _amp, writer) = Processor::new(&client, gain, recording);
+    let process = processor.into_process_handler();
 
     let _active_client = client
         .activate_async(Notifications, jack::ClosureProcessHandler::new(process))
         .unwrap();
 
-    println!("Stereo output active with gain {:.2}!", gain);
+    println!(
+        "🔥 Rustortion: Metal mode active (gain {:.2}){}!",
+        gain,
+        if recording { " [🎙 recording]" } else { "" }
+    );
 
-    loop {
+    let running = Arc::new(AtomicBool::new(true));
+    let r = Arc::clone(&running);
+    let writer_clone = writer.clone();
+
+    ctrlc::set_handler(move || {
+        println!("\n🛑 Ctrl+C received, shutting down...");
+
+        if let Some(writer_arc) = &writer_clone {
+            if let Ok(mut maybe_writer) = writer_arc.lock() {
+                if let Some(writer) = maybe_writer.take() {
+                    writer.finalize().expect("Failed to finalize WAV file");
+                    println!("💾 Recording saved to recording.wav");
+                }
+            }
+        }
+
+        r.store(false, Ordering::SeqCst);
+    })
+    .expect("Error setting Ctrl+C handler");
+
+    while running.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_secs(1));
     }
 }
