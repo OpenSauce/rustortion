@@ -14,11 +14,7 @@ pub struct Processor {
 }
 
 impl Processor {
-    pub fn new(
-        client: &Client,
-        gain: f32,
-        recording: bool,
-    ) -> (Self, Arc<Mutex<Amp>>, RecordingWriter) {
+    pub fn new(client: &Client, amp: Arc<Mutex<Amp>>, recording: bool) -> (Self, RecordingWriter) {
         let in_port = client.register_port("in", AudioIn).unwrap();
         let out_l = client.register_port("out_l", AudioOut).unwrap();
         let out_r = client.register_port("out_r", AudioOut).unwrap();
@@ -28,7 +24,6 @@ impl Processor {
         let _ = client.connect_ports_by_name("rustortion:out_r", "system:playback_2");
 
         let sample_rate = client.sample_rate() as f32;
-        let amp = Arc::new(Mutex::new(Amp::new(gain, sample_rate)));
 
         let writer = if recording {
             let spec = hound::WavSpec {
@@ -49,13 +44,12 @@ impl Processor {
 
         (
             Self {
-                amp: Arc::clone(&amp),
+                amp,
                 writer: writer.clone(),
                 in_port,
                 out_l,
                 out_r,
             },
-            amp,
             writer,
         )
     }

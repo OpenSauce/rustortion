@@ -2,7 +2,7 @@ use jack::{Client, ClientOptions};
 use std::{
     env,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     thread,
@@ -12,9 +12,9 @@ use std::{
 mod amp;
 mod processor;
 
-use processor::Processor;
-
+use amp::{Amp, DistortionMode};
 use clap::Parser;
+use processor::Processor;
 
 #[derive(Parser, Debug)]
 #[command(name = "rustortion")]
@@ -27,6 +27,9 @@ struct Args {
 
     #[arg(long)]
     recording: bool,
+
+    #[arg(long, env = "RUSTORTION_MODE", default_value_t = DistortionMode::Tanh)]
+    mode: DistortionMode,
 }
 
 fn main() {
@@ -45,7 +48,9 @@ fn main() {
 
     let (client, _status) = Client::new("rustortion", ClientOptions::NO_START_SERVER).unwrap();
 
-    let (processor, _amp, writer) = Processor::new(&client, gain, recording);
+    let sample_rate = client.sample_rate() as f32;
+    let amp = Arc::new(Mutex::new(Amp::new(gain, sample_rate, args.mode)));
+    let (processor, writer) = Processor::new(&client, Arc::clone(&amp), recording);
     let process = processor.into_process_handler();
 
     let _active_client = client
@@ -53,8 +58,9 @@ fn main() {
         .unwrap();
 
     println!(
-        "🔥 Rustortion: Metal mode active (gain {:.2}){}!",
+        "🔥 Rustortion: Metal mode active (gain {:.2}, mode: {}){}!",
         gain,
+        args.mode,
         if recording { " [🎙 recording]" } else { "" }
     );
 
