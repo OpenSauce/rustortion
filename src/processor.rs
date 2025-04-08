@@ -89,7 +89,7 @@ impl Processor {
 
         // Downsampler (1 / 2x = 0.5)
         let downsampler = SincFixedIn::<f32>::new(
-            1.0 as f64 / oversample_factor as f64,
+            1.0_f64 / oversample_factor as f64,
             1.0,
             down_interp_params,
             (max_chunk_size as f32 * oversample_factor) as usize,
