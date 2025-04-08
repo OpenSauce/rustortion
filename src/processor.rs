@@ -1,9 +1,13 @@
 use crate::amp::Amp;
 use jack::{AudioIn, AudioOut, Client, Control, Port, ProcessScope};
-use std::sync::{Arc, Mutex};
+use rubato::{
+    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+};
+use std::fs::File;
+use std::io::BufWriter;
+use std::sync::{Arc, Mutex, MutexGuard};
 
-pub type RecordingWriter =
-    Option<Arc<Mutex<Option<hound::WavWriter<std::io::BufWriter<std::fs::File>>>>>>;
+pub type RecordingWriter = Option<Arc<Mutex<Option<hound::WavWriter<BufWriter<File>>>>>>;
 
 pub struct Processor {
     amp: Arc<Mutex<Amp>>,
@@ -11,6 +15,8 @@ pub struct Processor {
     in_port: Port<AudioIn>,
     out_l: Port<AudioOut>,
     out_r: Port<AudioOut>,
+    upsampler: SincFixedIn<f32>,
+    downsampler: SincFixedIn<f32>,
 }
 
 impl Processor {
@@ -42,6 +48,55 @@ impl Processor {
             None
         };
 
+        // ---------------------------------------
+        // Initialize rubato resamplers
+        // We'll assume mono input (1 channel).
+        // For stereo in/out, you'd set `channels = 2` and handle that carefully.
+        // ---------------------------------------
+        let channels = 1;
+        let oversample_factor: f32 = 2.0;
+
+        // The JACK buffer size can vary, but often is consistent (e.g., 128 or 256).
+        // We'll guess an upper bound chunk size for rubato.
+        // You may need to experiment or query the client for frames per period.
+        let max_chunk_size = 64;
+
+        // Common interpolation parameters:
+        let interp_params = SincInterpolationParameters {
+            sinc_len: 256,
+            f_cutoff: 0.95,
+            interpolation: SincInterpolationType::Cubic,
+            oversampling_factor: 160,
+            window: WindowFunction::BlackmanHarris2,
+        };
+        let down_interp_params = SincInterpolationParameters {
+            sinc_len: 256,
+            f_cutoff: 0.95,
+            interpolation: SincInterpolationType::Cubic,
+            oversampling_factor: 160,
+            window: WindowFunction::BlackmanHarris2,
+        };
+
+        // 2x upsampler
+        let upsampler = SincFixedIn::<f32>::new(
+            oversample_factor as f64, // The resample ratio
+            1.0,                      // Tolerance
+            interp_params,
+            max_chunk_size as usize, // max upsampled chunk size
+            channels,
+        )
+        .unwrap();
+
+        // Downsampler (1 / 2x = 0.5)
+        let downsampler = SincFixedIn::<f32>::new(
+            1.0 as f64 / oversample_factor as f64,
+            1.0,
+            down_interp_params,
+            (max_chunk_size as f32 * oversample_factor) as usize,
+            channels,
+        )
+        .unwrap();
+
         (
             Self {
                 amp,
@@ -49,6 +104,8 @@ impl Processor {
                 in_port,
                 out_l,
                 out_r,
+                upsampler,
+                downsampler,
             },
             writer,
         )
@@ -63,30 +120,72 @@ impl Processor {
             in_port,
             mut out_l,
             mut out_r,
+            mut upsampler,
+            mut downsampler,
         } = self;
 
-        move |_: &Client, ps: &ProcessScope| -> Control {
+        move |_client: &Client, ps: &ProcessScope| -> Control {
+            let n_frames = ps.n_frames() as usize; // frames in this callback
             let in_buf = in_port.as_slice(ps);
+
             let out_buf_l = out_l.as_mut_slice(ps);
             let out_buf_r = out_r.as_mut_slice(ps);
 
-            let mut writer_guard = writer.as_ref().map(|w| w.lock().unwrap());
+            let mut input_frames = vec![Vec::with_capacity(n_frames); 1];
+            input_frames[0].extend_from_slice(in_buf);
 
-            for ((l, r), input) in out_buf_l
-                .iter_mut()
-                .zip(out_buf_r.iter_mut())
-                .zip(in_buf.iter())
+            let mut upsampled = match upsampler.process(&input_frames, None) {
+                Ok(data) => data,
+                Err(e) => {
+                    eprintln!("Upsampler error: {e}");
+                    vec![Vec::new()]
+                }
+            };
+
+            if upsampled[0].is_empty() {
+                eprintln!("Upsampler returned an empty buffer");
+            }
+
             {
-                let out = amp.lock().unwrap().process_sample(*input);
-                *l = out;
-                *r = out;
+                let mut amp_guard: MutexGuard<'_, Amp> = amp.lock().unwrap();
+                let upsampled_channel = &mut upsampled[0];
+                for sample in upsampled_channel.iter_mut() {
+                    *sample = amp_guard.process_sample(*sample);
+                }
+            }
 
-                if let Some(writer_mutex) = &mut writer_guard {
-                    if let Some(ref mut writer) = **writer_mutex {
-                        let sample =
-                            (out * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
-                        writer.write_sample(sample).unwrap();
-                        writer.write_sample(sample).unwrap();
+            let downsampled = match downsampler.process(&upsampled, None) {
+                Ok(data) => data,
+                Err(e) => {
+                    eprintln!("Downsampler error: {e}");
+                    vec![Vec::new()]
+                }
+            };
+
+            if downsampled[0].is_empty() {
+                eprintln!("Downsampler returned an empty buffer");
+            }
+
+            let final_samples = &downsampled[0];
+            let frames_to_copy = final_samples.len().min(n_frames);
+
+            for i in 0..n_frames {
+                let out_sample = if i < frames_to_copy {
+                    final_samples[i]
+                } else {
+                    0.0
+                };
+                out_buf_l[i] = out_sample;
+                out_buf_r[i] = out_sample;
+            }
+
+            if let Some(mut writer_mutex) = writer.as_ref().map(|w| w.lock().unwrap()) {
+                if let Some(ref mut writer) = *writer_mutex {
+                    for &s in final_samples.iter().take(frames_to_copy) {
+                        let sample_i16 =
+                            (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                        writer.write_sample(sample_i16).unwrap(); // left
+                        writer.write_sample(sample_i16).unwrap(); // right
                     }
                 }
             }

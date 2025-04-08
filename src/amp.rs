@@ -28,13 +28,14 @@ pub struct Amp {
     lowpass_prev: f32,
     highpass_alpha: f32,
     highpass_prev: f32,
+    distorted_prev: f32,
     mode: DistortionMode,
 }
 
 impl Amp {
     pub fn new(gain: f32, sample_rate: f32, mode: DistortionMode) -> Self {
-        let lowpass_cutoff = 12000.0;
-        let highpass_cutoff = 100.0;
+        let lowpass_cutoff = 6000.0;
+        let highpass_cutoff = 120.0;
 
         let rc_lp = 1.0 / (2.0 * PI * lowpass_cutoff);
         let alpha_lp = (1.0 / sample_rate) / (rc_lp + (1.0 / sample_rate));
@@ -44,12 +45,13 @@ impl Amp {
 
         Self {
             gain,
-            drive: 20.0,
+            drive: 50.0,
             gate_threshold: 0.02,
             lowpass_alpha: alpha_lp,
             lowpass_prev: 0.0,
             highpass_alpha: alpha_hp,
             highpass_prev: 0.0,
+            distorted_prev: 0.0,
             mode,
         }
     }
@@ -65,11 +67,13 @@ impl Amp {
         let distorted = match self.mode {
             DistortionMode::Tanh => gated.tanh(),
             DistortionMode::HardClip => gated.clamp(-1.0, 1.0),
-            DistortionMode::Asymmetric => gated.tanh() + 0.2 * gated,
+            DistortionMode::Asymmetric => gated.tanh() + 0.3 * gated,
             DistortionMode::Sigmoid => gated / (1.0 + gated.abs()),
         };
 
-        let highpassed = self.highpass_alpha * (self.highpass_prev + distorted - input);
+        let highpassed =
+            self.highpass_alpha * (self.highpass_prev + distorted - self.distorted_prev);
+        self.distorted_prev = distorted;
         self.highpass_prev = highpassed;
 
         let filtered = self.lowpass_prev + self.lowpass_alpha * (highpassed - self.lowpass_prev);
