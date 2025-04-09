@@ -31,13 +31,7 @@ struct Args {
     #[arg(long)]
     preset_path: String,
 }
-fn load_amp_config(path: &str) -> std::io::Result<AmpConfig> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let config: AmpConfig =
-        from_reader(reader).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    Ok(config)
-}
+
 fn main() {
     unsafe {
         env::set_var("PIPEWIRE_LATENCY", "64/48000");
@@ -93,6 +87,14 @@ fn main() {
     while running.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_secs(1));
     }
+}
+
+fn load_amp_config(path: &str) -> std::io::Result<AmpConfig> {
+    let file = File::open(path)?;
+    let reader = BufReader::new(file);
+    let config: AmpConfig =
+        from_reader(reader).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    Ok(config)
 }
 
 struct Notifications;
