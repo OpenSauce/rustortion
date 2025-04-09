@@ -5,8 +5,7 @@ A basic low-latency guitar amp simulator, built in Rust using JACK (via PipeWire
 ## Requirements
 
 - Linux with PipeWire (with JACK support enabled)
-- `libjack` and JACK tools installed:  
-  `sudo apt install libjack-jackd2-dev jackd2 jack-tools`
+- `libjack` and JACK tools installed
 - Rust: [https://rust-lang.org/tools/install](https://rust-lang.org/tools/install)
 
 ## Building
@@ -21,7 +20,7 @@ Pass the path to the preset file as an argument:
 Use the recording flag to save the output to a file:  
 `cargo run -- --recording`
 
-Recordings are saved in the /recordings directory with a timestamp in the filename.
+Recordings are saved in the /recordings directory with a time-stamp in the filename.
 
 ## TODO
 

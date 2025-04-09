@@ -1,0 +1,9 @@
+
+{
+  "gain": 1.0,
+  "drive": 5.0,
+  "gate_threshold": 0.02,
+  "lowpass_cutoff": 6000.0,
+  "highpass_cutoff": 120.0,
+  "mode": "Sigmoid"
+}
