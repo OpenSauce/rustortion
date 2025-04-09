@@ -14,7 +14,7 @@ A basic low-latency guitar amp simulator, built in Rust using JACK (via PipeWire
 
 ## Running
 
-Pass the path to the preset file as an argument:
+Pass the path to the preset file as an argument:  
 `cargo run -- --preset-path presets/metal.json`
 
 Use the recording flag to save the output to a file:  
