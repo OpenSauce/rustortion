@@ -50,20 +50,11 @@ impl Processor {
             None
         };
 
-        // ---------------------------------------
-        // Initialize rubato resamplers
-        // We'll assume mono input (1 channel).
-        // For stereo in/out, you'd set `channels = 2` and handle that carefully.
-        // ---------------------------------------
         let channels = 1;
         let oversample_factor: f32 = 2.0;
 
-        // The JACK buffer size can vary, but often is consistent (e.g., 128 or 256).
-        // We'll guess an upper bound chunk size for rubato.
-        // You may need to experiment or query the client for frames per period.
         let max_chunk_size = 64;
 
-        // Common interpolation parameters:
         let interp_params = SincInterpolationParameters {
             sinc_len: 256,
             f_cutoff: 0.95,
