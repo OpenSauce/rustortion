@@ -1,7 +1,8 @@
 use clap::ValueEnum;
+use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
-use std::fmt;
-#[derive(ValueEnum, Copy, Clone, Debug)]
+
+#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum DistortionMode {
     Tanh,
     HardClip,
@@ -9,17 +10,6 @@ pub enum DistortionMode {
     Sigmoid,
 }
 
-impl fmt::Display for DistortionMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            DistortionMode::Tanh => "tanh",
-            DistortionMode::HardClip => "hardclip",
-            DistortionMode::Asymmetric => "asymmetric",
-            DistortionMode::Sigmoid => "sigmoid",
-        };
-        write!(f, "{s}")
-    }
-}
 pub struct Amp {
     gain: f32,
     drive: f32,
@@ -32,10 +22,26 @@ pub struct Amp {
     mode: DistortionMode,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct AmpConfig {
+    pub gain: f32,
+    pub drive: f32,
+    pub gate_threshold: f32,
+    pub lowpass_cutoff: f32,
+    pub highpass_cutoff: f32,
+    pub mode: DistortionMode,
+}
+
 impl Amp {
-    pub fn new(gain: f32, sample_rate: f32, mode: DistortionMode) -> Self {
-        let lowpass_cutoff = 6000.0;
-        let highpass_cutoff = 120.0;
+    pub fn new(config: AmpConfig, sample_rate: f32) -> Self {
+        let AmpConfig {
+            gain,
+            drive,
+            gate_threshold,
+            lowpass_cutoff,
+            highpass_cutoff,
+            mode,
+        } = config;
 
         let rc_lp = 1.0 / (2.0 * PI * lowpass_cutoff);
         let alpha_lp = (1.0 / sample_rate) / (rc_lp + (1.0 / sample_rate));
@@ -45,11 +51,11 @@ impl Amp {
 
         Self {
             gain,
-            drive: 50.0,
-            gate_threshold: 0.02,
+            drive,
+            gate_threshold,
             lowpass_alpha: alpha_lp,
-            lowpass_prev: 0.0,
             highpass_alpha: alpha_hp,
+            lowpass_prev: 0.0,
             highpass_prev: 0.0,
             distorted_prev: 0.0,
             mode,

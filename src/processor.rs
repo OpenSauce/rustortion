@@ -1,4 +1,5 @@
 use crate::amp::Amp;
+use hound::WavWriter;
 use jack::{AudioIn, AudioOut, Client, Control, Port, ProcessScope};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
@@ -7,7 +8,7 @@ use std::fs::File;
 use std::io::BufWriter;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-pub type RecordingWriter = Option<Arc<Mutex<Option<hound::WavWriter<BufWriter<File>>>>>>;
+pub type RecordingWriter = Option<Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>>;
 
 pub struct Processor {
     amp: Arc<Mutex<Amp>>,
@@ -42,6 +43,7 @@ impl Processor {
                 "./recordings/recording_{}.wav",
                 chrono::Local::now().format("%Y%m%d_%H%M%S")
             );
+            println!("Recording to: {}", filename);
             let writer = hound::WavWriter::create(filename, spec).unwrap();
             Some(Arc::new(Mutex::new(Some(writer))))
         } else {
@@ -77,7 +79,6 @@ impl Processor {
             window: WindowFunction::BlackmanHarris2,
         };
 
-        // 2x upsampler
         let upsampler = SincFixedIn::<f32>::new(
             oversample_factor as f64, // The resample ratio
             1.0,                      // Tolerance
@@ -87,7 +88,6 @@ impl Processor {
         )
         .unwrap();
 
-        // Downsampler (1 / 2x = 0.5)
         let downsampler = SincFixedIn::<f32>::new(
             1.0_f64 / oversample_factor as f64,
             1.0,
