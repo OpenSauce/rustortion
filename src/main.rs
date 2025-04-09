@@ -23,7 +23,7 @@ use processor::Processor;
 #[command(name = "rustortion")]
 #[command(author = "OpenSauce")]
 #[command(version = "0.1")]
-#[command(about = "A metal-mode JACK amp sim with optional WAV recording.")]
+#[command(about = "An amp sim with optional WAV recording.")]
 struct Args {
     #[arg(long)]
     recording: bool,
