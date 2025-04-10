@@ -71,8 +71,8 @@ impl Processor {
         };
 
         let upsampler = SincFixedIn::<f32>::new(
-            oversample_factor as f64,
-            1.0,
+            oversample_factor as f64, // The resample ratio
+            1.0,                      // Tolerance
             interp_params,
             max_chunk_size as usize,
             channels,

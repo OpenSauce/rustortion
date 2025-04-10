@@ -1,8 +1,9 @@
 {
-  "gain": 10.0,
+  "gain": 2.0,
   "drive": 50.0,
   "gate_threshold": 0.02,
   "lowpass_cutoff": 6000.0,
   "highpass_cutoff": 120.0,
-  "mode": "Sigmoid"
+  "mode": "Polynomial",
+  "level": 0.5
 }
