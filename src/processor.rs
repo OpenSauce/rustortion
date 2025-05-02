@@ -6,12 +6,12 @@ use rubato::{
 };
 use std::fs::File;
 use std::io::BufWriter;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 pub type RecordingWriter = Option<Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>>;
 
 pub struct Processor {
-    amp: Arc<Mutex<Amp>>,
+    amp: Amp,
     writer: RecordingWriter,
     in_port: Port<AudioIn>,
     out_l: Port<AudioOut>,
@@ -21,7 +21,7 @@ pub struct Processor {
 }
 
 impl Processor {
-    pub fn new(client: &Client, amp: Arc<Mutex<Amp>>, recording: bool) -> (Self, RecordingWriter) {
+    pub fn new(client: &Client, amp: Amp, recording: bool) -> (Self, RecordingWriter) {
         let in_port = client.register_port("in", AudioIn).unwrap();
         let out_l = client.register_port("out_l", AudioOut).unwrap();
         let out_r = client.register_port("out_r", AudioOut).unwrap();
@@ -53,7 +53,7 @@ impl Processor {
         let channels = 1;
         let oversample_factor: f32 = 2.0;
 
-        let max_chunk_size = 64;
+        let max_chunk_size = 128;
 
         let interp_params = SincInterpolationParameters {
             sinc_len: 256,
@@ -106,7 +106,7 @@ impl Processor {
         self,
     ) -> impl FnMut(&Client, &ProcessScope) -> Control + Send + 'static {
         let Processor {
-            amp,
+            mut amp,
             writer,
             in_port,
             mut out_l,
@@ -137,12 +137,9 @@ impl Processor {
                 eprintln!("Upsampler returned an empty buffer");
             }
 
-            {
-                let mut amp_guard: MutexGuard<'_, Amp> = amp.lock().unwrap();
-                let upsampled_channel = &mut upsampled[0];
-                for sample in upsampled_channel.iter_mut() {
-                    *sample = amp_guard.process_sample(*sample);
-                }
+            let upsampled_channel = &mut upsampled[0];
+            for sample in upsampled_channel.iter_mut() {
+                *sample = amp.process_sample(*sample);
             }
 
             let downsampled = match downsampler.process(&upsampled, None) {

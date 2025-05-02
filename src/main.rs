@@ -5,7 +5,7 @@ use std::io::BufReader;
 use std::{
     env,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicBool, Ordering},
     },
     thread,
@@ -34,7 +34,7 @@ struct Args {
 
 fn main() {
     unsafe {
-        env::set_var("PIPEWIRE_LATENCY", "64/48000");
+        env::set_var("PIPEWIRE_LATENCY", "128/48000");
         env::set_var("JACK_PROMISCUOUS_SERVER", "pipewire");
     }
 
@@ -57,8 +57,7 @@ fn main() {
     let sample_rate = client.sample_rate() as f32;
     let amp = Amp::new(config, sample_rate);
 
-    let amp = Arc::new(Mutex::new(amp));
-    let (processor, writer) = Processor::new(&client, Arc::clone(&amp), recording);
+    let (processor, writer) = Processor::new(&client, amp, recording);
     let process = processor.into_process_handler();
 
     let _active_client = client

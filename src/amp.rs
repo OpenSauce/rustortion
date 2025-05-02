@@ -103,17 +103,14 @@ impl Amp {
             DistortionMode::WaveFold => foldback(gated, 1.0),
         };
 
-        // Highpass filter (removing DC or very low freq)
         let highpassed =
             self.highpass_alpha * (self.highpass_prev + distorted - self.distorted_prev);
         self.distorted_prev = distorted;
         self.highpass_prev = highpassed;
 
-        // Lowpass filter (smooth out harshness at very high freq)
         let filtered = self.lowpass_prev + self.lowpass_alpha * (highpassed - self.lowpass_prev);
         self.lowpass_prev = filtered;
 
-        // Apply final level
         filtered * self.level
     }
 }
