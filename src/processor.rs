@@ -18,9 +18,9 @@ pub struct Processor {
 
 impl Processor {
     pub fn new(client: &Client, amp: Amp, tx: Option<Sender<AudioBlock>>) -> Self {
-        let in_port = client.register_port("in", AudioIn).unwrap();
-        let out_l = client.register_port("out_l", AudioOut).unwrap();
-        let out_r = client.register_port("out_r", AudioOut).unwrap();
+        let in_port = client.register_port("in", AudioIn::default()).unwrap();
+        let out_l = client.register_port("out_l", AudioOut::default()).unwrap();
+        let out_r = client.register_port("out_r", AudioOut::default()).unwrap();
 
         let _ = client.connect_ports_by_name("system:capture_1", "rustortion:in");
         let _ = client.connect_ports_by_name("rustortion:out_l", "system:playback_1");

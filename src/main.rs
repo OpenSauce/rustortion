@@ -1,4 +1,4 @@
-use jack::{Client, ClientOptions};
+use jack::{Client, ClientOptions, contrib::ClosureProcessHandler};
 use serde_json::from_reader;
 use std::fs::File;
 use std::io::BufReader;
@@ -65,7 +65,7 @@ fn main() {
     let process = processor.into_process_handler();
 
     let _active_client = client
-        .activate_async(Notifications, jack::ClosureProcessHandler::new(process))
+        .activate_async(Notifications, ClosureProcessHandler::new(process))
         .unwrap();
 
     let running = Arc::new(AtomicBool::new(true));
