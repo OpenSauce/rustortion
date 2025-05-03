@@ -1,18 +1,14 @@
 use crate::amp::Amp;
-use hound::WavWriter;
+use crate::recorder::{AudioBlock, BLOCK_FRAMES};
+use crossbeam::channel::Sender;
 use jack::{AudioIn, AudioOut, Client, Control, Port, ProcessScope};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
-use std::fs::File;
-use std::io::BufWriter;
-use std::sync::{Arc, Mutex};
-
-pub type RecordingWriter = Option<Arc<Mutex<Option<WavWriter<BufWriter<File>>>>>>;
 
 pub struct Processor {
     amp: Amp,
-    writer: RecordingWriter,
+    tx: Option<Sender<AudioBlock>>,
     in_port: Port<AudioIn>,
     out_l: Port<AudioOut>,
     out_r: Port<AudioOut>,
@@ -21,7 +17,7 @@ pub struct Processor {
 }
 
 impl Processor {
-    pub fn new(client: &Client, amp: Amp, recording: bool) -> (Self, RecordingWriter) {
+    pub fn new(client: &Client, amp: Amp, tx: Option<Sender<AudioBlock>>) -> Self {
         let in_port = client.register_port("in", AudioIn).unwrap();
         let out_l = client.register_port("out_l", AudioOut).unwrap();
         let out_r = client.register_port("out_r", AudioOut).unwrap();
@@ -29,26 +25,6 @@ impl Processor {
         let _ = client.connect_ports_by_name("system:capture_1", "rustortion:in");
         let _ = client.connect_ports_by_name("rustortion:out_l", "system:playback_1");
         let _ = client.connect_ports_by_name("rustortion:out_r", "system:playback_2");
-
-        let sample_rate = client.sample_rate() as f32;
-
-        let writer = if recording {
-            let spec = hound::WavSpec {
-                channels: 2,
-                sample_rate: sample_rate as u32,
-                bits_per_sample: 16,
-                sample_format: hound::SampleFormat::Int,
-            };
-            let filename = format!(
-                "./recordings/recording_{}.wav",
-                chrono::Local::now().format("%Y%m%d_%H%M%S")
-            );
-            println!("Recording to: {}", filename);
-            let writer = hound::WavWriter::create(filename, spec).unwrap();
-            Some(Arc::new(Mutex::new(Some(writer))))
-        } else {
-            None
-        };
 
         let channels = 1;
         let oversample_factor: f32 = 2.0;
@@ -88,18 +64,15 @@ impl Processor {
         )
         .unwrap();
 
-        (
-            Self {
-                amp,
-                writer: writer.clone(),
-                in_port,
-                out_l,
-                out_r,
-                upsampler,
-                downsampler,
-            },
-            writer,
-        )
+        Self {
+            amp,
+            tx,
+            in_port,
+            out_l,
+            out_r,
+            upsampler,
+            downsampler,
+        }
     }
 
     pub fn into_process_handler(
@@ -107,7 +80,7 @@ impl Processor {
     ) -> impl FnMut(&Client, &ProcessScope) -> Control + Send + 'static {
         let Processor {
             mut amp,
-            writer,
+            tx,
             in_port,
             mut out_l,
             mut out_r,
@@ -167,15 +140,13 @@ impl Processor {
                 out_buf_r[i] = out_sample;
             }
 
-            if let Some(mut writer_mutex) = writer.as_ref().map(|w| w.lock().unwrap()) {
-                if let Some(ref mut writer) = *writer_mutex {
-                    for &s in final_samples.iter().take(frames_to_copy) {
-                        let sample_i16 =
-                            (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
-                        writer.write_sample(sample_i16).unwrap(); // left
-                        writer.write_sample(sample_i16).unwrap(); // right
-                    }
+            if let Some(ref tx) = tx {
+                let mut block = AudioBlock::with_capacity(BLOCK_FRAMES * 2);
+                for &s in final_samples.iter().take(BLOCK_FRAMES) {
+                    let v = (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                    block.extend_from_slice(&[v, v]);
                 }
+                let _ = tx.try_send(block); // never blocks
             }
 
             Control::Continue
