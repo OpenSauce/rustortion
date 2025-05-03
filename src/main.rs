@@ -81,6 +81,11 @@ fn main() {
     while running.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_secs(1));
     }
+
+    _active_client
+        .deactivate()
+        .expect("Failed to deactivate JACK client");
+
     if let Some(rec) = recorder {
         rec.stop(); // join disk thread
     }

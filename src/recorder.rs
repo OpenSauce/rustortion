@@ -34,7 +34,7 @@ impl Recorder {
 
     pub fn stop(self) {
         drop(self.tx);
-        let _ = self.handle.join();
+        self.handle.join().expect("Unable to join thread");
     }
 }
 
@@ -52,4 +52,6 @@ fn run_writer_thread(sample_rate: u32, filename: String, rx: Receiver<AudioBlock
             writer.write_sample(*sample).unwrap();
         }
     }
+
+    writer.finalize().expect("Failed to finalise WAV file");
 }
