@@ -14,10 +14,12 @@ use std::{
 
 mod amp;
 mod processor;
+mod recorder;
 
 use amp::{Amp, AmpConfig};
 use clap::Parser;
 use processor::Processor;
+use recorder::Recorder;
 
 #[derive(Parser, Debug)]
 #[command(name = "rustortion")]
@@ -43,10 +45,6 @@ fn main() {
 
     let config = load_amp_config(&args.preset_path).expect("Failed to load preset file");
 
-    if recording {
-        std::fs::create_dir_all("./recordings").unwrap();
-    }
-
     println!(
         "🔥 Rustortion: {}",
         if recording { "🛑 Recording!" } else { "" }
@@ -57,7 +55,13 @@ fn main() {
     let sample_rate = client.sample_rate() as f32;
     let amp = Amp::new(config, sample_rate);
 
-    let (processor, writer) = Processor::new(&client, amp, recording);
+    let recorder = if recording {
+        Some(Recorder::new(sample_rate as u32, "./recordings").expect("failed to start recorder"))
+    } else {
+        None
+    };
+    let tx = recorder.as_ref().map(|r| r.sender());
+    let processor = Processor::new(&client, amp, tx);
     let process = processor.into_process_handler();
 
     let _active_client = client
@@ -66,18 +70,9 @@ fn main() {
 
     let running = Arc::new(AtomicBool::new(true));
     let r = Arc::clone(&running);
-    let writer_clone = writer.clone();
 
     ctrlc::set_handler(move || {
         println!("\nCtrl+C received, shutting down...");
-
-        if let Some(writer_arc) = &writer_clone {
-            if let Ok(mut maybe_writer) = writer_arc.lock() {
-                if let Some(writer) = maybe_writer.take() {
-                    writer.finalize().expect("Failed to finalize WAV file");
-                }
-            }
-        }
 
         r.store(false, Ordering::SeqCst);
     })
@@ -85,6 +80,9 @@ fn main() {
 
     while running.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_secs(1));
+    }
+    if let Some(rec) = recorder {
+        rec.stop(); // join disk thread
     }
 }
 
