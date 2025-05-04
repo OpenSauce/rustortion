@@ -1,5 +1,5 @@
-use crate::amp::Amp;
-use crate::recorder::{AudioBlock, BLOCK_FRAMES};
+use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
+use crate::sim::amp::Amp;
 use crossbeam::channel::Sender;
 use jack::{AudioIn, AudioOut, Client, Control, Port, ProcessScope};
 use rubato::{

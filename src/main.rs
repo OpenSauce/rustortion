@@ -12,14 +12,12 @@ use std::{
     time::Duration,
 };
 
-mod amp;
-mod processor;
-mod recorder;
+mod io;
+mod sim;
 
-use amp::{Amp, AmpConfig};
 use clap::Parser;
-use processor::Processor;
-use recorder::Recorder;
+use io::{processor::Processor, recorder::Recorder};
+use sim::amp::{Amp, AmpConfig};
 
 #[derive(Parser, Debug)]
 #[command(name = "rustortion")]
