@@ -1,9 +1,9 @@
 {
-  "gain": 5.0,
+  "gain": 10.0,
   "drive": 50.0,
   "gate_threshold": 0.02,
   "lowpass_cutoff": 6000.0,
   "highpass_cutoff": 120.0,
   "mode": "DiodeLike",
-  "level": 1
+  "level": 2
 }

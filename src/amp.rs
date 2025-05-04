@@ -25,6 +25,12 @@ pub struct Amp {
     distorted_prev: f32,
     mode: DistortionMode,
     level: f32,
+    compressor_env: f32,
+    comp_attack: f32,    // 0.5 ms
+    comp_release: f32,   // 100 ms
+    comp_threshold: f32, // –20 dB
+    comp_ratio: f32,     // 4:1
+    makeup: f32,         // +6 dB
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -36,37 +42,70 @@ pub struct AmpConfig {
     pub highpass_cutoff: f32,
     pub mode: DistortionMode,
     pub level: f32,
+
+    #[serde(default = "default_attack_ms")]
+    pub comp_attack_ms: f32, // 0.5
+    #[serde(default = "default_release_ms")]
+    pub comp_release_ms: f32, // 100
+    #[serde(default = "default_threshold_db")]
+    pub comp_threshold_db: f32, // -20
+    #[serde(default = "default_ratio")]
+    pub comp_ratio: f32, // 4.0
+    #[serde(default = "default_makeup_db")]
+    pub makeup_db: f32,
+}
+
+fn default_attack_ms() -> f32 {
+    0.5
+}
+fn default_release_ms() -> f32 {
+    100.0
+}
+fn default_threshold_db() -> f32 {
+    -20.0
+}
+fn default_ratio() -> f32 {
+    4.0
+}
+fn default_makeup_db() -> f32 {
+    6.0
+}
+#[inline]
+fn db_to_lin(db: f32) -> f32 {
+    10f32.powf(db / 20.0)
 }
 
 impl Amp {
     pub fn new(config: AmpConfig, sample_rate: f32) -> Self {
-        let AmpConfig {
-            gain,
-            drive,
-            gate_threshold,
-            lowpass_cutoff,
-            highpass_cutoff,
-            mode,
-            level,
-        } = config;
-
-        let rc_lp = 1.0 / (2.0 * PI * lowpass_cutoff);
+        let rc_lp = 1.0 / (2.0 * PI * config.lowpass_cutoff);
         let alpha_lp = (1.0 / sample_rate) / (rc_lp + (1.0 / sample_rate));
 
-        let rc_hp = 1.0 / (2.0 * PI * highpass_cutoff);
+        let rc_hp = 1.0 / (2.0 * PI * config.highpass_cutoff);
         let alpha_hp = rc_hp / (rc_hp + (1.0 / sample_rate));
 
+        let (comp_attack, comp_release) = {
+            // convert ms to one‑pole coefficients  α = e^(−1/τ)
+            let a = (-1.0 / (sample_rate * 0.001 * config.comp_attack_ms)).exp();
+            let r = (-1.0 / (sample_rate * 0.001 * config.comp_release_ms)).exp();
+            (a, r)
+        };
         Self {
-            gain,
-            drive,
-            gate_threshold,
+            gain: config.gain,
+            drive: config.drive,
+            gate_threshold: config.gate_threshold,
             lowpass_alpha: alpha_lp,
             highpass_alpha: alpha_hp,
             lowpass_prev: 0.0,
             highpass_prev: 0.0,
             distorted_prev: 0.0,
-            mode,
-            level,
+            mode: config.mode,
+            level: config.level,
+            compressor_env: 0.0,
+            comp_attack,
+            comp_release,
+            comp_threshold: db_to_lin(config.comp_threshold_db),
+            comp_ratio: config.comp_ratio,
+            makeup: db_to_lin(config.makeup_db),
         }
     }
 
@@ -103,9 +142,24 @@ impl Amp {
             DistortionMode::WaveFold => foldback(gated, 1.0),
         };
 
+        let level_in = distorted.abs().max(1e-10); // avoid log(0)
+        if level_in > self.compressor_env {
+            self.compressor_env = self.comp_attack * (self.compressor_env - level_in) + level_in;
+        } else {
+            self.compressor_env = self.comp_release * (self.compressor_env - level_in) + level_in;
+        }
+
+        let over_threshold = (self.compressor_env / self.comp_threshold).max(1.0);
+        let gain_lin = if over_threshold > 1.0 {
+            // G = (in/threshold)^(1/ratio‑1)
+            over_threshold.powf((1.0 / self.comp_ratio) - 1.0) * self.makeup
+        } else {
+            self.makeup
+        };
+        let compressed = distorted * gain_lin;
         let highpassed =
-            self.highpass_alpha * (self.highpass_prev + distorted - self.distorted_prev);
-        self.distorted_prev = distorted;
+            self.highpass_alpha * (self.highpass_prev + compressed - self.distorted_prev);
+        self.distorted_prev = compressed;
         self.highpass_prev = highpassed;
 
         let filtered = self.lowpass_prev + self.lowpass_alpha * (highpassed - self.lowpass_prev);

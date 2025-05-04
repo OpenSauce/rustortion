@@ -27,7 +27,7 @@ impl Processor {
         let _ = client.connect_ports_by_name("rustortion:out_r", "system:playback_2");
 
         let channels = 1;
-        let oversample_factor: f32 = 2.0;
+        let oversample_factor: f32 = 4.0;
 
         let max_chunk_size = 128;
 
