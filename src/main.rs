@@ -1,7 +1,4 @@
 use jack::{Client, ClientOptions, contrib::ClosureProcessHandler};
-use serde_json::from_reader;
-use std::fs::File;
-use std::io::BufReader;
 use std::{
     env,
     sync::{
@@ -17,8 +14,7 @@ mod sim;
 
 use clap::Parser;
 use io::{processor::Processor, recorder::Recorder};
-use sim::amp::{Amp, AmpConfig};
-use sim::chain::{AmplifierChain, create_mesa_boogie_dual_rectifier};
+use sim::chain::create_mesa_boogie_dual_rectifier;
 
 #[derive(Parser, Debug)]
 #[command(name = "rustortion")]
@@ -42,13 +38,10 @@ fn main() {
     let args = Args::parse();
     let recording = args.recording;
 
-    let config = load_amp_config(&args.preset_path).expect("Failed to load preset file");
-
     println!(
         "🔥 Rustortion: {}",
         if recording { "🛑 Recording!" } else { "" }
     );
-    println!("{:?}", config);
 
     let (client, _status) = Client::new("rustortion", ClientOptions::NO_START_SERVER).unwrap();
     let sample_rate = client.sample_rate() as f32;
@@ -88,14 +81,6 @@ fn main() {
     if let Some(rec) = recorder {
         rec.stop(); // join disk thread
     }
-}
-
-fn load_amp_config(path: &str) -> std::io::Result<AmpConfig> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let config: AmpConfig =
-        from_reader(reader).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    Ok(config)
 }
 
 struct Notifications;

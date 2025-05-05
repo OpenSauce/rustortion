@@ -57,12 +57,11 @@ impl Stage for PowerAmpStage {
         match self.amp_type {
             PowerAmpType::ClassA => {
                 // Class A - smooth, asymmetric clipping
-                let positive = if driven > 0.0 {
+                if driven > 0.0 {
                     driven.tanh()
                 } else {
                     driven * 0.8 // Less gain for negative side
-                };
-                positive
+                }
             }
             PowerAmpType::ClassAB => {
                 // Class AB - asymmetric with crossover characteristics

@@ -135,7 +135,7 @@ impl Stage for FilterStage {
                 }
             }
             "resonance" => {
-                if value >= 0.0 && value <= 1.0 {
+                if (0.0..=1.0).contains(&value) {
                     self.resonance = value;
                     Ok(())
                 } else {

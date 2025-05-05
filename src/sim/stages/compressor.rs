@@ -77,7 +77,7 @@ impl Stage for CompressorStage {
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "threshold" => {
-                if value >= -60.0 && value <= 0.0 {
+                if (-60.0..=0.).contains(&value) {
                     self.threshold = db_to_lin(value);
                     Ok(())
                 } else {
@@ -85,7 +85,7 @@ impl Stage for CompressorStage {
                 }
             }
             "ratio" => {
-                if value >= 1.0 && value <= 20.0 {
+                if (1.0..=20.0).contains(&value) {
                     self.ratio = value;
                     Ok(())
                 } else {
@@ -93,7 +93,7 @@ impl Stage for CompressorStage {
                 }
             }
             "attack" => {
-                if value >= 0.1 && value <= 100.0 {
+                if (0.1..=100.0).contains(&value) {
                     self.update_coefficients(value, self.release);
                     Ok(())
                 } else {
@@ -101,7 +101,7 @@ impl Stage for CompressorStage {
                 }
             }
             "release" => {
-                if value >= 10.0 && value <= 1000.0 {
+                if (10.0..=1000.0).contains(&value) {
                     self.update_coefficients(self.attack, value);
                     Ok(())
                 } else {
@@ -109,7 +109,7 @@ impl Stage for CompressorStage {
                 }
             }
             "makeup" => {
-                if value >= -12.0 && value <= 24.0 {
+                if (-12.0..=24.0).contains(&value) {
                     self.makeup = db_to_lin(value);
                     Ok(())
                 } else {
