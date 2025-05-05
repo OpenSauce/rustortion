@@ -4,6 +4,8 @@ pub struct CompressorStage {
     name: String,
     attack: f32,      // Attack coefficient (0-1)
     release: f32,     // Release coefficient (0-1)
+    attack_ms: f32,   // Attack time in milliseconds
+    release_ms: f32,  // Release time in milliseconds
     threshold: f32,   // Threshold in linear scale
     ratio: f32,       // Compression ratio (e.g., 4.0 for 4:1)
     makeup: f32,      // Makeup gain in linear scale
@@ -26,7 +28,8 @@ impl CompressorStage {
         makeup_db: f32,
         sample_rate: f32,
     ) -> Self {
-        // Convert ms to one-pole coefficients α = e^(−1/τ)
+        // Convert ms to one-pole coefficients
+        // For attack/release: smaller time constant = faster response = smaller coefficient
         let attack = (-1.0 / (sample_rate * 0.001 * attack_ms)).exp();
         let release = (-1.0 / (sample_rate * 0.001 * release_ms)).exp();
 
@@ -34,6 +37,8 @@ impl CompressorStage {
             name: name.to_string(),
             attack,
             release,
+            attack_ms,
+            release_ms,
             threshold: db_to_lin(threshold_db),
             ratio,
             makeup: db_to_lin(makeup_db),
@@ -42,10 +47,21 @@ impl CompressorStage {
         }
     }
 
-    // Recalculate coefficients when parameters change
-    fn update_coefficients(&mut self, attack_ms: f32, release_ms: f32) {
-        self.attack = (-1.0 / (self.sample_rate * 0.001 * attack_ms)).exp();
-        self.release = (-1.0 / (self.sample_rate * 0.001 * release_ms)).exp();
+    // Calculate coefficient from time constant in ms
+    fn calculate_coefficient(&self, time_ms: f32) -> f32 {
+        (-1.0 / (self.sample_rate * 0.001 * time_ms)).exp()
+    }
+
+    // Update just the attack time and coefficient
+    fn update_attack(&mut self, attack_ms: f32) {
+        self.attack_ms = attack_ms;
+        self.attack = self.calculate_coefficient(attack_ms);
+    }
+
+    // Update just the release time and coefficient
+    fn update_release(&mut self, release_ms: f32) {
+        self.release_ms = release_ms;
+        self.release = self.calculate_coefficient(release_ms);
     }
 }
 
@@ -54,11 +70,18 @@ impl Stage for CompressorStage {
         // Envelope follower
         let level_in = input.abs().max(1e-10); // Avoid log(0)
 
-        // Attack/release behavior
+        // Attack/release behavior - using proper one-pole filter form:
+        // y[n] = α·y[n-1] + (1-α)·x[n]
+        //
+        // Where α is closer to 1.0 for longer time constants
+        // For attack (level_in > envelope): use attack coefficient (faster)
+        // For release (level_in < envelope): use release coefficient (slower)
         if level_in > self.envelope {
-            self.envelope = self.attack * (self.envelope - level_in) + level_in;
+            // Attack phase - faster coefficient
+            self.envelope = self.attack * self.envelope + (1.0 - self.attack) * level_in;
         } else {
-            self.envelope = self.release * (self.envelope - level_in) + level_in;
+            // Release phase - slower coefficient
+            self.envelope = self.release * self.envelope + (1.0 - self.release) * level_in;
         }
 
         // Compression gain calculation
@@ -94,7 +117,7 @@ impl Stage for CompressorStage {
             }
             "attack" => {
                 if (0.1..=100.0).contains(&value) {
-                    self.update_coefficients(value, self.release);
+                    self.update_attack(value);
                     Ok(())
                 } else {
                     Err("Attack must be between 0.1 ms and 100 ms")
@@ -102,7 +125,7 @@ impl Stage for CompressorStage {
             }
             "release" => {
                 if (10.0..=1000.0).contains(&value) {
-                    self.update_coefficients(self.attack, value);
+                    self.update_release(value);
                     Ok(())
                 } else {
                     Err("Release must be between 10 ms and 1000 ms")
@@ -124,9 +147,9 @@ impl Stage for CompressorStage {
         match name {
             "threshold" => Ok(20.0 * self.threshold.log10()), // Convert back to dB
             "ratio" => Ok(self.ratio),
-            "attack" => Ok(-1000.0 * self.attack.ln() * self.sample_rate), // Convert back to ms
-            "release" => Ok(-1000.0 * self.release.ln() * self.sample_rate), // Convert back to ms
-            "makeup" => Ok(20.0 * self.makeup.log10()),                    // Convert back to dB
+            "attack" => Ok(self.attack_ms), // Return stored ms value directly
+            "release" => Ok(self.release_ms), // Return stored ms value directly
+            "makeup" => Ok(20.0 * self.makeup.log10()), // Convert back to dB
             _ => Err("Unknown parameter name"),
         }
     }
