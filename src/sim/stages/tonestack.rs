@@ -69,9 +69,12 @@ impl Stage for ToneStackStage {
             ToneStackModel::Flat => (100.0, 800.0, 2000.0, 5000.0),   // Neutral
         };
 
-        // Calculate filter coefficients (simplified)
+        // Calculate filter coefficients
         let bass_alpha =
             (1.0 / self.sample_rate) / ((1.0 / (2.0 * PI * bass_freq)) + (1.0 / self.sample_rate));
+
+        let mid_alpha = (1.0 / (2.0 * PI * mid_freq))
+            / ((1.0 / (2.0 * PI * mid_freq)) + (1.0 / self.sample_rate));
 
         let treble_alpha = (1.0 / (2.0 * PI * treble_freq))
             / ((1.0 / (2.0 * PI * treble_freq)) + (1.0 / self.sample_rate));
@@ -82,9 +85,9 @@ impl Stage for ToneStackStage {
         // Simple lowpass for bass
         self.bass_lp = self.bass_lp + bass_alpha * (input - self.bass_lp);
 
-        // Very simplified bandpass for mids (in reality would use biquad)
+        // Proper bandpass for mids using mid_freq (still simplified but now uses the correct coefficient)
         let mid_hp = input - self.bass_lp;
-        self.mid_bp_1 = (1.0 - treble_alpha) * self.mid_bp_1 + treble_alpha * mid_hp;
+        self.mid_bp_1 = (1.0 - mid_alpha) * self.mid_bp_1 + mid_alpha * mid_hp;
         self.mid_bp_2 = mid_hp - self.mid_bp_1;
 
         // Highpass for treble

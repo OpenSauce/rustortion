@@ -90,7 +90,7 @@ impl Stage for PowerAmpStage {
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "drive" => {
-                if value >= 0.0 && value <= 1.0 {
+                if (0.0..=1.0).contains(&value) {
                     self.drive = value;
                     Ok(())
                 } else {
@@ -98,7 +98,7 @@ impl Stage for PowerAmpStage {
                 }
             }
             "sag" => {
-                if value >= 0.0 && value <= 1.0 {
+                if (0.0..=1.0).contains(&value) {
                     self.sag = value;
                     Ok(())
                 } else {

@@ -34,15 +34,14 @@ impl Stage for PreampStage {
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "gain" => {
-                if value >= 0.0 && value <= 10.0 {
-                    self.gain = value;
+                if (0.0..=10.0).contains(&value) {
                     Ok(())
                 } else {
                     Err("Gain must be between 0.0 and 10.0")
                 }
             }
             "bias" => {
-                if value >= -1.0 && value <= 1.0 {
+                if (-1.0..=1.0).contains(&value) {
                     self.bias = value;
                     Ok(())
                 } else {

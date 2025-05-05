@@ -189,6 +189,7 @@ pub fn create_mesa_boogie_dual_rectifier(sample_rate: f32) -> AmplifierChain {
 
 // AmplifierChain implementation that holds and processes all stages
 pub struct AmplifierChain {
+    #[allow(dead_code)]
     name: String,
     stages: Vec<Box<dyn Stage + Send>>,
     active_channel: usize,                // 0, 1, or 2 for clean, rhythm, lead
