@@ -1,5 +1,5 @@
-use crate::amp::Amp;
-use crate::recorder::{AudioBlock, BLOCK_FRAMES};
+use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
+use crate::sim::chain::AmplifierChain;
 use crossbeam::channel::Sender;
 use jack::{AudioIn, AudioOut, Client, Control, Port, ProcessScope};
 use rubato::{
@@ -7,7 +7,7 @@ use rubato::{
 };
 
 pub struct Processor {
-    amp: Amp,
+    amp: AmplifierChain,
     tx: Option<Sender<AudioBlock>>,
     in_port: Port<AudioIn>,
     out_l: Port<AudioOut>,
@@ -17,7 +17,7 @@ pub struct Processor {
 }
 
 impl Processor {
-    pub fn new(client: &Client, amp: Amp, tx: Option<Sender<AudioBlock>>) -> Self {
+    pub fn new(client: &Client, amp: AmplifierChain, tx: Option<Sender<AudioBlock>>) -> Self {
         let in_port = client.register_port("in", AudioIn::default()).unwrap();
         let out_l = client.register_port("out_l", AudioOut::default()).unwrap();
         let out_r = client.register_port("out_r", AudioOut::default()).unwrap();
@@ -112,7 +112,7 @@ impl Processor {
 
             let upsampled_channel = &mut upsampled[0];
             for sample in upsampled_channel.iter_mut() {
-                *sample = amp.process_sample(*sample);
+                *sample = amp.process(*sample);
             }
 
             let downsampled = match downsampler.process(&upsampled, None) {

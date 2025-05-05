@@ -1,7 +1,4 @@
 use jack::{Client, ClientOptions, contrib::ClosureProcessHandler};
-use serde_json::from_reader;
-use std::fs::File;
-use std::io::BufReader;
 use std::{
     env,
     sync::{
@@ -12,14 +9,12 @@ use std::{
     time::Duration,
 };
 
-mod amp;
-mod processor;
-mod recorder;
+mod io;
+mod sim;
 
-use amp::{Amp, AmpConfig};
 use clap::Parser;
-use processor::Processor;
-use recorder::Recorder;
+use io::{processor::Processor, recorder::Recorder};
+use sim::chain::create_mesa_boogie_dual_rectifier;
 
 #[derive(Parser, Debug)]
 #[command(name = "rustortion")]
@@ -29,9 +24,6 @@ use recorder::Recorder;
 struct Args {
     #[arg(long)]
     recording: bool,
-
-    #[arg(long)]
-    preset_path: String,
 }
 
 fn main() {
@@ -43,17 +35,13 @@ fn main() {
     let args = Args::parse();
     let recording = args.recording;
 
-    let config = load_amp_config(&args.preset_path).expect("Failed to load preset file");
-
     println!(
         "🔥 Rustortion: {}",
         if recording { "🛑 Recording!" } else { "" }
     );
-    println!("{:?}", config);
 
     let (client, _status) = Client::new("rustortion", ClientOptions::NO_START_SERVER).unwrap();
     let sample_rate = client.sample_rate() as f32;
-    let amp = Amp::new(config, sample_rate);
 
     let recorder = if recording {
         Some(Recorder::new(sample_rate as u32, "./recordings").expect("failed to start recorder"))
@@ -61,7 +49,8 @@ fn main() {
         None
     };
     let tx = recorder.as_ref().map(|r| r.sender());
-    let processor = Processor::new(&client, amp, tx);
+    let chain = create_mesa_boogie_dual_rectifier(sample_rate);
+    let processor = Processor::new(&client, chain, tx);
     let process = processor.into_process_handler();
 
     let _active_client = client
@@ -89,14 +78,6 @@ fn main() {
     if let Some(rec) = recorder {
         rec.stop(); // join disk thread
     }
-}
-
-fn load_amp_config(path: &str) -> std::io::Result<AmpConfig> {
-    let file = File::open(path)?;
-    let reader = BufReader::new(file);
-    let config: AmpConfig =
-        from_reader(reader).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
-    Ok(config)
 }
 
 struct Notifications;
