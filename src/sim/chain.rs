@@ -9,7 +9,7 @@ use crate::sim::stages::{Stage, filter::FilterStage, preamp::PreampStage};
 pub fn create_mesa_boogie_dual_rectifier(sample_rate: f32) -> AmplifierChain {
     let mut chain = AmplifierChain::new("Mesa Boogie Dual Rectifier");
 
-    // Input buffer/preamp filter
+    // Input buffer/preamp filter - common to all channels
     chain.add_stage(Box::new(FilterStage::new(
         "Input Filter",
         FilterType::Highpass,
@@ -18,9 +18,7 @@ pub fn create_mesa_boogie_dual_rectifier(sample_rate: f32) -> AmplifierChain {
         sample_rate,
     )));
 
-    // Input compressor - light compression to even out dynamics
-    // Different for each channel:
-
+    // CLEAN CHANNEL STAGES
     // Clean channel compressor - moderate compression
     chain.add_stage(Box::new(CompressorStage::new(
         "Clean Channel Compressor",
@@ -32,7 +30,7 @@ pub fn create_mesa_boogie_dual_rectifier(sample_rate: f32) -> AmplifierChain {
         sample_rate,
     )));
 
-    // Channel 1 - First gain stage (clean channel)
+    // Clean channel preamp
     chain.add_stage(Box::new(PreampStage::new(
         "Clean Preamp",
         2.5,               // Low gain
@@ -40,7 +38,7 @@ pub fn create_mesa_boogie_dual_rectifier(sample_rate: f32) -> AmplifierChain {
         ClipperType::Soft, // Soft clipping for clean tones
     )));
 
-    // Channel 1 coupling capacitor (highpass filter)
+    // Clean channel coupling capacitor (highpass filter)
     chain.add_stage(Box::new(FilterStage::new(
         "Clean Cap",
         FilterType::Highpass,
@@ -49,7 +47,37 @@ pub fn create_mesa_boogie_dual_rectifier(sample_rate: f32) -> AmplifierChain {
         sample_rate,
     )));
 
-    // Lead/Rhythm channel compressor - tighter compression
+    // RHYTHM CHANNEL STAGES
+    // Rhythm channel compressor
+    chain.add_stage(Box::new(CompressorStage::new(
+        "Rhythm Channel Compressor",
+        0.5,   // 0.5ms attack - very fast
+        100.0, // 100ms release
+        -24.0, // -24dB threshold - more aggressive
+        4.0,   // 4:1 ratio - tighter compression
+        4.0,   // +4dB makeup gain
+        sample_rate,
+    )));
+
+    // Rhythm preamp stage
+    chain.add_stage(Box::new(PreampStage::new(
+        "Rhythm Drive",
+        5.0,                 // Medium gain
+        0.1,                 // Slight positive bias
+        ClipperType::Medium, // Medium clipping for rhythm
+    )));
+
+    // Rhythm coupling capacitor
+    chain.add_stage(Box::new(FilterStage::new(
+        "Rhythm Cap",
+        FilterType::Highpass,
+        150.0, // 150Hz to tighten bass
+        0.0,   // No resonance
+        sample_rate,
+    )));
+
+    // LEAD CHANNEL STAGES
+    // Lead channel compressor
     chain.add_stage(Box::new(CompressorStage::new(
         "Lead Channel Compressor",
         0.5,   // 0.5ms attack - very fast
@@ -60,24 +88,7 @@ pub fn create_mesa_boogie_dual_rectifier(sample_rate: f32) -> AmplifierChain {
         sample_rate,
     )));
 
-    // Channel 2 - First gain stage (rhythm channel)
-    chain.add_stage(Box::new(PreampStage::new(
-        "Rhythm Drive",
-        5.0,                 // Medium gain
-        0.1,                 // Slight positive bias
-        ClipperType::Medium, // Medium clipping for rhythm
-    )));
-
-    // Channel 2 coupling capacitor
-    chain.add_stage(Box::new(FilterStage::new(
-        "Rhythm Cap",
-        FilterType::Highpass,
-        150.0, // 150Hz to tighten bass
-        0.0,   // No resonance
-        sample_rate,
-    )));
-
-    // Channel 3 - First gain stage (lead channel)
+    // Lead preamp stage
     chain.add_stage(Box::new(PreampStage::new(
         "Lead Drive",
         8.0,                     // High gain
@@ -85,15 +96,16 @@ pub fn create_mesa_boogie_dual_rectifier(sample_rate: f32) -> AmplifierChain {
         ClipperType::Asymmetric, // Asymmetric clipping for harmonically rich lead
     )));
 
-    // Channel 3 coupling capacitor
+    // Lead coupling capacitor
     chain.add_stage(Box::new(FilterStage::new(
         "Lead Cap",
         FilterType::Highpass,
-        180.0, // 180Hz - tighter bass for lead
+        100.0, // 180Hz - tighter bass for lead
         0.0,   // No resonance
         sample_rate,
     )));
 
+    // COMMON POST-PREAMP STAGES (shared by all channels)
     // Second gain stage (common to all channels)
     chain.add_stage(Box::new(PreampStage::new(
         "Secondary Gain",
@@ -172,14 +184,30 @@ pub fn create_mesa_boogie_dual_rectifier(sample_rate: f32) -> AmplifierChain {
     )));
 
     // Define the three channels with their specific stages
-    // Channel 0: Clean
-    chain.define_channel(0, 1, 4); // Input compressor -> Clean preamp -> Clean cap
+    // Updated channel definitions with non-overlapping ranges:
+    // Channel 0: Clean - Input filter (0) -> Clean stages (1,2,3) -> Common post stages (10+)
+    chain.define_channel(
+        0,
+        vec![0],
+        vec![1, 2, 3],
+        vec![10, 11, 12, 13, 14, 15, 16, 17],
+    );
 
-    // Channel 1: Rhythm
-    chain.define_channel(1, 4, 8); // Lead compressor -> Rhythm drive -> Rhythm cap
+    // Channel 1: Rhythm - Input filter (0) -> Rhythm stages (4,5,6) -> Common post stages (10+)
+    chain.define_channel(
+        1,
+        vec![0],
+        vec![4, 5, 6],
+        vec![10, 11, 12, 13, 14, 15, 16, 17],
+    );
 
-    // Channel 2: Lead
-    chain.define_channel(2, 4, 10); // Lead compressor -> Lead drive -> Lead cap
+    // Channel 2: Lead - Input filter (0) -> Lead stages (7,8,9) -> Common post stages (10+)
+    chain.define_channel(
+        2,
+        vec![0],
+        vec![7, 8, 9],
+        vec![10, 11, 12, 13, 14, 15, 16, 17],
+    );
 
     // Set default channel to clean
     chain.set_channel(2);
@@ -192,8 +220,8 @@ pub struct AmplifierChain {
     #[allow(dead_code)]
     name: String,
     stages: Vec<Box<dyn Stage + Send>>,
-    active_channel: usize,                // 0, 1, or 2 for clean, rhythm, lead
-    channel_mapping: Vec<(usize, usize)>, // Maps channel number to stage ranges
+    active_channel: usize, // 0, 1, or 2 for clean, rhythm, lead
+    channel_mapping: Vec<(Vec<usize>, Vec<usize>, Vec<usize>)>, // Maps channel to (pre, channel-specific, post) stage indices
 }
 
 impl AmplifierChain {
@@ -216,11 +244,19 @@ impl AmplifierChain {
         }
     }
 
-    pub fn define_channel(&mut self, channel: usize, start_stage: usize, end_stage: usize) {
+    // Updated to use explicit stage indices for each channel
+    pub fn define_channel(
+        &mut self,
+        channel: usize,
+        pre_stages: Vec<usize>,
+        channel_stages: Vec<usize>,
+        post_stages: Vec<usize>,
+    ) {
         if channel >= self.channel_mapping.len() {
-            self.channel_mapping.resize(channel + 1, (0, 0));
+            self.channel_mapping
+                .resize(channel + 1, (Vec::new(), Vec::new(), Vec::new()));
         }
-        self.channel_mapping[channel] = (start_stage, end_stage);
+        self.channel_mapping[channel] = (pre_stages, channel_stages, post_stages);
     }
 
     pub fn process(&mut self, input: f32) -> f32 {
@@ -228,23 +264,28 @@ impl AmplifierChain {
 
         // Process through active channel stages
         if !self.channel_mapping.is_empty() {
-            let (start, end) = self.channel_mapping[self.active_channel];
+            let (pre_stages, channel_stages, post_stages) =
+                &self.channel_mapping[self.active_channel];
 
-            // Process initial stages (before channel split)
-            for i in 0..start {
-                signal = self.stages[i].process(signal);
-            }
-
-            // Process active channel stages
-            for i in start..=end {
-                if i < self.stages.len() {
-                    signal = self.stages[i].process(signal);
+            // Process pre-channel stages (common to all channels)
+            for &stage_idx in pre_stages {
+                if stage_idx < self.stages.len() {
+                    signal = self.stages[stage_idx].process(signal);
                 }
             }
 
-            // Process remaining stages (after channel merge)
-            for i in (end + 1)..self.stages.len() {
-                signal = self.stages[i].process(signal);
+            // Process active channel-specific stages
+            for &stage_idx in channel_stages {
+                if stage_idx < self.stages.len() {
+                    signal = self.stages[stage_idx].process(signal);
+                }
+            }
+
+            // Process post-channel stages (common to all channels)
+            for &stage_idx in post_stages {
+                if stage_idx < self.stages.len() {
+                    signal = self.stages[stage_idx].process(signal);
+                }
             }
         } else {
             // If no channel mapping defined, just process through all stages

@@ -38,7 +38,7 @@ impl Stage for PowerAmpStage {
         let input_abs = input.abs();
 
         // Sag envelope follower
-        let sag_attack = (-1.0 / (self.sample_rate * 0.005)).exp(); // 5ms attack
+        let sag_attack = (-1.0 / (self.sample_rate * 0.002)).exp(); // 5ms attack
         let sag_release = (-1.0 / (self.sample_rate * 0.050)).exp(); // 50ms release
 
         if input_abs > self.sag_envelope {

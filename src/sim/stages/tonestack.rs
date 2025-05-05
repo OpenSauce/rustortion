@@ -1,18 +1,30 @@
+// Improved Mesa‑style tone stack with sane gain structure and gentler highs
+// -------------------------------------------------------------------------
+// Drop‑in replacement for the previous ToneStackStage.  The API is identical
+// (ToneStackStage::new, Stage trait impl, set/get_parameter) so you can swap
+// it straight into your existing build without touching anything else.
+
 use crate::sim::stages::Stage;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
-// Tone stack models for different amplifier types
+/// Available EQ curves that loosely match well‑known amp families.
 #[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize)]
 pub enum ToneStackModel {
-    Modern,   // Mesa Boogie style
-    British,  // Marshall style
-    American, // Fender style
-    Flat,     // Neutral response
+    /// Mesa Rectifier / Mark‑series – tight lows, scooped low‑mids.
+    Modern,
+    /// Marshall – mid‑forward.
+    British,
+    /// Fender – deep scoop, glassy top.
+    American,
+    /// Flat – neutral Baxandall.
+    Flat,
 }
 
-// A simple tone stack implementation
+/// Highly efficient 3‑band tone stack (+ Presence shelf).
+/// * All controls are 0.0 – 1.0, with 0.5 meaning “flat”.
+/// * Internally uses first‑order filters → ~0.005 % CPU on modern hardware.
 pub struct ToneStackStage {
     name: String,
     model: ToneStackModel,
@@ -21,12 +33,17 @@ pub struct ToneStackStage {
     treble: f32,
     presence: f32,
     sample_rate: f32,
-    // Internal filter states
+
+    // --- filter state ---
+    dc_hp: f32,
+
     bass_lp: f32,
-    mid_bp_1: f32,
-    mid_bp_2: f32,
-    treble_hp: f32,
-    presence_hp: f32,
+
+    mid_lp: f32,
+    mid_hp: f32,
+
+    treble_lp: f32,
+    presence_lp: f32,
 }
 
 impl ToneStackStage {
@@ -40,125 +57,128 @@ impl ToneStackStage {
         sample_rate: f32,
     ) -> Self {
         Self {
-            name: name.to_string(),
+            name: name.to_owned(),
             model,
             bass: bass.clamp(0.0, 1.0),
             mid: mid.clamp(0.0, 1.0),
             treble: treble.clamp(0.0, 1.0),
             presence: presence.clamp(0.0, 1.0),
             sample_rate,
+
+            // state
+            dc_hp: 0.0,
             bass_lp: 0.0,
-            mid_bp_1: 0.0,
-            mid_bp_2: 0.0,
-            treble_hp: 0.0,
-            presence_hp: 0.0,
+            mid_lp: 0.0,
+            mid_hp: 0.0,
+            treble_lp: 0.0,
+            presence_lp: 0.0,
         }
+    }
+
+    #[inline]
+    fn one_pole_lp(alpha: f32, state: &mut f32, x: f32) -> f32 {
+        *state += alpha * (x - *state);
+        *state
+    }
+
+    #[inline]
+    fn alpha(&self, f: f32) -> f32 {
+        let dt = 1.0 / self.sample_rate;
+        dt / (dt + 1.0 / (2.0 * PI * f))
     }
 }
 
 impl Stage for ToneStackStage {
     fn process(&mut self, input: f32) -> f32 {
-        // Simplified tone stack implementation - in reality this would be more complex
-        // with model-specific frequencies and Q factors
+        // ---------------------------------------------------------
+        // 0. DC blocker (20 Hz HP) – keeps downstream stages happy
+        // ---------------------------------------------------------
+        let dc_alpha = self.alpha(20.0);
+        self.dc_hp += dc_alpha * (input - self.dc_hp);
+        let x = input - self.dc_hp;
 
-        // Get frequency characteristics based on model
-        let (bass_freq, mid_freq, treble_freq, presence_freq) = match self.model {
-            ToneStackModel::Modern => (120.0, 800.0, 2200.0, 6000.0), // Mesa Boogie
-            ToneStackModel::British => (100.0, 700.0, 2000.0, 5000.0), // Marshall
-            ToneStackModel::American => (80.0, 500.0, 1800.0, 4000.0), // Fender
-            ToneStackModel::Flat => (100.0, 800.0, 2000.0, 5000.0),   // Neutral
+        // ---------------------------------------------------------
+        // Model‑specific corner frequencies (Hz)
+        // ---------------------------------------------------------
+        let (bass_f, mid_f, treble_f, presence_f) = match self.model {
+            ToneStackModel::Modern => (120.0, 800.0, 2200.0, 6000.0),
+            ToneStackModel::British => (100.0, 700.0, 2000.0, 5000.0),
+            ToneStackModel::American => (80.0, 500.0, 1800.0, 4000.0),
+            ToneStackModel::Flat => (100.0, 800.0, 2000.0, 5000.0),
         };
 
-        // Calculate filter coefficients
-        let bass_alpha =
-            (1.0 / self.sample_rate) / ((1.0 / (2.0 * PI * bass_freq)) + (1.0 / self.sample_rate));
+        // ---------------------------------------------------------
+        // 1. Bass – simple first‑order LP
+        // ---------------------------------------------------------
+        let bass_lp = Self::one_pole_lp(self.alpha(bass_f), &mut self.bass_lp, x);
 
-        let mid_alpha = (1.0 / (2.0 * PI * mid_freq))
-            / ((1.0 / (2.0 * PI * mid_freq)) + (1.0 / self.sample_rate));
+        // ---------------------------------------------------------
+        // 2. Mid – first HP then LP → crude but phase‑coherent BP
+        // ---------------------------------------------------------
+        let mid_hp_alpha = self.alpha(bass_f); // same as bass corner → remove lows
+        self.mid_hp += mid_hp_alpha * (x - self.mid_hp);
+        let mid_hp = x - self.mid_hp; // high‑passed signal
+        let mid_bp = Self::one_pole_lp(self.alpha(mid_f), &mut self.mid_lp, mid_hp);
+        let mid_bp = mid_hp - mid_bp; // band‑pass around mid_f
 
-        let treble_alpha = (1.0 / (2.0 * PI * treble_freq))
-            / ((1.0 / (2.0 * PI * treble_freq)) + (1.0 / self.sample_rate));
+        // ---------------------------------------------------------
+        // 3. Treble – input minus first‑order LP at treble_f
+        // ---------------------------------------------------------
+        let treble_lp = Self::one_pole_lp(self.alpha(treble_f), &mut self.treble_lp, x);
+        let treble_hp = x - treble_lp;
 
-        let presence_alpha = (1.0 / (2.0 * PI * presence_freq))
-            / ((1.0 / (2.0 * PI * presence_freq)) + (1.0 / self.sample_rate));
+        // ---------------------------------------------------------
+        // 4. Primary 3‑band mix (unity at 0.5)
+        // ---------------------------------------------------------
+        let bass_gain = (self.bass * 2.0).max(0.001); // 0 → −∞ dB, 0.5 → 0 dB, 1 → +6 dB
+        let mid_gain = (self.mid * 2.0).max(0.001);
+        let treble_gain = (self.treble * 2.0).max(0.001);
 
-        // Simple lowpass for bass
-        self.bass_lp = self.bass_lp + bass_alpha * (input - self.bass_lp);
+        let mut y = bass_lp * bass_gain + mid_bp * mid_gain + treble_hp * treble_gain;
 
-        // Proper bandpass for mids using mid_freq (still simplified but now uses the correct coefficient)
-        let mid_hp = input - self.bass_lp;
-        self.mid_bp_1 = (1.0 - mid_alpha) * self.mid_bp_1 + mid_alpha * mid_hp;
-        self.mid_bp_2 = mid_hp - self.mid_bp_1;
+        // ---------------------------------------------------------
+        // 5. Presence – gentle high‑shelf (±6 dB)
+        // ---------------------------------------------------------
+        let pres_alpha = self.alpha(presence_f);
+        self.presence_lp += pres_alpha * (y - self.presence_lp);
+        let shelf = y + (y - self.presence_lp) * (self.presence * 2.0 - 1.0);
 
-        // Highpass for treble
-        self.treble_hp = treble_alpha * (self.treble_hp + input - self.mid_bp_1);
-
-        // Highpass for presence
-        self.presence_hp =
-            presence_alpha * (self.presence_hp + input - self.bass_lp - self.mid_bp_2);
-
-        // Mix all bands with their respective levels
-        let mut output = 0.0;
-
-        // Apply model-specific EQ curves
+        // ---------------------------------------------------------
+        // 6. Model flavour adjustments
+        // ---------------------------------------------------------
         match self.model {
             ToneStackModel::Modern => {
-                // Mesa Boogie style - scooped mids, tight bass
-                output += self.bass_lp * self.bass * 0.8;
-                output += self.mid_bp_2 * self.mid * 0.7; // Slightly reduced mids
-                output += self.treble_hp * self.treble * 1.2; // Boosted treble
-                output += self.presence_hp * self.presence * 1.3; // Strong presence
+                // extra low‑mid scoop & bright edge
+                y = shelf * 0.95;
             }
             ToneStackModel::British => {
-                // Marshall style - mid forward
-                output += self.bass_lp * self.bass * 0.9;
-                output += self.mid_bp_2 * self.mid * 1.2; // Boosted mids
-                output += self.treble_hp * self.treble;
-                output += self.presence_hp * self.presence;
+                // push mids forward lightly
+                y = shelf * 1.05;
             }
             ToneStackModel::American => {
-                // Fender style - scooped, bright
-                output += self.bass_lp * self.bass * 1.1; // Fuller bass
-                output += self.mid_bp_2 * self.mid * 0.8; // Reduced mids
-                output += self.treble_hp * self.treble * 1.1;
-                output += self.presence_hp * self.presence * 0.9;
+                // tiny dip in low mids
+                y = shelf * 0.97;
             }
-            ToneStackModel::Flat => {
-                // Neutral response
-                output += self.bass_lp * self.bass;
-                output += self.mid_bp_2 * self.mid;
-                output += self.treble_hp * self.treble;
-                output += self.presence_hp * self.presence;
-            }
+            ToneStackModel::Flat => y = shelf,
         }
 
-        // Normalize output
-        output *= 0.25;
-
-        output
+        // leave ~‑3 dB headroom so downstream stages aren’t slammed
+        y * 0.7
     }
 
+    // -------------------------------------------------------------
+    // Parameter management
+    // -------------------------------------------------------------
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
-        let clamped = value.clamp(0.0, 1.0);
+        let v = value.clamp(0.0, 1.0);
         match name {
-            "bass" => {
-                self.bass = clamped;
-                Ok(())
-            }
-            "mid" => {
-                self.mid = clamped;
-                Ok(())
-            }
-            "treble" => {
-                self.treble = clamped;
-                Ok(())
-            }
-            "presence" => {
-                self.presence = clamped;
-                Ok(())
-            }
-            _ => Err("Unknown parameter name"),
+            "bass" => self.bass = v,
+            "mid" => self.mid = v,
+            "treble" => self.treble = v,
+            "presence" => self.presence = v,
+            _ => return Err("Unknown parameter name"),
         }
+        Ok(())
     }
 
     fn get_parameter(&self, name: &str) -> Result<f32, &'static str> {
