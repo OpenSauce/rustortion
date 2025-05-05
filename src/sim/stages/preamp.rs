@@ -35,6 +35,7 @@ impl Stage for PreampStage {
         match name {
             "gain" => {
                 if (0.0..=10.0).contains(&value) {
+                    self.gain = value;
                     Ok(())
                 } else {
                     Err("Gain must be between 0.0 and 10.0")
