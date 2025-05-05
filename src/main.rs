@@ -18,6 +18,7 @@ mod sim;
 use clap::Parser;
 use io::{processor::Processor, recorder::Recorder};
 use sim::amp::{Amp, AmpConfig};
+use sim::chain::{AmplifierChain, create_mesa_boogie_dual_rectifier};
 
 #[derive(Parser, Debug)]
 #[command(name = "rustortion")]
@@ -51,7 +52,6 @@ fn main() {
 
     let (client, _status) = Client::new("rustortion", ClientOptions::NO_START_SERVER).unwrap();
     let sample_rate = client.sample_rate() as f32;
-    let amp = Amp::new(config, sample_rate);
 
     let recorder = if recording {
         Some(Recorder::new(sample_rate as u32, "./recordings").expect("failed to start recorder"))
@@ -59,7 +59,8 @@ fn main() {
         None
     };
     let tx = recorder.as_ref().map(|r| r.sender());
-    let processor = Processor::new(&client, amp, tx);
+    let chain = create_mesa_boogie_dual_rectifier(sample_rate);
+    let processor = Processor::new(&client, chain, tx);
     let process = processor.into_process_handler();
 
     let _active_client = client
