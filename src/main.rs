@@ -24,9 +24,6 @@ use sim::chain::create_mesa_boogie_dual_rectifier;
 struct Args {
     #[arg(long)]
     recording: bool,
-
-    #[arg(long)]
-    preset_path: String,
 }
 
 fn main() {
