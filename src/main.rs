@@ -9,12 +9,9 @@ use std::{
     time::Duration,
 };
 
-mod io;
-mod sim;
-
 use clap::Parser;
-use io::{processor::Processor, recorder::Recorder};
-use sim::chain::create_mesa_boogie_dual_rectifier;
+use rustortion::io::{processor::Processor, recorder::Recorder};
+use rustortion::sim::chain::create_mesa_boogie_dual_rectifier;
 
 #[derive(Parser, Debug)]
 #[command(name = "rustortion")]
