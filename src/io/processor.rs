@@ -1,13 +1,16 @@
 use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
 use crate::sim::chain::AmplifierChain;
 use crossbeam::channel::Sender;
+use crossbeam::queue::ArrayQueue;
 use jack::{AudioIn, AudioOut, Client, Control, Port, ProcessScope};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
+use std::sync::{Arc, Mutex};
 
 pub struct Processor {
-    amp: AmplifierChain,
+    amp: Box<AmplifierChain>,
+    inbox: Arc<ArrayQueue<Box<AmplifierChain>>>,
     tx: Option<Sender<AudioBlock>>,
     in_port: Port<AudioIn>,
     out_l: Port<AudioOut>,
@@ -65,7 +68,8 @@ impl Processor {
         .unwrap();
 
         Self {
-            amp,
+            amp: Box::new(amp),
+            inbox: Arc::new(ArrayQueue::new(8)),
             tx,
             in_port,
             out_l,
@@ -75,11 +79,24 @@ impl Processor {
         }
     }
 
+    /// Creates a processor with a shared amplifier chain for live updates from GUI
+    pub fn new_shared(
+        client: &Client,
+        init_amp: AmplifierChain,
+        tx: Option<Sender<AudioBlock>>,
+    ) -> (Self, Arc<ArrayQueue<Box<AmplifierChain>>>) {
+        let inbox = Arc::new(ArrayQueue::new(8));
+        let mut proc = Self::new(client, init_amp, tx);
+        proc.inbox = inbox.clone(); // store the very same queue
+        (proc, inbox)
+    }
+
     pub fn into_process_handler(
         self,
     ) -> impl FnMut(&Client, &ProcessScope) -> Control + Send + 'static {
         let Processor {
             mut amp,
+            inbox,
             tx,
             in_port,
             mut out_l,
@@ -89,6 +106,11 @@ impl Processor {
         } = self;
 
         move |_client: &Client, ps: &ProcessScope| -> Control {
+            // Check if we should update our amp from the shared state (if any)
+            if let Some(new) = inbox.pop() {
+                amp = new;
+            }
+
             let n_frames = ps.n_frames() as usize; // frames in this callback
             let in_buf = in_port.as_slice(ps);
 

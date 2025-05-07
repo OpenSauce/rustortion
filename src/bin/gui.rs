@@ -16,7 +16,7 @@ use rustortion::sim::stages::Stage;
 use rustortion::sim::stages::filter::{FilterStage, FilterType};
 
 pub fn main() -> iced::Result {
-    iced::application("title", AmplifierGui::update, AmplifierGui::view).run()
+    iced::application("Rustortion", AmplifierGui::update, AmplifierGui::view).run()
 }
 
 // -----------------------------------------------------------------------------
@@ -56,6 +56,7 @@ enum Message {
     FilterTypeChanged(usize, FilterType),
     CutoffChanged(usize, f32),
     ResonanceChanged(usize, f32),
+    Start,
 }
 
 // -----------------------------------------------------------------------------
@@ -63,12 +64,14 @@ enum Message {
 // -----------------------------------------------------------------------------
 
 impl AmplifierGui {
-    fn new() -> Self {
-        Self { stages: Vec::new() }
-    }
-
     fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
+            Message::Start => {
+                let sample_rate = 44100.0; // Example sample rate
+                let chain = self.to_amp_chain(sample_rate);
+                println!("Starting!");
+                Task::none()
+            }
             Message::AddStage => {
                 self.stages.push(FilterConfig::default());
                 Task::none()
@@ -85,13 +88,13 @@ impl AmplifierGui {
             }
             Message::CutoffChanged(i, v) => {
                 if let Some(cfg) = self.stages.get_mut(i) {
-                    cfg.cutoff_hz = v.max(20.0).min(20_000.0);
+                    cfg.cutoff_hz = v.clamp(20.0, 20_000.0);
                 }
                 Task::none()
             }
             Message::ResonanceChanged(i, v) => {
                 if let Some(cfg) = self.stages.get_mut(i) {
-                    cfg.resonance = v.max(0.0).min(1.0);
+                    cfg.resonance = v.clamp(0.0, 1.0);
                 }
                 Task::none()
             }
@@ -109,9 +112,12 @@ impl AmplifierGui {
 
         let scrollable_content = scrollable(list);
 
-        let footer = row![button("Add Filter Stage").on_press(Message::AddStage)]
-            .spacing(10)
-            .align_y(Alignment::Center);
+        let footer = row![
+            button("Add Filter Stage").on_press(Message::AddStage),
+            button("Start").on_press(Message::Start),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center);
 
         container(column![scrollable_content, footer].spacing(20).padding(20))
             .width(Length::Fill)
@@ -168,11 +174,8 @@ fn slider_row<'a, F: 'a + Fn(f32) -> Message>(
     .into()
 }
 
-// -----------------------------------------------------------------------------
-// Optional – convert a FilterConfig into a real DSP stage ---------------------
-// -----------------------------------------------------------------------------
 impl FilterConfig {
-    fn to_stage(&self, sample_rate: f32) -> Box<dyn Stage + Send> {
+    fn to_stage(self, sample_rate: f32) -> Box<dyn Stage + Send> {
         Box::new(FilterStage::new(
             "UI Filter",
             self.filter_type,
@@ -183,16 +186,10 @@ impl FilterConfig {
     }
 }
 
-// -----------------------------------------------------------------------------
-// Conversion to AmplifierChain ------------------------------------------------
-// -----------------------------------------------------------------------------
-
 impl AmplifierGui {
-    // Convert the GUI state to an AmplifierChain for audio processing
     pub fn to_amp_chain(&self, sample_rate: f32) -> AmplifierChain {
         let mut chain = AmplifierChain::new("Custom Filter Chain");
 
-        // Add all filter stages to the chain
         for (idx, config) in self.stages.iter().enumerate() {
             chain.add_stage(Box::new(FilterStage::new(
                 &format!("Filter {}", idx),
@@ -203,7 +200,6 @@ impl AmplifierGui {
             )));
         }
 
-        // Define a simple channel that uses all stages
         if !self.stages.is_empty() {
             let stage_indices: Vec<usize> = (0..self.stages.len()).collect();
             chain.define_channel(0, Vec::new(), stage_indices, Vec::new());

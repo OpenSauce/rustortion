@@ -6,7 +6,7 @@ pub mod preamp;
 pub mod tonestack;
 
 // The core trait that all processing stages must implement
-pub trait Stage: Send {
+pub trait Stage: Send + Clone + Sync + 'static {
     // Process a single sample through this stage
     fn process(&mut self, input: f32) -> f32;
 
