@@ -1,4 +1,3 @@
-use jack::{Client, ClientOptions, contrib::ClosureProcessHandler};
 use std::{
     env,
     sync::{
@@ -9,9 +8,12 @@ use std::{
     time::Duration,
 };
 
+mod io;
+mod sim;
+
 use clap::Parser;
-use rustortion::io::{processor::Processor, recorder::Recorder};
-use rustortion::sim::chain::create_mesa_boogie_dual_rectifier;
+use io::manager::ProcessorManager;
+use sim::chain::create_mesa_boogie_dual_rectifier;
 
 #[derive(Parser, Debug)]
 #[command(name = "rustortion")]
@@ -23,7 +25,7 @@ struct Args {
     recording: bool,
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     unsafe {
         env::set_var("PIPEWIRE_LATENCY", "128/48000");
         env::set_var("JACK_PROMISCUOUS_SERVER", "pipewire");
@@ -37,29 +39,22 @@ fn main() {
         if recording { "🛑 Recording!" } else { "" }
     );
 
-    let (client, _status) = Client::new("rustortion", ClientOptions::NO_START_SERVER).unwrap();
-    let sample_rate = client.sample_rate() as f32;
+    let mut processor_manager = ProcessorManager::new()?;
 
-    let recorder = if recording {
-        Some(Recorder::new(sample_rate as u32, "./recordings").expect("failed to start recorder"))
-    } else {
-        None
-    };
-    let tx = recorder.as_ref().map(|r| r.sender());
-    let chain = create_mesa_boogie_dual_rectifier(sample_rate);
-    let processor = Processor::new(&client, chain, tx);
-    let process = processor.into_process_handler();
+    let chain = create_mesa_boogie_dual_rectifier(processor_manager.sample_rate());
+    processor_manager.set_amp_chain(chain);
 
-    let _active_client = client
-        .activate_async(Notifications, ClosureProcessHandler::new(process))
-        .unwrap();
+    if recording {
+        processor_manager.enable_recording("./recordings")?;
+    }
+
+    processor_manager.start()?;
 
     let running = Arc::new(AtomicBool::new(true));
     let r = Arc::clone(&running);
 
     ctrlc::set_handler(move || {
         println!("\nCtrl+C received, shutting down...");
-
         r.store(false, Ordering::SeqCst);
     })
     .expect("Error setting Ctrl+C handler");
@@ -68,14 +63,7 @@ fn main() {
         thread::sleep(Duration::from_secs(1));
     }
 
-    _active_client
-        .deactivate()
-        .expect("Failed to deactivate JACK client");
+    processor_manager.stop()?;
 
-    if let Some(rec) = recorder {
-        rec.stop(); // join disk thread
-    }
+    Ok(())
 }
-
-struct Notifications;
-impl jack::NotificationHandler for Notifications {}

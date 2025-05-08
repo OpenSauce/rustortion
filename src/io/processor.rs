@@ -1,17 +1,17 @@
 use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
 use crate::sim::chain::AmplifierChain;
-use crossbeam::channel::Sender;
-use crossbeam::queue::ArrayQueue;
+use crossbeam::channel::{Receiver, Sender};
 use jack::{AudioIn, AudioOut, Client, Control, Port, ProcessScope};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
-use std::sync::{Arc, Mutex};
 
 pub struct Processor {
-    amp: Box<AmplifierChain>,
-    inbox: Arc<ArrayQueue<Box<AmplifierChain>>>,
-    tx: Option<Sender<AudioBlock>>,
+    /// The *current* mutable chain used by the audio thread
+    chain: Box<AmplifierChain>,
+    /// Receiver for preset updates from the GUI
+    rx_chain: Receiver<Box<AmplifierChain>>,
+    tx_audio: Option<Sender<AudioBlock>>,
     in_port: Port<AudioIn>,
     out_l: Port<AudioOut>,
     out_r: Port<AudioOut>,
@@ -20,7 +20,12 @@ pub struct Processor {
 }
 
 impl Processor {
-    pub fn new(client: &Client, amp: AmplifierChain, tx: Option<Sender<AudioBlock>>) -> Self {
+    /// Construct with an initial default chain plus a receiver for future ones
+    pub fn new_with_channel(
+        client: &Client,
+        rx_chain: Receiver<Box<AmplifierChain>>,
+        tx_audio: Option<Sender<AudioBlock>>,
+    ) -> Self {
         let in_port = client.register_port("in", AudioIn::default()).unwrap();
         let out_l = client.register_port("out_l", AudioOut::default()).unwrap();
         let out_r = client.register_port("out_r", AudioOut::default()).unwrap();
@@ -31,7 +36,6 @@ impl Processor {
 
         let channels = 1;
         let oversample_factor: f32 = 4.0;
-
         let max_chunk_size = 128;
 
         let interp_params = SincInterpolationParameters {
@@ -50,16 +54,16 @@ impl Processor {
         };
 
         let upsampler = SincFixedIn::<f32>::new(
-            oversample_factor as f64, // The resample ratio
-            1.0,                      // Tolerance
+            oversample_factor as f64,
+            1.0,
             interp_params,
-            max_chunk_size as usize,
+            max_chunk_size,
             channels,
         )
         .unwrap();
 
         let downsampler = SincFixedIn::<f32>::new(
-            1.0_f64 / oversample_factor as f64,
+            1.0 / oversample_factor as f64,
             1.0,
             down_interp_params,
             (max_chunk_size as f32 * oversample_factor) as usize,
@@ -68,9 +72,9 @@ impl Processor {
         .unwrap();
 
         Self {
-            amp: Box::new(amp),
-            inbox: Arc::new(ArrayQueue::new(8)),
-            tx,
+            chain: Box::new(AmplifierChain::new("Default")),
+            rx_chain,
+            tx_audio,
             in_port,
             out_l,
             out_r,
@@ -79,48 +83,26 @@ impl Processor {
         }
     }
 
-    /// Creates a processor with a shared amplifier chain for live updates from GUI
-    pub fn new_shared(
-        client: &Client,
-        init_amp: AmplifierChain,
-        tx: Option<Sender<AudioBlock>>,
-    ) -> (Self, Arc<ArrayQueue<Box<AmplifierChain>>>) {
-        let inbox = Arc::new(ArrayQueue::new(8));
-        let mut proc = Self::new(client, init_amp, tx);
-        proc.inbox = inbox.clone(); // store the very same queue
-        (proc, inbox)
-    }
-
     pub fn into_process_handler(
-        self,
-    ) -> impl FnMut(&Client, &ProcessScope) -> Control + Send + 'static {
-        let Processor {
-            mut amp,
-            inbox,
-            tx,
-            in_port,
-            mut out_l,
-            mut out_r,
-            mut upsampler,
-            mut downsampler,
-        } = self;
-
-        move |_client: &Client, ps: &ProcessScope| -> Control {
-            // Check if we should update our amp from the shared state (if any)
-            if let Some(new) = inbox.pop() {
-                amp = new;
+        mut self,
+    ) -> Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send + 'static> {
+        Box::new(move |_client: &Client, ps: &ProcessScope| -> Control {
+            // Check for a new preset without blocking
+            if let Ok(new_chain) = self.rx_chain.try_recv() {
+                self.chain = new_chain;
             }
 
-            let n_frames = ps.n_frames() as usize; // frames in this callback
-            let in_buf = in_port.as_slice(ps);
+            let n_frames = ps.n_frames() as usize;
+            let in_buf = self.in_port.as_slice(ps);
 
-            let out_buf_l = out_l.as_mut_slice(ps);
-            let out_buf_r = out_r.as_mut_slice(ps);
+            let out_buf_l = self.out_l.as_mut_slice(ps);
+            let out_buf_r = self.out_r.as_mut_slice(ps);
 
-            let mut input_frames = vec![Vec::with_capacity(n_frames); 1];
-            input_frames[0].extend_from_slice(in_buf);
+            // --------------- DSP ---------------
 
-            let mut upsampled = match upsampler.process(&input_frames, None) {
+            // Upsample
+            let input_frames = vec![in_buf.to_vec()];
+            let mut upsampled = match self.upsampler.process(&input_frames, None) {
                 Ok(data) => data,
                 Err(e) => {
                     eprintln!("Upsampler error: {e}");
@@ -128,26 +110,20 @@ impl Processor {
                 }
             };
 
-            if upsampled[0].is_empty() {
-                eprintln!("Upsampler returned an empty buffer");
+            // Process
+            let chain = self.chain.as_mut();
+            for s in &mut upsampled[0] {
+                *s = chain.process(*s); // ✅ no move, just &mut borrow
             }
 
-            let upsampled_channel = &mut upsampled[0];
-            for sample in upsampled_channel.iter_mut() {
-                *sample = amp.process(*sample);
-            }
-
-            let downsampled = match downsampler.process(&upsampled, None) {
+            // Downsample
+            let downsampled = match self.downsampler.process(&upsampled, None) {
                 Ok(data) => data,
                 Err(e) => {
                     eprintln!("Downsampler error: {e}");
                     vec![Vec::new()]
                 }
             };
-
-            if downsampled[0].is_empty() {
-                eprintln!("Downsampler returned an empty buffer");
-            }
 
             let final_samples = &downsampled[0];
             let frames_to_copy = final_samples.len().min(n_frames);
@@ -162,16 +138,17 @@ impl Processor {
                 out_buf_r[i] = out_sample;
             }
 
-            if let Some(ref tx) = tx {
+            // Send to recorder (non‑blocking)
+            if let Some(ref tx) = self.tx_audio {
                 let mut block = AudioBlock::with_capacity(BLOCK_FRAMES * 2);
                 for &s in final_samples.iter().take(BLOCK_FRAMES) {
                     let v = (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
                     block.extend_from_slice(&[v, v]);
                 }
-                let _ = tx.try_send(block); // never blocks
+                let _ = tx.try_send(block);
             }
 
             Control::Continue
-        }
+        })
     }
 }

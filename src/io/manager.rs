@@ -1,6 +1,8 @@
-use crossbeam::queue::ArrayQueue;
-use jack::{Client, ClientOptions, contrib::ClosureProcessHandler};
-use std::sync::{Arc, Mutex};
+use crossbeam::channel::{Sender, bounded};
+use jack::{
+    AsyncClient, Client, ClientOptions, Control, ProcessScope, contrib::ClosureProcessHandler,
+};
+use std::sync::Arc;
 
 use crate::io::processor::Processor;
 use crate::io::recorder::Recorder;
@@ -10,13 +12,17 @@ use crate::sim::chain::AmplifierChain;
 pub struct ProcessorManager {
     client: Option<Client>,
     active_client: Option<
-        jack::AsyncClient<Notifications, ClosureProcessHandler<&'static Client, jack::Control>>,
+        AsyncClient<
+            Notifications,
+            ClosureProcessHandler<
+                (),
+                Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send + 'static>,
+            >,
+        >,
     >,
     recorder: Option<Recorder>,
-    /* GUI edits this value behind a mutex … */
-    gui_chain: Arc<Mutex<AmplifierChain>>,
-    /* … and we push boxed clones into the queue the audio thread owns */
-    inbox: Option<Arc<ArrayQueue<Box<AmplifierChain>>>>,
+    /// GUI → audio thread: push a completely new preset
+    amp_tx: Option<Sender<Box<AmplifierChain>>>,
     sample_rate: f32,
 }
 
@@ -27,31 +33,24 @@ impl jack::NotificationHandler for Notifications {}
 impl ProcessorManager {
     /// Creates a new ProcessorManager
     pub fn new() -> Result<Self, String> {
-        // Set up JACK client
         let (client, _status) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
-            .map_err(|e| format!("Failed to create JACK client: {}", e))?;
+            .map_err(|e| format!("Failed to create JACK client: {e}"))?;
 
         Ok(Self {
             sample_rate: client.sample_rate() as f32,
             client: Some(client),
             active_client: None,
             recorder: None,
-            gui_chain: Arc::new(Mutex::new(AmplifierChain::new("Default"))),
-            inbox: None,
+            amp_tx: None,
         })
     }
 
-    /// Sets up a new amplifier chain
-    pub fn set_amp_chain(&mut self, new_chain: AmplifierChain) {
-        *self.gui_chain.lock().unwrap() = new_chain.clone(); // keep GUI copy
-        if let Some(q) = &self.inbox {
-            let _ = q.push(Box::new(new_chain)); // drop if full
+    /// Push a new amplifier chain from the GUI side.
+    /// Never blocks; silently drops if the buffer is full.
+    pub fn set_amp_chain(&self, new_chain: AmplifierChain) {
+        if let Some(tx) = &self.amp_tx {
+            let _ = tx.try_send(Box::new(new_chain));
         }
-    }
-
-    /// Gets a reference to the amplifier chain for GUI updates
-    pub fn get_amp_chain(&self) -> Arc<Mutex<AmplifierChain>> {
-        self.gui_chain.clone()
     }
 
     /// Starts recording if enabled
@@ -61,7 +60,7 @@ impl ProcessorManager {
         }
 
         let recorder = Recorder::new(self.sample_rate as u32, record_dir)
-            .map_err(|e| format!("Failed to start recorder: {}", e))?;
+            .map_err(|e| format!("Failed to start recorder: {e}"))?;
 
         self.recorder = Some(recorder);
         Ok(())
@@ -81,23 +80,20 @@ impl ProcessorManager {
         }
 
         let client = self.client.take().ok_or("Client already active")?;
+        let (tx_amp, rx_amp) = bounded::<Box<AmplifierChain>>(1); // SPSC, size 1
 
-        let tx = self.recorder.as_ref().map(|r| r.sender());
+        let tx_audio = self.recorder.as_ref().map(|r| r.sender());
 
-        /* build processor + get its inbox -------------------------------- */
-        let init_chain = self.gui_chain.lock().unwrap().clone();
-        let (processor, inbox) = Processor::new_shared(&client, init_chain, tx);
-
-        self.inbox = Some(inbox); // store for future GUI pushes
+        // Processor owns its mutable chain and a receiver for updates
+        let processor = Processor::new_with_channel(&client, rx_amp, tx_audio);
 
         let callback = processor.into_process_handler();
+        let handler = ClosureProcessHandler::new(callback);
         let active = client
-            .activate_async(
-                Notifications,
-                ClosureProcessHandler::new(&client, callback), // D = &Client
-            )
+            .activate_async(Notifications, handler)
             .map_err(|e| format!("activate_async: {e}"))?;
 
+        self.amp_tx = Some(tx_amp);
         self.active_client = Some(active);
         Ok(())
     }
@@ -110,8 +106,10 @@ impl ProcessorManager {
             self.client = Some(client);
         }
         self.disable_recording();
+        self.amp_tx = None;
         Ok(())
     }
+
     /// Returns the sample rate
     pub fn sample_rate(&self) -> f32 {
         self.sample_rate
