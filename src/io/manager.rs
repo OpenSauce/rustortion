@@ -1,25 +1,14 @@
 use crossbeam::channel::{Sender, bounded};
-use jack::{
-    AsyncClient, Client, ClientOptions, Control, ProcessScope, contrib::ClosureProcessHandler,
-};
-use std::sync::Arc;
+use jack::{AsyncClient, Client, ClientOptions, contrib::ClosureProcessHandler};
 
-use crate::io::processor::Processor;
+use crate::io::processor::{ProcessHandler, Processor};
 use crate::io::recorder::Recorder;
 use crate::sim::chain::AmplifierChain;
 
 /// Manages the audio processing chain and JACK client
 pub struct ProcessorManager {
     client: Option<Client>,
-    active_client: Option<
-        AsyncClient<
-            Notifications,
-            ClosureProcessHandler<
-                (),
-                Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send + 'static>,
-            >,
-        >,
-    >,
+    active_client: Option<AsyncClient<Notifications, ClosureProcessHandler<(), ProcessHandler>>>,
     recorder: Option<Recorder>,
     /// GUI → audio thread: push a completely new preset
     amp_tx: Option<Sender<Box<AmplifierChain>>>,

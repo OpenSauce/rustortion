@@ -6,6 +6,8 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
+pub type ProcessHandler = Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send + 'static>;
+
 pub struct Processor {
     /// The *current* mutable chain used by the audio thread
     chain: Box<AmplifierChain>,
@@ -83,9 +85,7 @@ impl Processor {
         }
     }
 
-    pub fn into_process_handler(
-        mut self,
-    ) -> Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send + 'static> {
+    pub fn into_process_handler(mut self) -> ProcessHandler {
         Box::new(move |_client: &Client, ps: &ProcessScope| -> Control {
             // Check for a new preset without blocking
             if let Ok(new_chain) = self.rx_chain.try_recv() {

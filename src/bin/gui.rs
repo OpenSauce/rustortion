@@ -12,7 +12,6 @@ use iced::widget::{button, column, container, row, scrollable, slider, text};
 use iced::{Alignment, Element, Length, Task};
 
 use rustortion::sim::chain::AmplifierChain;
-use rustortion::sim::stages::Stage;
 use rustortion::sim::stages::filter::{FilterStage, FilterType};
 
 pub fn main() -> iced::Result {
@@ -53,7 +52,6 @@ impl Default for FilterConfig {
 enum Message {
     AddStage,
     RemoveStage(usize),
-    FilterTypeChanged(usize, FilterType),
     CutoffChanged(usize, f32),
     ResonanceChanged(usize, f32),
     Start,
@@ -62,13 +60,12 @@ enum Message {
 // -----------------------------------------------------------------------------
 // Application impl (modern Iced app pattern) ----------------------------------
 // -----------------------------------------------------------------------------
-
 impl AmplifierGui {
     fn update(&mut self, msg: Message) -> Task<Message> {
         match msg {
             Message::Start => {
                 let sample_rate = 44100.0; // Example sample rate
-                let chain = self.to_amp_chain(sample_rate);
+                let _ = self.to_amp_chain(sample_rate);
                 println!("Starting!");
                 Task::none()
             }
@@ -78,12 +75,6 @@ impl AmplifierGui {
             }
             Message::RemoveStage(i) if i < self.stages.len() => {
                 self.stages.remove(i);
-                Task::none()
-            }
-            Message::FilterTypeChanged(i, filter_type) => {
-                if let Some(cfg) = self.stages.get_mut(i) {
-                    cfg.filter_type = filter_type;
-                }
                 Task::none()
             }
             Message::CutoffChanged(i, v) => {
@@ -172,18 +163,6 @@ fn slider_row<'a, F: 'a + Fn(f32) -> Message>(
     .spacing(10)
     .align_y(Alignment::Center)
     .into()
-}
-
-impl FilterConfig {
-    fn to_stage(self, sample_rate: f32) -> Box<dyn Stage + Send> {
-        Box::new(FilterStage::new(
-            "UI Filter",
-            self.filter_type,
-            self.cutoff_hz,
-            self.resonance,
-            sample_rate,
-        ))
-    }
 }
 
 impl AmplifierGui {
