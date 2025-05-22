@@ -9,9 +9,7 @@ use rubato::{
 pub type ProcessHandler = Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send + 'static>;
 
 pub struct Processor {
-    /// The *current* mutable chain used by the audio thread
     chain: Box<AmplifierChain>,
-    /// Receiver for preset updates from the GUI
     rx_chain: Receiver<Box<AmplifierChain>>,
     tx_audio: Option<Sender<AudioBlock>>,
     in_port: Port<AudioIn>,
@@ -19,10 +17,10 @@ pub struct Processor {
     out_r: Port<AudioOut>,
     upsampler: SincFixedIn<f32>,
     downsampler: SincFixedIn<f32>,
+    input_frames: Vec<Vec<f32>>,
 }
 
 impl Processor {
-    /// Construct with an initial default chain plus a receiver for future ones
     pub fn new_with_channel(
         client: &Client,
         rx_chain: Receiver<Box<AmplifierChain>>,
@@ -73,6 +71,12 @@ impl Processor {
         )
         .unwrap();
 
+        // Pre-allocate input buffer with reasonable initial capacity
+        // JACK typically uses buffer sizes from 64 to 1024 frames
+        let max_frames = 1024; // or client.buffer_size() if available
+        let mut input_frames = Vec::with_capacity(channels);
+        input_frames.push(Vec::with_capacity(max_frames));
+
         Self {
             chain: Box::new(AmplifierChain::new("Default")),
             rx_chain,
@@ -82,6 +86,7 @@ impl Processor {
             out_r,
             upsampler,
             downsampler,
+            input_frames,
         }
     }
 
@@ -100,9 +105,21 @@ impl Processor {
 
             // --------------- DSP ---------------
 
+            {
+                let input_channel = &mut self.input_frames[0];
+                input_channel.clear();
+
+                // Ensure capacity if needed (rarely happens after initial allocation)
+                if input_channel.capacity() < n_frames {
+                    input_channel.reserve(n_frames - input_channel.capacity());
+                }
+
+                // Copy input data
+                input_channel.extend_from_slice(in_buf);
+            }
+
             // Upsample
-            let input_frames = vec![in_buf.to_vec()];
-            let mut upsampled = match self.upsampler.process(&input_frames, None) {
+            let mut upsampled = match self.upsampler.process(&self.input_frames, None) {
                 Ok(data) => data,
                 Err(e) => {
                     eprintln!("Upsampler error: {e}");
