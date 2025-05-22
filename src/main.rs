@@ -42,13 +42,14 @@ fn main() -> Result<(), String> {
     let mut processor_manager = ProcessorManager::new()?;
 
     let chain = create_mesa_boogie_dual_rectifier(processor_manager.sample_rate());
-    processor_manager.set_amp_chain(chain);
 
     if recording {
         processor_manager.enable_recording("./recordings")?;
     }
 
     processor_manager.start()?;
+
+    processor_manager.set_amp_chain(chain);
 
     let running = Arc::new(AtomicBool::new(true));
     let r = Arc::clone(&running);
