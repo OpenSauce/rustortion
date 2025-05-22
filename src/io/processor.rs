@@ -71,11 +71,8 @@ impl Processor {
         )
         .unwrap();
 
-        // Pre-allocate input buffer with reasonable initial capacity
-        // JACK typically uses buffer sizes from 64 to 1024 frames
-        let max_frames = 1024; // or client.buffer_size() if available
         let mut input_frames = Vec::with_capacity(channels);
-        input_frames.push(Vec::with_capacity(max_frames));
+        input_frames.push(Vec::with_capacity(client.buffer_size() as usize));
 
         Self {
             chain: Box::new(AmplifierChain::new("Default")),
@@ -92,9 +89,9 @@ impl Processor {
 
     pub fn into_process_handler(mut self) -> ProcessHandler {
         Box::new(move |_client: &Client, ps: &ProcessScope| -> Control {
-            // Check for a new preset without blocking
             if let Ok(new_chain) = self.rx_chain.try_recv() {
                 self.chain = new_chain;
+                println!("Received new chain");
             }
 
             let n_frames = ps.n_frames() as usize;
