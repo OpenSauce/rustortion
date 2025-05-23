@@ -1,5 +1,4 @@
 use std::{
-    env,
     sync::{
         Arc,
         atomic::{AtomicBool, Ordering},
@@ -13,6 +12,7 @@ mod sim;
 
 use clap::Parser;
 use io::manager::ProcessorManager;
+use log::info;
 use sim::chain::create_mesa_boogie_dual_rectifier;
 
 #[derive(Parser, Debug)]
@@ -26,15 +26,13 @@ struct Args {
 }
 
 fn main() -> Result<(), String> {
-    unsafe {
-        env::set_var("PIPEWIRE_LATENCY", "128/48000");
-        env::set_var("JACK_PROMISCUOUS_SERVER", "pipewire");
-    }
+    dotenv::dotenv().ok();
+    env_logger::init();
 
     let args = Args::parse();
     let recording = args.recording;
 
-    println!(
+    info!(
         "🔥 Rustortion: {}",
         if recording { "🛑 Recording!" } else { "" }
     );
@@ -42,7 +40,6 @@ fn main() -> Result<(), String> {
     let mut processor_manager = ProcessorManager::new()?;
 
     let chain = create_mesa_boogie_dual_rectifier(processor_manager.sample_rate());
-    processor_manager.set_amp_chain(chain);
 
     if recording {
         processor_manager.enable_recording("./recordings")?;
@@ -50,11 +47,13 @@ fn main() -> Result<(), String> {
 
     processor_manager.start()?;
 
+    processor_manager.set_amp_chain(chain);
+
     let running = Arc::new(AtomicBool::new(true));
     let r = Arc::clone(&running);
 
     ctrlc::set_handler(move || {
-        println!("\nCtrl+C received, shutting down...");
+        info!("\nCtrl+C received, shutting down...");
         r.store(false, Ordering::SeqCst);
     })
     .expect("Error setting Ctrl+C handler");

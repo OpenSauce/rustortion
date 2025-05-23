@@ -38,7 +38,9 @@ impl ProcessorManager {
     /// Never blocks; silently drops if the buffer is full.
     pub fn set_amp_chain(&self, new_chain: AmplifierChain) {
         if let Some(tx) = &self.amp_tx {
-            let _ = tx.try_send(Box::new(new_chain));
+            tx.try_send(Box::new(new_chain)).unwrap_or_else(|e| {
+                log::error!("Failed to send new amplifier chain: {e}");
+            });
         }
     }
 
