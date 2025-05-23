@@ -2,7 +2,7 @@ use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
 use crate::sim::chain::AmplifierChain;
 use crossbeam::channel::{Receiver, Sender};
 use jack::{AudioIn, AudioOut, Client, Control, Port, ProcessScope};
-use log;
+use log::{error, info};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
@@ -94,7 +94,7 @@ impl Processor {
         Box::new(move |_client: &Client, ps: &ProcessScope| -> Control {
             if let Ok(new_chain) = self.rx_chain.try_recv() {
                 self.chain = new_chain;
-                log::info!("Received new chain");
+                info!("Received new chain");
             }
 
             let n_frames = ps.n_frames() as usize;
@@ -117,7 +117,7 @@ impl Processor {
             let mut upsampled = match self.upsampler.process(&self.input_frames, None) {
                 Ok(data) => data,
                 Err(e) => {
-                    log::error!("Upsampler error: {e}");
+                    error!("Upsampler error: {e}");
                     return Control::Continue;
                 }
             };
@@ -130,7 +130,7 @@ impl Processor {
             let downsampled = match self.downsampler.process(&upsampled, None) {
                 Ok(data) => data,
                 Err(e) => {
-                    log::error!("Downsampler error: {e}");
+                    error!("Downsampler error: {e}");
                     return Control::Continue;
                 }
             };
@@ -153,7 +153,7 @@ impl Processor {
                 }
 
                 if let Err(e) = tx.try_send(block) {
-                    log::error!("Error sending audio block: {e}");
+                    error!("Error sending audio block: {e}");
                 }
             }
 
