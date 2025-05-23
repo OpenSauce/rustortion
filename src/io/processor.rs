@@ -2,6 +2,7 @@ use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
 use crate::sim::chain::AmplifierChain;
 use crossbeam::channel::{Receiver, Sender};
 use jack::{AudioIn, AudioOut, Client, Control, Port, ProcessScope};
+use log;
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
@@ -9,14 +10,17 @@ use rubato::{
 pub type ProcessHandler = Box<dyn FnMut(&Client, &ProcessScope) -> Control + Send + 'static>;
 
 pub struct Processor {
+    /// Amplifier.
     chain: Box<AmplifierChain>,
     rx_chain: Receiver<Box<AmplifierChain>>,
+    /// Optional recorder.
     tx_audio: Option<Sender<AudioBlock>>,
     in_port: Port<AudioIn>,
     out_l: Port<AudioOut>,
     out_r: Port<AudioOut>,
     upsampler: SincFixedIn<f32>,
     downsampler: SincFixedIn<f32>,
+    /// Reusable buffer for input frames.
     input_frames: Vec<Vec<f32>>,
 }
 
@@ -71,8 +75,7 @@ impl Processor {
         )
         .unwrap();
 
-        let mut input_frames = Vec::with_capacity(channels);
-        input_frames.push(Vec::with_capacity(client.buffer_size() as usize));
+        let input_frames = vec![Vec::with_capacity(client.buffer_size() as usize)];
 
         Self {
             chain: Box::new(AmplifierChain::new("Default")),
@@ -91,7 +94,7 @@ impl Processor {
         Box::new(move |_client: &Client, ps: &ProcessScope| -> Control {
             if let Ok(new_chain) = self.rx_chain.try_recv() {
                 self.chain = new_chain;
-                println!("Received new chain");
+                log::info!("Received new chain");
             }
 
             let n_frames = ps.n_frames() as usize;
@@ -100,66 +103,58 @@ impl Processor {
             let out_buf_l = self.out_l.as_mut_slice(ps);
             let out_buf_r = self.out_r.as_mut_slice(ps);
 
-            // --------------- DSP ---------------
-
             {
                 let input_channel = &mut self.input_frames[0];
                 input_channel.clear();
 
-                // Ensure capacity if needed (rarely happens after initial allocation)
                 if input_channel.capacity() < n_frames {
                     input_channel.reserve(n_frames - input_channel.capacity());
                 }
 
-                // Copy input data
                 input_channel.extend_from_slice(in_buf);
             }
 
-            // Upsample
             let mut upsampled = match self.upsampler.process(&self.input_frames, None) {
                 Ok(data) => data,
                 Err(e) => {
-                    eprintln!("Upsampler error: {e}");
-                    vec![Vec::new()]
+                    log::error!("Upsampler error: {e}");
+                    return Control::Continue;
                 }
             };
 
-            // Process
             let chain = self.chain.as_mut();
             for s in &mut upsampled[0] {
-                *s = chain.process(*s); // ✅ no move, just &mut borrow
+                *s = chain.process(*s);
             }
 
-            // Downsample
             let downsampled = match self.downsampler.process(&upsampled, None) {
                 Ok(data) => data,
                 Err(e) => {
-                    eprintln!("Downsampler error: {e}");
-                    vec![Vec::new()]
+                    log::error!("Downsampler error: {e}");
+                    return Control::Continue;
                 }
             };
 
             let final_samples = &downsampled[0];
             let frames_to_copy = final_samples.len().min(n_frames);
 
-            for i in 0..n_frames {
-                let out_sample = if i < frames_to_copy {
-                    final_samples[i]
-                } else {
-                    0.0
-                };
-                out_buf_l[i] = out_sample;
-                out_buf_r[i] = out_sample;
+            out_buf_l[..frames_to_copy].copy_from_slice(&final_samples[..frames_to_copy]);
+            out_buf_r[..frames_to_copy].copy_from_slice(&final_samples[..frames_to_copy]);
+            for i in frames_to_copy..n_frames {
+                out_buf_l[i] = 0.0;
+                out_buf_r[i] = 0.0;
             }
 
-            // Send to recorder (non‑blocking)
             if let Some(ref tx) = self.tx_audio {
                 let mut block = AudioBlock::with_capacity(BLOCK_FRAMES * 2);
                 for &s in final_samples.iter().take(BLOCK_FRAMES) {
                     let v = (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
                     block.extend_from_slice(&[v, v]);
                 }
-                let _ = tx.try_send(block);
+
+                if let Err(e) = tx.try_send(block) {
+                    log::error!("Error sending audio block: {e}");
+                }
             }
 
             Control::Continue

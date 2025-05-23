@@ -210,7 +210,7 @@ pub fn create_mesa_boogie_dual_rectifier(sample_rate: f32) -> AmplifierChain {
     );
 
     // Set default channel to clean
-    chain.set_channel(0);
+    chain.set_channel(1);
 
     chain
 }
