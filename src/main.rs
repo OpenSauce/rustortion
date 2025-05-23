@@ -33,7 +33,7 @@ fn main() -> Result<(), String> {
     let recording = args.recording;
 
     info!(
-        "🔥 Rustortion: {}",
+        "Rustortion: {}",
         if recording { "🛑 Recording!" } else { "" }
     );
 
@@ -45,15 +45,13 @@ fn main() -> Result<(), String> {
         processor_manager.enable_recording("./recordings")?;
     }
 
-    processor_manager.start()?;
-
     processor_manager.set_amp_chain(chain);
 
     let running = Arc::new(AtomicBool::new(true));
     let r = Arc::clone(&running);
 
     ctrlc::set_handler(move || {
-        info!("\nCtrl+C received, shutting down...");
+        info!("Ctrl+C received, shutting down...");
         r.store(false, Ordering::SeqCst);
     })
     .expect("Error setting Ctrl+C handler");
@@ -61,8 +59,6 @@ fn main() -> Result<(), String> {
     while running.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_secs(1));
     }
-
-    processor_manager.stop()?;
 
     Ok(())
 }
