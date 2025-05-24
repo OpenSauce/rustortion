@@ -52,7 +52,7 @@ impl Processor {
             .context("failed to connect to in port")?;
         client
             .connect_ports_by_name("rustortion:out_port_left", "system:playback_1")
-            .context("faled to connect to out port left")?;
+            .context("failed to connect to out port left")?;
         client
             .connect_ports_by_name("rustortion:out_port_right", "system:playback_2")
             .context("failed to connect to out port right")?;
