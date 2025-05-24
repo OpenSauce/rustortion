@@ -35,7 +35,7 @@ impl ProcessorManager {
 
         let _active_client = client
             .activate_async(Notifications, processor)
-            .with_context(|| "failed to activate async")?;
+            .context("failed to activate async client")?;
 
         Ok(Self {
             sample_rate,
