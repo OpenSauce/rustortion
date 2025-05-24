@@ -3,13 +3,14 @@ use crate::sim::chain::AmplifierChain;
 use anyhow::{Context, Result};
 use crossbeam::channel::{Receiver, Sender};
 use jack::{AudioIn, AudioOut, Client, Control, Frames, Port, ProcessHandler, ProcessScope};
-use log::{error, info};
+use log::{debug, error};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
 const CHANNELS: usize = 1;
 const OVERSAMPLE_FACTOR: f64 = 4.0;
+const MAX_BLOCK_SIZE: usize = 4096;
 
 pub struct Processor {
     /// Amplifier chain, used for processing amp simulations on the input.
@@ -57,9 +58,6 @@ impl Processor {
             .connect_ports_by_name("rustortion:out_port_right", "system:playback_2")
             .context("failed to connect to out port right")?;
 
-        let max_chunk_size = client.buffer_size() as usize;
-        info!("Max chunk size: {max_chunk_size}, oversample factor: {OVERSAMPLE_FACTOR}");
-
         let interp_params = SincInterpolationParameters {
             sinc_len: 256,
             f_cutoff: 0.95,
@@ -75,25 +73,33 @@ impl Processor {
             window: WindowFunction::BlackmanHarris2,
         };
 
-        let upsampler = SincFixedIn::<f32>::new(
+        let mut upsampler = SincFixedIn::<f32>::new(
             OVERSAMPLE_FACTOR,
             1.0,
             interp_params,
-            max_chunk_size,
+            MAX_BLOCK_SIZE,
             CHANNELS,
         )
         .context("failed to create upsampler")?;
 
-        let downsampler = SincFixedIn::<f32>::new(
+        let mut downsampler = SincFixedIn::<f32>::new(
             1.0 / OVERSAMPLE_FACTOR,
             1.0,
             down_interp_params,
-            (max_chunk_size as f64 * OVERSAMPLE_FACTOR) as usize,
+            MAX_BLOCK_SIZE * OVERSAMPLE_FACTOR as usize,
             CHANNELS,
         )
         .context("failed to create downsampler")?;
 
-        let input_buffer = vec![Vec::with_capacity(client.buffer_size() as usize)];
+        let buffer_size = client.buffer_size() as usize;
+        upsampler
+            .set_chunk_size(buffer_size)
+            .context("failed to set upsampler chunk size")?;
+        downsampler
+            .set_chunk_size(buffer_size * OVERSAMPLE_FACTOR as usize)
+            .context("failed to set downsampler chunk size")?;
+
+        let input_buffer = vec![Vec::with_capacity(buffer_size)];
         let upsampled_buffer = upsampler.output_buffer_allocate(true);
         let downsampled_buffer = downsampler.output_buffer_allocate(true);
 
@@ -117,7 +123,7 @@ impl ProcessHandler for Processor {
     fn process(&mut self, _c: &Client, ps: &ProcessScope) -> Control {
         if let Ok(new_chain) = self.rx_chain.try_recv() {
             self.chain = new_chain;
-            info!("Received new chain");
+            debug!("Received new chain");
         }
 
         let n_frames = ps.n_frames() as usize;
@@ -191,13 +197,27 @@ impl ProcessHandler for Processor {
     }
 
     fn buffer_size(&mut self, _c: &Client, frames: Frames) -> Control {
-        // TODO: Handle buffer size changes gracefully.
-        let needed = frames as usize;
+        debug!("JACK buffer size changed to {frames} frames");
+        let new_size = frames as usize;
         let cap = self.input_buffer[0].capacity();
 
-        if cap < needed {
-            self.input_buffer[0].reserve_exact(needed - cap);
+        if cap < new_size {
+            self.input_buffer[0].reserve_exact(new_size - cap);
         }
+
+        if let Err(e) = self.upsampler.set_chunk_size(new_size) {
+            error!("Upsampler cannot grow to {new_size}: {e}");
+        } else {
+            self.upsampled_buffer = self.upsampler.output_buffer_allocate(true);
+        }
+
+        let needed_down = new_size * OVERSAMPLE_FACTOR as usize;
+        if let Err(e) = self.downsampler.set_chunk_size(needed_down) {
+            error!("Downsampler cannot grow to {needed_down}: {e}");
+        } else {
+            self.downsampled_buffer = self.downsampler.output_buffer_allocate(true);
+        }
+
         Control::Continue
     }
 }
