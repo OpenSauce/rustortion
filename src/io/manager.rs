@@ -1,15 +1,15 @@
 use anyhow::{Context, Result};
 use crossbeam::channel::{Sender, bounded};
-use jack::{AsyncClient, Client, ClientOptions, contrib::ClosureProcessHandler};
+use jack::{AsyncClient, Client, ClientOptions};
 use log::error;
 
-use crate::io::processor::{ProcessHandler, Processor};
+use crate::io::processor::Processor;
 use crate::io::recorder::Recorder;
 use crate::sim::chain::AmplifierChain;
 
 /// Manages the audio processing chain and JACK client
 pub struct ProcessorManager {
-    _active_client: AsyncClient<Notifications, ClosureProcessHandler<(), ProcessHandler>>,
+    _active_client: AsyncClient<Notifications, Processor>,
     recorder: Option<Recorder>,
     /// GUI → audio thread: push a completely new preset
     amp_tx: Sender<Box<AmplifierChain>>,
@@ -24,18 +24,18 @@ impl ProcessorManager {
     /// Creates a new ProcessorManager
     pub fn new() -> Result<Self> {
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
-            .context("Failed to create JACK client")?;
+            .context("failed to create JACK client")?;
 
         let (tx_amp, rx_amp) = bounded::<Box<AmplifierChain>>(1);
 
-        let processor = Processor::new_with_channel(&client, rx_amp, None);
-        let handler = ClosureProcessHandler::new(processor.into_process_handler());
+        let processor =
+            Processor::new(&client, rx_amp, None).context("error creating processor")?;
 
         let sample_rate = client.sample_rate() as f32;
 
         let _active_client = client
-            .activate_async(Notifications, handler)
-            .with_context(|| "Failed to activate async")?;
+            .activate_async(Notifications, processor)
+            .context("failed to activate async client")?;
 
         Ok(Self {
             sample_rate,
@@ -62,7 +62,7 @@ impl ProcessorManager {
         }
 
         let recorder = Recorder::new(self.sample_rate as u32, record_dir)
-            .context("Failed to start recorder")?;
+            .context("failed to start recorder")?;
         let _ = recorder.sender();
 
         self.recorder = Some(recorder);

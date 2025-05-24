@@ -53,19 +53,19 @@ __________                __                 __  .__
     for &key in &required_vars {
         match std::env::var(key) {
             Ok(val) => info!("{} = {}", key, val),
-            Err(_) => anyhow::bail!("Environment variable '{}' must be set.", key),
+            Err(_) => anyhow::bail!("environment variable '{}' must be set.", key),
         }
     }
 
     let mut processor_manager =
-        ProcessorManager::new().context("Failed to create ProcessorManager")?;
+        ProcessorManager::new().context("failed to create ProcessorManager")?;
 
     let chain = create_mesa_boogie_dual_rectifier(processor_manager.sample_rate());
 
     if recording {
         processor_manager
             .enable_recording(&args.recording_dir)
-            .with_context(|| format!("Failed to enable recording in '{}'", args.recording_dir))?;
+            .with_context(|| format!("failed to enable recording in '{}'", args.recording_dir))?;
     }
 
     processor_manager.set_amp_chain(chain);
@@ -77,7 +77,7 @@ __________                __                 __  .__
         info!("Ctrl+C received, shutting down...");
         shutdown_flag.store(false, Ordering::SeqCst);
     })
-    .expect("Error setting Ctrl+C handler");
+    .expect("error setting Ctrl+C handler");
 
     while running.load(Ordering::SeqCst) {
         thread::sleep(Duration::from_secs(1));
