@@ -25,9 +25,9 @@ pub struct Processor {
     downsampler: SincFixedIn<f32>,
     /// Reusable buffer for input frames.
     input_buffer: Vec<Vec<f32>>,
-    /// Resuable buffer for upsampled frames.
+    /// Reusable buffer for upsampled frames.
     upsampled_buffer: Vec<Vec<f32>>,
-    /// Resuable buffer for downsampled frames.
+    /// Reusable buffer for downsampled frames.
     downsampled_buffer: Vec<Vec<f32>>,
 }
 
