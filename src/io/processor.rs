@@ -8,6 +8,9 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
+const CHANNELS: usize = 1;
+const OVERSAMPLE_FACTOR: f64 = 4.0;
+
 pub struct Processor {
     /// Amplifier chain, used for processing amp simulations on the input.
     chain: Box<AmplifierChain>,
@@ -54,10 +57,8 @@ impl Processor {
             .connect_ports_by_name("rustortion:out_port_right", "system:playback_2")
             .context("failed to connect to out port right")?;
 
-        let channels = 1;
-        let oversample_factor: f32 = 4.0;
         let max_chunk_size = client.buffer_size() as usize;
-        info!("Max chunk size: {max_chunk_size}, oversample factor: {oversample_factor}");
+        info!("Max chunk size: {max_chunk_size}, oversample factor: {OVERSAMPLE_FACTOR}");
 
         let interp_params = SincInterpolationParameters {
             sinc_len: 256,
@@ -75,20 +76,20 @@ impl Processor {
         };
 
         let upsampler = SincFixedIn::<f32>::new(
-            oversample_factor as f64,
+            OVERSAMPLE_FACTOR,
             1.0,
             interp_params,
             max_chunk_size,
-            channels,
+            CHANNELS,
         )
         .context("failed to create upsampler")?;
 
         let downsampler = SincFixedIn::<f32>::new(
-            1.0 / oversample_factor as f64,
+            1.0 / OVERSAMPLE_FACTOR,
             1.0,
             down_interp_params,
-            (max_chunk_size as f32 * oversample_factor) as usize,
-            channels,
+            (max_chunk_size as f64 * OVERSAMPLE_FACTOR) as usize,
+            CHANNELS,
         )
         .context("failed to create downsampler")?;
 
