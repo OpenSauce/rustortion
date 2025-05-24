@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use crossbeam::channel::{Sender, bounded};
 use jack::{AsyncClient, Client, ClientOptions, contrib::ClosureProcessHandler};
 use log::error;
@@ -21,11 +22,11 @@ impl jack::NotificationHandler for Notifications {}
 
 impl ProcessorManager {
     /// Creates a new ProcessorManager
-    pub fn new() -> Result<Self, String> {
-        let (client, _status) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
-            .map_err(|e| format!("Failed to create JACK client: {e}"))?;
+    pub fn new() -> Result<Self> {
+        let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
+            .context("Failed to create JACK client")?;
 
-        let (tx_amp, rx_amp) = bounded::<Box<AmplifierChain>>(1); // SPSC, size 1
+        let (tx_amp, rx_amp) = bounded::<Box<AmplifierChain>>(1);
 
         let processor = Processor::new_with_channel(&client, rx_amp, None);
         let handler = ClosureProcessHandler::new(processor.into_process_handler());
@@ -34,7 +35,7 @@ impl ProcessorManager {
 
         let _active_client = client
             .activate_async(Notifications, handler)
-            .map_err(|e| format!("activate_async: {e}"))?;
+            .with_context(|| "Falied to activate async")?;
 
         Ok(Self {
             sample_rate,
@@ -55,13 +56,13 @@ impl ProcessorManager {
     }
 
     /// Starts recording if enabled
-    pub fn enable_recording(&mut self, record_dir: &str) -> Result<(), String> {
+    pub fn enable_recording(&mut self, record_dir: &str) -> Result<()> {
         if self.recorder.is_some() {
             return Ok(());
         }
 
         let recorder = Recorder::new(self.sample_rate as u32, record_dir)
-            .map_err(|e| format!("Failed to start recorder: {e}"))?;
+            .context("Failed to start recorder")?;
         let _ = recorder.sender();
 
         self.recorder = Some(recorder);
@@ -75,7 +76,9 @@ impl ProcessorManager {
         }
 
         if let Some(recorder) = self.recorder.take() {
-            recorder.stop();
+            if let Err(e) = recorder.stop() {
+                error!("Failed to stop recorder: {e}");
+            }
         }
     }
 

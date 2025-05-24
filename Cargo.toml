@@ -6,7 +6,7 @@ edition = "2024"
 [dependencies]
 jack = "0.13"
 hound = "3.5"
-ctrlc = "3.4"
+ctrlc = { version = "3.4", features = ["termination"] }
 chrono = "0.4"
 clap = {version = "4.5", features = ["derive", "env"] }
 rubato = "0.16"
@@ -16,3 +16,4 @@ iced = "0.13"
 log = "0.4"
 env_logger = "0.11"
 dotenv = "0.15"
+anyhow = "1.0"
