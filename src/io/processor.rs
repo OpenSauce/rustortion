@@ -103,6 +103,8 @@ impl Processor {
         let upsampled_buffer = upsampler.output_buffer_allocate(true);
         let downsampled_buffer = downsampler.output_buffer_allocate(true);
 
+        debug_stats(client);
+
         Ok(Self {
             chain: Box::new(AmplifierChain::new("Default")),
             rx_chain,
@@ -196,8 +198,9 @@ impl ProcessHandler for Processor {
         Control::Continue
     }
 
-    fn buffer_size(&mut self, _c: &Client, frames: Frames) -> Control {
-        debug!("JACK buffer size changed to {frames} frames");
+    fn buffer_size(&mut self, client: &Client, frames: Frames) -> Control {
+        debug_stats(client);
+
         let new_size = frames as usize;
         let cap = self.input_buffer[0].capacity();
 
@@ -220,4 +223,13 @@ impl ProcessHandler for Processor {
 
         Control::Continue
     }
+}
+
+fn debug_stats(client: &Client) {
+    let sample_rate = client.sample_rate() as f32;
+    let buffer_frames = client.buffer_size() as f32;
+    debug!(
+        "Sample rate: {sample_rate}, Buffer frames: {buffer_frames}, Calls p/s: {}",
+        sample_rate / buffer_frames
+    );
 }

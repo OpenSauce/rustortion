@@ -20,11 +20,8 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Check formatting
-        run: cargo fmt --check
+      - name: Lint (fmt, check, clippy)
+        run: make lint
 
-      - name: Run Clippy
-        run: cargo clippy -- -D warnings
-
-      - name: Check compilation
-        run: cargo check
+      - name: Run tests
+        run: make test
