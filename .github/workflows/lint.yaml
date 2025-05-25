@@ -20,7 +20,7 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Lint (fmt, check, clippy)
+      - name: Lint
         run: make lint
 
       - name: Run tests
