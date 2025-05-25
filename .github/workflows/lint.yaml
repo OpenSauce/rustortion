@@ -1,4 +1,4 @@
-name: Lint & Clippy
+name: Lint & Test
 
 on:
   push:
@@ -8,9 +8,8 @@ on:
 
 jobs:
   lint:
-    name: Rust Linting
+    name: Lint
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -23,5 +22,17 @@ jobs:
       - name: Lint
         run: make lint
 
-      - name: Run tests
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libjack-jackd2-dev pkg-config
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Test
         run: make test
