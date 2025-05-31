@@ -1,16 +1,10 @@
-// Improved Mesa‑style tone stack with sane gain structure and gentler highs
-// -------------------------------------------------------------------------
-// Drop‑in replacement for the previous ToneStackStage.  The API is identical
-// (ToneStackStage::new, Stage trait impl, set/get_parameter) so you can swap
-// it straight into your existing build without touching anything else.
-
 use crate::sim::stages::Stage;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
 /// Available EQ curves that loosely match well‑known amp families.
-#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum ToneStackModel {
     /// Mesa Rectifier / Mark‑series – tight lows, scooped low‑mids.
     Modern,
@@ -20,6 +14,17 @@ pub enum ToneStackModel {
     American,
     /// Flat – neutral Baxandall.
     Flat,
+}
+
+impl std::fmt::Display for ToneStackModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ToneStackModel::Modern => write!(f, "Modern"),
+            ToneStackModel::British => write!(f, "British"),
+            ToneStackModel::American => write!(f, "American"),
+            ToneStackModel::Flat => write!(f, "Flat"),
+        }
+    }
 }
 
 /// Highly efficient 3‑band tone stack (+ Presence shelf).

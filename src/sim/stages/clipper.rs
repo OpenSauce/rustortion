@@ -2,13 +2,25 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
-#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum ClipperType {
     Soft,       // Smooth, tube-like saturation (similar to Tanh)
     Medium,     // Balanced clipping (similar to ArcTan)
     Hard,       // More aggressive clipping (similar to HardClip)
     Asymmetric, // Tube-like even harmonic generation
     ClassA,     // Classic Class A tube preamp behavior
+}
+
+impl std::fmt::Display for ClipperType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ClipperType::Soft => write!(f, "Soft Clipping"),
+            ClipperType::Medium => write!(f, "Medium Clipping"),
+            ClipperType::Hard => write!(f, "Hard Clipping"),
+            ClipperType::Asymmetric => write!(f, "Asymmetric Clipping"),
+            ClipperType::ClassA => write!(f, "Class A Tube Preamp"),
+        }
+    }
 }
 
 impl ClipperType {

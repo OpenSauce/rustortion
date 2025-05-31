@@ -2,11 +2,21 @@ use crate::sim::stages::Stage;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
-#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum PowerAmpType {
     ClassA,
     ClassAB,
     ClassB,
+}
+
+impl std::fmt::Display for PowerAmpType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PowerAmpType::ClassA => write!(f, "Class A"),
+            PowerAmpType::ClassAB => write!(f, "Class AB"),
+            PowerAmpType::ClassB => write!(f, "Class B"),
+        }
+    }
 }
 
 pub struct PowerAmpStage {
