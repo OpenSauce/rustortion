@@ -89,6 +89,15 @@ impl ProcessorManager {
     }
 }
 
+impl std::fmt::Debug for ProcessorManager {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProcessorManager")
+            .field("sample_rate", &self.sample_rate)
+            .field("recorder", &self.recorder.is_some())
+            .finish()
+    }
+}
+
 impl Drop for ProcessorManager {
     fn drop(&mut self) {
         self.disable_recording();

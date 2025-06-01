@@ -2,6 +2,7 @@ use iced::Length::Fill;
 use iced::widget::{button, column, container, pick_list, row, scrollable};
 use iced::{Alignment, Element, Length, Task, Theme};
 
+use crate::io::manager::ProcessorManager;
 use crate::sim::chain::AmplifierChain;
 use crate::sim::stages::{
     clipper::ClipperType,
@@ -14,11 +15,20 @@ use crate::sim::stages::{
 
 use crate::gui::widgets::{compressor, filter, poweramp, preamp, tonestack};
 
-pub fn start() -> iced::Result {
+pub fn start(processor_manager: ProcessorManager) -> iced::Result {
     iced::application("Rustortion", AmplifierGui::update, AmplifierGui::view)
         .window_size((800.0, 600.0))
         .theme(AmplifierGui::theme)
-        .run()
+        .run_with(move || {
+            (
+                AmplifierGui {
+                    processor_manager,
+                    stages: Vec::new(),
+                    selected_stage_type: StageType::default(),
+                },
+                Task::none(),
+            )
+        })
 }
 
 // Stage type enum
@@ -149,8 +159,9 @@ impl Default for PowerAmpConfig {
 }
 
 // Main GUI state
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct AmplifierGui {
+    processor_manager: ProcessorManager,
     stages: Vec<StageConfig>,
     selected_stage_type: StageType,
 }
@@ -161,7 +172,6 @@ pub enum Message {
     AddStage,
     RemoveStage(usize),
     StageTypeSelected(StageType),
-    Start,
 
     // Filter messages
     FilterTypeChanged(usize, FilterType),
@@ -196,14 +206,9 @@ pub enum Message {
 // Application implementation
 impl AmplifierGui {
     fn update(&mut self, msg: Message) -> Task<Message> {
+        let mut should_update_chain = false;
+
         match msg {
-            Message::Start => {
-                let sample_rate = 44100.0;
-                let _chain = self.to_amp_chain(sample_rate);
-                println!("Starting with {} stages!", self.stages.len());
-                // Here you would connect to ProcessorManager
-                Task::none()
-            }
             Message::AddStage => {
                 let new_stage = match self.selected_stage_type {
                     StageType::Filter => StageConfig::Filter(FilterConfig::default()),
@@ -213,17 +218,16 @@ impl AmplifierGui {
                     StageType::PowerAmp => StageConfig::PowerAmp(PowerAmpConfig::default()),
                 };
                 self.stages.push(new_stage);
-                Task::none()
+                should_update_chain = true;
             }
             Message::RemoveStage(idx) => {
                 if idx < self.stages.len() {
                     self.stages.remove(idx);
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::StageTypeSelected(stage_type) => {
                 self.selected_stage_type = stage_type;
-                Task::none()
             }
 
             // Filter updates
@@ -231,19 +235,19 @@ impl AmplifierGui {
                 if let Some(StageConfig::Filter(cfg)) = self.stages.get_mut(idx) {
                     cfg.filter_type = filter_type;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::FilterCutoffChanged(idx, v) => {
                 if let Some(StageConfig::Filter(cfg)) = self.stages.get_mut(idx) {
                     cfg.cutoff_hz = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::FilterResonanceChanged(idx, v) => {
                 if let Some(StageConfig::Filter(cfg)) = self.stages.get_mut(idx) {
                     cfg.resonance = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
 
             // Preamp updates
@@ -251,19 +255,19 @@ impl AmplifierGui {
                 if let Some(StageConfig::Preamp(cfg)) = self.stages.get_mut(idx) {
                     cfg.gain = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::PreampBiasChanged(idx, v) => {
                 if let Some(StageConfig::Preamp(cfg)) = self.stages.get_mut(idx) {
                     cfg.bias = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::PreampClipperChanged(idx, clipper) => {
                 if let Some(StageConfig::Preamp(cfg)) = self.stages.get_mut(idx) {
                     cfg.clipper_type = clipper;
                 }
-                Task::none()
+                should_update_chain = true;
             }
 
             // Compressor updates
@@ -271,31 +275,31 @@ impl AmplifierGui {
                 if let Some(StageConfig::Compressor(cfg)) = self.stages.get_mut(idx) {
                     cfg.threshold_db = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::CompressorRatioChanged(idx, v) => {
                 if let Some(StageConfig::Compressor(cfg)) = self.stages.get_mut(idx) {
                     cfg.ratio = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::CompressorAttackChanged(idx, v) => {
                 if let Some(StageConfig::Compressor(cfg)) = self.stages.get_mut(idx) {
                     cfg.attack_ms = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::CompressorReleaseChanged(idx, v) => {
                 if let Some(StageConfig::Compressor(cfg)) = self.stages.get_mut(idx) {
                     cfg.release_ms = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::CompressorMakeupChanged(idx, v) => {
                 if let Some(StageConfig::Compressor(cfg)) = self.stages.get_mut(idx) {
                     cfg.makeup_db = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
 
             // ToneStack updates
@@ -303,31 +307,31 @@ impl AmplifierGui {
                 if let Some(StageConfig::ToneStack(cfg)) = self.stages.get_mut(idx) {
                     cfg.model = model;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::ToneStackBassChanged(idx, v) => {
                 if let Some(StageConfig::ToneStack(cfg)) = self.stages.get_mut(idx) {
                     cfg.bass = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::ToneStackMidChanged(idx, v) => {
                 if let Some(StageConfig::ToneStack(cfg)) = self.stages.get_mut(idx) {
                     cfg.mid = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::ToneStackTrebleChanged(idx, v) => {
                 if let Some(StageConfig::ToneStack(cfg)) = self.stages.get_mut(idx) {
                     cfg.treble = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::ToneStackPresenceChanged(idx, v) => {
                 if let Some(StageConfig::ToneStack(cfg)) = self.stages.get_mut(idx) {
                     cfg.presence = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
 
             // PowerAmp updates
@@ -335,21 +339,33 @@ impl AmplifierGui {
                 if let Some(StageConfig::PowerAmp(cfg)) = self.stages.get_mut(idx) {
                     cfg.amp_type = amp_type;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::PowerAmpDriveChanged(idx, v) => {
                 if let Some(StageConfig::PowerAmp(cfg)) = self.stages.get_mut(idx) {
                     cfg.drive = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
             Message::PowerAmpSagChanged(idx, v) => {
                 if let Some(StageConfig::PowerAmp(cfg)) = self.stages.get_mut(idx) {
                     cfg.sag = v;
                 }
-                Task::none()
+                should_update_chain = true;
             }
         }
+
+        if should_update_chain {
+            self.update_processor_chain();
+        }
+
+        Task::none()
+    }
+
+    fn update_processor_chain(&self) {
+        let sample_rate = self.processor_manager.sample_rate();
+        let chain = self.to_amp_chain(sample_rate);
+        self.processor_manager.set_amp_chain(chain);
     }
 
     fn view(&self) -> Element<Message> {
@@ -384,7 +400,6 @@ impl AmplifierGui {
                 Message::StageTypeSelected
             ),
             button("Add Stage").on_press(Message::AddStage),
-            button("Start").on_press(Message::Start),
         ]
         .spacing(10)
         .align_y(Alignment::Center);
