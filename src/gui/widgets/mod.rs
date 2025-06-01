@@ -13,13 +13,16 @@ pub fn labeled_slider<'a, F: 'a + Fn(f32) -> Message>(
     value: f32,
     on_change: F,
     format: impl Fn(f32) -> String + 'a,
+    step: f32,
 ) -> Element<'a, Message> {
     use iced::Alignment;
     use iced::widget::{row, slider, text};
 
     row![
         text(label).width(Length::FillPortion(3)),
-        slider(range, value, on_change).width(Length::FillPortion(5)),
+        slider(range, value, on_change)
+            .width(Length::FillPortion(5))
+            .step(step),
         text(format(value)).width(Length::FillPortion(2)),
     ]
     .spacing(10)

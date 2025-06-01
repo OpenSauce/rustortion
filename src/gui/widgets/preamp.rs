@@ -4,6 +4,14 @@ use crate::sim::stages::clipper::ClipperType;
 use iced::widget::{column, container, pick_list, row, text};
 use iced::{Element, Length};
 
+const CLIPPER_TYPES: [ClipperType; 5] = [
+    ClipperType::Soft,
+    ClipperType::Medium,
+    ClipperType::Hard,
+    ClipperType::Asymmetric,
+    ClipperType::ClassA,
+];
+
 pub fn preamp_widget(idx: usize, cfg: &PreampConfig) -> Element<Message> {
     let header = row![
         text(format!("Preamp {}", idx + 1)),
@@ -12,17 +20,9 @@ pub fn preamp_widget(idx: usize, cfg: &PreampConfig) -> Element<Message> {
     .spacing(10)
     .align_y(iced::Alignment::Center);
 
-    let clipper_types = vec![
-        ClipperType::Soft,
-        ClipperType::Medium,
-        ClipperType::Hard,
-        ClipperType::Asymmetric,
-        ClipperType::ClassA,
-    ];
-
     let clipper_picker = row![
         text("Clipper:").width(Length::FillPortion(3)),
-        pick_list(clipper_types, Some(cfg.clipper_type), move |t| {
+        pick_list(CLIPPER_TYPES, Some(cfg.clipper_type), move |t| {
             Message::PreampClipperChanged(idx, t)
         })
         .width(Length::FillPortion(7)),
@@ -37,14 +37,16 @@ pub fn preamp_widget(idx: usize, cfg: &PreampConfig) -> Element<Message> {
             0.0..=10.0,
             cfg.gain,
             move |v| Message::PreampGainChanged(idx, v),
-            |v| format!("{:.1}", v)
+            |v| format!("{:.1}", v),
+            1.0
         ),
         labeled_slider(
             "Bias",
             -1.0..=1.0,
             cfg.bias,
             move |v| Message::PreampBiasChanged(idx, v),
-            |v| format!("{:.2}", v)
+            |v| format!("{:.2}", v),
+            0.1
         ),
     ]
     .spacing(5);

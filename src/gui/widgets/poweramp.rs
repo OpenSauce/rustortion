@@ -4,6 +4,12 @@ use crate::sim::stages::poweramp::PowerAmpType;
 use iced::widget::{column, container, pick_list, row, text};
 use iced::{Element, Length};
 
+const POWER_AMP_TYPES: [PowerAmpType; 3] = [
+    PowerAmpType::ClassA,
+    PowerAmpType::ClassAB,
+    PowerAmpType::ClassB,
+];
+
 pub fn poweramp_widget(idx: usize, cfg: &PowerAmpConfig) -> Element<Message> {
     let header = row![
         text(format!("Power Amp {}", idx + 1)),
@@ -12,15 +18,9 @@ pub fn poweramp_widget(idx: usize, cfg: &PowerAmpConfig) -> Element<Message> {
     .spacing(10)
     .align_y(iced::Alignment::Center);
 
-    let amp_types = vec![
-        PowerAmpType::ClassA,
-        PowerAmpType::ClassAB,
-        PowerAmpType::ClassB,
-    ];
-
     let type_picker = row![
         text("Type:").width(Length::FillPortion(3)),
-        pick_list(amp_types, Some(cfg.amp_type), move |t| {
+        pick_list(POWER_AMP_TYPES, Some(cfg.amp_type), move |t| {
             Message::PowerAmpTypeChanged(idx, t)
         })
         .width(Length::FillPortion(7)),
@@ -35,14 +35,16 @@ pub fn poweramp_widget(idx: usize, cfg: &PowerAmpConfig) -> Element<Message> {
             0.0..=1.0,
             cfg.drive,
             move |v| Message::PowerAmpDriveChanged(idx, v),
-            |v| format!("{:.2}", v)
+            |v| format!("{:.2}", v),
+            0.1
         ),
         labeled_slider(
             "Sag",
             0.0..=1.0,
             cfg.sag,
             move |v| Message::PowerAmpSagChanged(idx, v),
-            |v| format!("{:.2}", v)
+            |v| format!("{:.2}", v),
+            0.1
         ),
     ]
     .spacing(5);
