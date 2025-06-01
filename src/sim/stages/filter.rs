@@ -3,12 +3,23 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
-#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub enum FilterType {
     Highpass,
     Lowpass,
     Bandpass,
     Notch,
+}
+
+impl std::fmt::Display for FilterType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FilterType::Highpass => write!(f, "Highpass"),
+            FilterType::Lowpass => write!(f, "Lowpass"),
+            FilterType::Bandpass => write!(f, "Bandpass"),
+            FilterType::Notch => write!(f, "Notch"),
+        }
+    }
 }
 
 pub struct FilterStage {
