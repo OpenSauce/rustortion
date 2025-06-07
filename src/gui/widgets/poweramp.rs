@@ -1,4 +1,4 @@
-use super::labeled_slider;
+use super::{icon_button, labeled_slider};
 use crate::gui::amp::{Message, PowerAmpConfig};
 use crate::sim::stages::poweramp::PowerAmpType;
 use iced::widget::{column, container, pick_list, row, text};
@@ -10,13 +10,34 @@ const POWER_AMP_TYPES: [PowerAmpType; 3] = [
     PowerAmpType::ClassB,
 ];
 
-pub fn poweramp_widget(idx: usize, cfg: &PowerAmpConfig) -> Element<Message> {
-    let header = row![
-        text(format!("Power Amp {}", idx + 1)),
-        iced::widget::button("x").on_press(Message::RemoveStage(idx)),
-    ]
-    .spacing(10)
-    .align_y(iced::Alignment::Center);
+pub fn poweramp_widget(idx: usize, cfg: &PowerAmpConfig, total_stages: usize) -> Element<Message> {
+    let mut header = row![text(format!("Power Amp {}", idx + 1))].spacing(5);
+
+    if idx > 0 {
+        header = header.push(icon_button(
+            "↑",
+            Some(Message::MoveStageUp(idx)),
+            iced::widget::button::primary,
+        ));
+    } else {
+        header = header.push(icon_button("↑", None, iced::widget::button::secondary));
+    }
+
+    if idx < total_stages.saturating_sub(1) {
+        header = header.push(icon_button(
+            "↓",
+            Some(Message::MoveStageDown(idx)),
+            iced::widget::button::primary,
+        ));
+    } else {
+        header = header.push(icon_button("↓", None, iced::widget::button::secondary));
+    }
+
+    header = header.push(icon_button(
+        "×",
+        Some(Message::RemoveStage(idx)),
+        iced::widget::button::danger,
+    ));
 
     let type_picker = row![
         text("Type:").width(Length::FillPortion(3)),
@@ -49,12 +70,16 @@ pub fn poweramp_widget(idx: usize, cfg: &PowerAmpConfig) -> Element<Message> {
     ]
     .spacing(5);
 
-    container(column![header, body].spacing(5).padding(10))
-        .width(Length::Fill)
-        .style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(5))
-        })
-        .into()
+    container(
+        column![header.align_y(iced::Alignment::Center), body]
+            .spacing(5)
+            .padding(10),
+    )
+    .width(Length::Fill)
+    .style(|theme: &iced::Theme| {
+        container::Style::default()
+            .background(theme.palette().background)
+            .border(iced::Border::default().rounded(5))
+    })
+    .into()
 }
