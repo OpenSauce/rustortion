@@ -171,6 +171,8 @@ struct AmplifierGui {
 pub enum Message {
     AddStage,
     RemoveStage(usize),
+    MoveStageUp(usize),
+    MoveStageDown(usize),
     StageTypeSelected(StageType),
 
     // Filter messages
@@ -225,6 +227,18 @@ impl AmplifierGui {
                     self.stages.remove(idx);
                 }
                 should_update_chain = true;
+            }
+            Message::MoveStageUp(idx) => {
+                if idx > 0 {
+                    self.stages.swap(idx - 1, idx);
+                    should_update_chain = true;
+                }
+            }
+            Message::MoveStageDown(idx) => {
+                if idx < self.stages.len().saturating_sub(1) {
+                    self.stages.swap(idx, idx + 1);
+                    should_update_chain = true;
+                }
             }
             Message::StageTypeSelected(stage_type) => {
                 self.selected_stage_type = stage_type;
@@ -374,11 +388,17 @@ impl AmplifierGui {
         // Add all stages to the list
         for (idx, stage) in self.stages.iter().enumerate() {
             let widget = match stage {
-                StageConfig::Filter(cfg) => filter::filter_widget(idx, cfg),
-                StageConfig::Preamp(cfg) => preamp::preamp_widget(idx, cfg),
-                StageConfig::Compressor(cfg) => compressor::compressor_widget(idx, cfg),
-                StageConfig::ToneStack(cfg) => tonestack::tonestack_widget(idx, cfg),
-                StageConfig::PowerAmp(cfg) => poweramp::poweramp_widget(idx, cfg),
+                StageConfig::Filter(cfg) => filter::filter_widget(idx, cfg, self.stages.len()),
+                StageConfig::Preamp(cfg) => preamp::preamp_widget(idx, cfg, self.stages.len()),
+                StageConfig::Compressor(cfg) => {
+                    compressor::compressor_widget(idx, cfg, self.stages.len())
+                }
+                StageConfig::ToneStack(cfg) => {
+                    tonestack::tonestack_widget(idx, cfg, self.stages.len())
+                }
+                StageConfig::PowerAmp(cfg) => {
+                    poweramp::poweramp_widget(idx, cfg, self.stages.len())
+                }
             };
             list = list.push(widget);
         }

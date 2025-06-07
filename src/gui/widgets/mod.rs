@@ -5,7 +5,8 @@ pub mod preamp;
 pub mod tonestack;
 
 use crate::gui::amp::Message;
-use iced::{Element, Length};
+use iced::widget::{button, row, text};
+use iced::{Element, Font, Length};
 
 pub fn labeled_slider<'a, F: 'a + Fn(f32) -> Message>(
     label: &'a str,
@@ -28,4 +29,22 @@ pub fn labeled_slider<'a, F: 'a + Fn(f32) -> Message>(
     .spacing(10)
     .align_y(Alignment::Center)
     .into()
+}
+
+const ICONS_FONT: Font = Font::MONOSPACE;
+
+pub fn icon_button<'a>(
+    icon: &'a str,
+    message: Option<Message>,
+    style: fn(&iced::Theme, button::Status) -> iced::widget::button::Style,
+) -> Element<'a, Message> {
+    let btn = button(text(icon).font(ICONS_FONT))
+        .width(Length::Fixed(30.0))
+        .style(style);
+
+    if let Some(msg) = message {
+        btn.on_press(msg).into()
+    } else {
+        btn.into()
+    }
 }
