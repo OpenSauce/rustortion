@@ -1,40 +1,16 @@
-use super::{icon_button, labeled_slider};
+use super::{labeled_slider, stage_header};
 use crate::gui::amp::{CompressorConfig, Message};
-use iced::widget::{column, container, row, text};
+use iced::widget::{column, container};
 use iced::{Element, Length};
+
+const HEADER_TEXT: &str = "Compressor";
 
 pub fn compressor_widget(
     idx: usize,
     cfg: &CompressorConfig,
     total_stages: usize,
 ) -> Element<Message> {
-    let mut header = row![text(format!("Compressor {}", idx + 1))].spacing(5);
-
-    if idx > 0 {
-        header = header.push(icon_button(
-            "↑",
-            Some(Message::MoveStageUp(idx)),
-            iced::widget::button::primary,
-        ));
-    } else {
-        header = header.push(icon_button("↑", None, iced::widget::button::secondary));
-    }
-
-    if idx < total_stages.saturating_sub(1) {
-        header = header.push(icon_button(
-            "↓",
-            Some(Message::MoveStageDown(idx)),
-            iced::widget::button::primary,
-        ));
-    } else {
-        header = header.push(icon_button("↓", None, iced::widget::button::secondary));
-    }
-
-    header = header.push(icon_button(
-        "×",
-        Some(Message::RemoveStage(idx)),
-        iced::widget::button::danger,
-    ));
+    let header = stage_header(HEADER_TEXT, idx, total_stages);
 
     let body = column![
         labeled_slider(

@@ -1,9 +1,10 @@
-use super::{icon_button, labeled_slider};
+use super::{labeled_slider, stage_header};
 use crate::gui::amp::{Message, PreampConfig};
 use crate::sim::stages::clipper::ClipperType;
 use iced::widget::{column, container, pick_list, row, text};
 use iced::{Element, Length};
 
+const HEADER_TEXT: &str = "Preamp";
 const CLIPPER_TYPES: [ClipperType; 5] = [
     ClipperType::Soft,
     ClipperType::Medium,
@@ -13,33 +14,7 @@ const CLIPPER_TYPES: [ClipperType; 5] = [
 ];
 
 pub fn preamp_widget(idx: usize, cfg: &PreampConfig, total_stages: usize) -> Element<Message> {
-    let mut header = row![text(format!("Preamp {}", idx + 1))].spacing(5);
-
-    if idx > 0 {
-        header = header.push(icon_button(
-            "↑",
-            Some(Message::MoveStageUp(idx)),
-            iced::widget::button::primary,
-        ));
-    } else {
-        header = header.push(icon_button("↑", None, iced::widget::button::secondary));
-    }
-
-    if idx < total_stages.saturating_sub(1) {
-        header = header.push(icon_button(
-            "↓",
-            Some(Message::MoveStageDown(idx)),
-            iced::widget::button::primary,
-        ));
-    } else {
-        header = header.push(icon_button("↓", None, iced::widget::button::secondary));
-    }
-
-    header = header.push(icon_button(
-        "×",
-        Some(Message::RemoveStage(idx)),
-        iced::widget::button::danger,
-    ));
+    let header = stage_header(HEADER_TEXT, idx, total_stages);
 
     let clipper_picker = row![
         text("Clipper:").width(Length::FillPortion(3)),
@@ -72,6 +47,7 @@ pub fn preamp_widget(idx: usize, cfg: &PreampConfig, total_stages: usize) -> Ele
     ]
     .spacing(5);
 
+    // TODO: Use a better background colour
     container(column![header, body].spacing(5).padding(10))
         .width(Length::Fill)
         .style(|theme: &iced::Theme| {

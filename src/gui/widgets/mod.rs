@@ -48,3 +48,39 @@ pub fn icon_button<'a>(
         btn.into()
     }
 }
+
+pub fn stage_header(stage_name: &str, idx: usize, total_stages: usize) -> Element<Message> {
+    let header_text = format!("{} {}", stage_name, idx + 1);
+
+    let move_up_btn = if idx > 0 {
+        icon_button(
+            "↑",
+            Some(Message::MoveStageUp(idx)),
+            iced::widget::button::primary,
+        )
+    } else {
+        icon_button("↑", None, iced::widget::button::secondary)
+    };
+
+    let move_down_btn = if idx < total_stages.saturating_sub(1) {
+        icon_button(
+            "↓",
+            Some(Message::MoveStageDown(idx)),
+            iced::widget::button::primary,
+        )
+    } else {
+        icon_button("↓", None, iced::widget::button::secondary)
+    };
+
+    let remove_btn = icon_button(
+        "×",
+        Some(Message::RemoveStage(idx)),
+        iced::widget::button::danger,
+    );
+
+    // Build the complete row
+    row![move_up_btn, move_down_btn, remove_btn, text(header_text)]
+        .spacing(5)
+        .align_y(iced::Alignment::Center)
+        .into()
+}
