@@ -229,7 +229,7 @@ impl AmplifierGui {
                 should_update_chain = true;
             }
             Message::MoveStageUp(idx) => {
-                if idx > 0 && idx < self.stages.len() {
+                if idx > 0 {
                     self.stages.swap(idx - 1, idx);
                     should_update_chain = true;
                 }
