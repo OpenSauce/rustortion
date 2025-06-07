@@ -47,6 +47,7 @@ pub fn preamp_widget(idx: usize, cfg: &PreampConfig, total_stages: usize) -> Ele
     ]
     .spacing(5);
 
+    // TODO: Use a better background colour
     container(column![header, body].spacing(5).padding(10))
         .width(Length::Fill)
         .style(|theme: &iced::Theme| {
