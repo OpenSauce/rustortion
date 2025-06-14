@@ -8,12 +8,13 @@ use crate::sim::stages::{
     clipper::ClipperType,
     compressor::CompressorStage,
     filter::{FilterStage, FilterType},
+    level::LevelStage,
     poweramp::{PowerAmpStage, PowerAmpType},
     preamp::PreampStage,
     tonestack::{ToneStackModel, ToneStackStage},
 };
 
-use crate::gui::widgets::{compressor, filter, poweramp, preamp, tonestack};
+use crate::gui::widgets::{compressor, filter, level, poweramp, preamp, tonestack};
 
 pub fn start(processor_manager: ProcessorManager) -> iced::Result {
     iced::application("Rustortion", AmplifierGui::update, AmplifierGui::view)
@@ -40,6 +41,7 @@ pub enum StageType {
     Compressor,
     ToneStack,
     PowerAmp,
+    Level,
 }
 
 impl std::fmt::Display for StageType {
@@ -50,6 +52,7 @@ impl std::fmt::Display for StageType {
             StageType::Compressor => write!(f, "Compressor"),
             StageType::ToneStack => write!(f, "Tone Stack"),
             StageType::PowerAmp => write!(f, "Power Amp"),
+            StageType::Level => write!(f, "Level"),
         }
     }
 }
@@ -62,6 +65,7 @@ pub enum StageConfig {
     Compressor(CompressorConfig),
     ToneStack(ToneStackConfig),
     PowerAmp(PowerAmpConfig),
+    Level(LevelConfig),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -101,6 +105,11 @@ pub struct PowerAmpConfig {
     pub drive: f32,
     pub amp_type: PowerAmpType,
     pub sag: f32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct LevelConfig {
+    pub gain: f32,
 }
 
 // Default implementations
@@ -158,6 +167,12 @@ impl Default for PowerAmpConfig {
     }
 }
 
+impl Default for LevelConfig {
+    fn default() -> Self {
+        Self { gain: 1.0 }
+    }
+}
+
 // Main GUI state
 #[derive(Debug)]
 struct AmplifierGui {
@@ -203,6 +218,9 @@ pub enum Message {
     PowerAmpTypeChanged(usize, PowerAmpType),
     PowerAmpDriveChanged(usize, f32),
     PowerAmpSagChanged(usize, f32),
+
+    // Level messages
+    LevelGainChanged(usize, f32),
 }
 
 // Application implementation
@@ -218,6 +236,7 @@ impl AmplifierGui {
                     StageType::Compressor => StageConfig::Compressor(CompressorConfig::default()),
                     StageType::ToneStack => StageConfig::ToneStack(ToneStackConfig::default()),
                     StageType::PowerAmp => StageConfig::PowerAmp(PowerAmpConfig::default()),
+                    StageType::Level => StageConfig::Level(LevelConfig::default()),
                 };
                 self.stages.push(new_stage);
                 should_update_chain = true;
@@ -367,6 +386,14 @@ impl AmplifierGui {
                 }
                 should_update_chain = true;
             }
+
+            // Level updates
+            Message::LevelGainChanged(idx, gain) => {
+                if let Some(StageConfig::Level(cfg)) = self.stages.get_mut(idx) {
+                    cfg.gain = gain;
+                }
+                should_update_chain = true;
+            }
         }
 
         if should_update_chain {
@@ -399,6 +426,7 @@ impl AmplifierGui {
                 StageConfig::PowerAmp(cfg) => {
                     poweramp::poweramp_widget(idx, cfg, self.stages.len())
                 }
+                StageConfig::Level(cfg) => level::level_widget(idx, cfg, self.stages.len()),
             };
             list = list.push(widget);
         }
@@ -411,6 +439,7 @@ impl AmplifierGui {
             StageType::Compressor,
             StageType::ToneStack,
             StageType::PowerAmp,
+            StageType::Level,
         ];
 
         let footer = row![
@@ -485,6 +514,12 @@ impl AmplifierGui {
                         cfg.amp_type,
                         cfg.sag,
                         sample_rate,
+                    )));
+                }
+                StageConfig::Level(cfg) => {
+                    chain.add_stage(Box::new(LevelStage::new(
+                        &format!("Level {}", idx),
+                        cfg.gain,
                     )));
                 }
             }
