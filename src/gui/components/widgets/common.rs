@@ -1,13 +1,6 @@
-pub mod compressor;
-pub mod filter;
-pub mod level;
-pub mod poweramp;
-pub mod preamp;
-pub mod tonestack;
-
-use crate::gui::amp::Message;
-use iced::widget::{button, row, text};
-use iced::{Element, Font, Length};
+use crate::gui::messages::Message;
+use iced::widget::{button, row, slider, text};
+use iced::{Alignment, Element, Font, Length};
 
 pub fn labeled_slider<'a, F: 'a + Fn(f32) -> Message>(
     label: &'a str,
@@ -17,9 +10,6 @@ pub fn labeled_slider<'a, F: 'a + Fn(f32) -> Message>(
     format: impl Fn(f32) -> String + 'a,
     step: f32,
 ) -> Element<'a, Message> {
-    use iced::Alignment;
-    use iced::widget::{row, slider, text};
-
     row![
         text(label).width(Length::FillPortion(3)),
         slider(range, value, on_change)
@@ -79,9 +69,8 @@ pub fn stage_header(stage_name: &str, idx: usize, total_stages: usize) -> Elemen
         iced::widget::button::danger,
     );
 
-    // Build the complete row
     row![move_up_btn, move_down_btn, remove_btn, text(header_text)]
         .spacing(5)
-        .align_y(iced::Alignment::Center)
+        .align_y(Alignment::Center)
         .into()
 }
