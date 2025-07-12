@@ -18,7 +18,7 @@ pub fn compressor_widget(
             -60.0..=0.0,
             cfg.threshold_db,
             move |v| Message::CompressorThresholdChanged(idx, v),
-            |v| format!("{:.1} dB", v),
+            |v| format!("{v:.1} dB"),
             1.0
         ),
         labeled_slider(
@@ -26,7 +26,7 @@ pub fn compressor_widget(
             1.0..=20.0,
             cfg.ratio,
             move |v| Message::CompressorRatioChanged(idx, v),
-            |v| format!("{:.1}:1", v),
+            |v| format!("{v:.1}:1"),
             1.0
         ),
         labeled_slider(
@@ -34,7 +34,7 @@ pub fn compressor_widget(
             0.1..=100.0,
             cfg.attack_ms,
             move |v| Message::CompressorAttackChanged(idx, v),
-            |v| format!("{:.1} ms", v),
+            |v| format!("{v:.1} ms"),
             1.0
         ),
         labeled_slider(
@@ -42,7 +42,7 @@ pub fn compressor_widget(
             10.0..=1000.0,
             cfg.release_ms,
             move |v| Message::CompressorReleaseChanged(idx, v),
-            |v| format!("{:.0} ms", v),
+            |v| format!("{v:.0} ms"),
             1.0
         ),
         labeled_slider(
@@ -50,7 +50,7 @@ pub fn compressor_widget(
             -12.0..=24.0,
             cfg.makeup_db,
             move |v| Message::CompressorMakeupChanged(idx, v),
-            |v| format!("{:.2} dB", v),
+            |v| format!("{v:.2} dB"),
             1.0
         ),
     ]

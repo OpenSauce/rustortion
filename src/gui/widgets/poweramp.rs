@@ -31,7 +31,7 @@ pub fn poweramp_widget(idx: usize, cfg: &PowerAmpConfig, total_stages: usize) ->
             0.0..=1.0,
             cfg.drive,
             move |v| Message::PowerAmpDriveChanged(idx, v),
-            |v| format!("{:.2}", v),
+            |v| format!("{v:.2}"),
             0.1
         ),
         labeled_slider(
@@ -39,7 +39,7 @@ pub fn poweramp_widget(idx: usize, cfg: &PowerAmpConfig, total_stages: usize) ->
             0.0..=1.0,
             cfg.sag,
             move |v| Message::PowerAmpSagChanged(idx, v),
-            |v| format!("{:.2}", v),
+            |v| format!("{v:.2}"),
             0.1
         ),
     ]

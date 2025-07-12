@@ -23,7 +23,7 @@ impl Recorder {
             "{record_dir}/recording_{}.wav",
             chrono::Local::now().format("%Y%m%d_%H%M%S")
         );
-        info!("Recording to: {}", filename);
+        info!("Recording to: {filename}");
 
         let handle = thread::spawn(move || run_writer_thread(sample_rate, filename, rx));
 
@@ -57,7 +57,7 @@ fn run_writer_thread(sample_rate: u32, filename: String, rx: Receiver<AudioBlock
     let mut writer = match WavWriter::create(&filename, spec) {
         Ok(w) => w,
         Err(e) => {
-            error!("Failed to create WAV file '{}': {}", filename, e);
+            error!("Failed to create WAV file '{filename}': {e}");
             return;
         }
     };
@@ -65,14 +65,14 @@ fn run_writer_thread(sample_rate: u32, filename: String, rx: Receiver<AudioBlock
     for block in rx {
         for &sample in &block {
             if let Err(e) = writer.write_sample(sample) {
-                error!("Failed to write sample to WAV file '{}': {}", filename, e);
+                error!("Failed to write sample to WAV file '{filename}': {e}");
             }
         }
     }
 
     if let Err(e) = writer.finalize() {
-        error!("Failed to finalize WAV file: {}", e);
+        error!("Failed to finalize WAV file: {e}");
     } else {
-        info!("Recording saved: {}", filename);
+        info!("Recording saved: {filename}");
     }
 }

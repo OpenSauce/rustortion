@@ -47,12 +47,12 @@ __________                __                 __  .__
         \/           \/                                         \/ 
     "#
     );
-    info!("Args: {:?}", args);
+    info!("Args: {args:?}");
 
     let required_vars = ["RUST_LOG", "PIPEWIRE_LATENCY", "JACK_PROMISCUOUS_SERVER"];
     for &key in &required_vars {
         match std::env::var(key) {
-            Ok(val) => info!("{} = {}", key, val),
+            Ok(val) => info!("{key} = {val}"),
             Err(_) => anyhow::bail!("environment variable '{}' must be set.", key),
         }
     }

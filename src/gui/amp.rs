@@ -470,7 +470,7 @@ impl AmplifierGui {
             match stage {
                 StageConfig::Filter(cfg) => {
                     chain.add_stage(Box::new(FilterStage::new(
-                        &format!("Filter {}", idx),
+                        &format!("Filter {idx}"),
                         cfg.filter_type,
                         cfg.cutoff_hz,
                         cfg.resonance,
@@ -479,7 +479,7 @@ impl AmplifierGui {
                 }
                 StageConfig::Preamp(cfg) => {
                     chain.add_stage(Box::new(PreampStage::new(
-                        &format!("Preamp {}", idx),
+                        &format!("Preamp {idx}"),
                         cfg.gain,
                         cfg.bias,
                         cfg.clipper_type,
@@ -487,7 +487,7 @@ impl AmplifierGui {
                 }
                 StageConfig::Compressor(cfg) => {
                     chain.add_stage(Box::new(CompressorStage::new(
-                        &format!("Compressor {}", idx),
+                        &format!("Compressor {idx}"),
                         cfg.attack_ms,
                         cfg.release_ms,
                         cfg.threshold_db,
@@ -498,7 +498,7 @@ impl AmplifierGui {
                 }
                 StageConfig::ToneStack(cfg) => {
                     chain.add_stage(Box::new(ToneStackStage::new(
-                        &format!("ToneStack {}", idx),
+                        &format!("ToneStack {idx}"),
                         cfg.model,
                         cfg.bass,
                         cfg.mid,
@@ -509,7 +509,7 @@ impl AmplifierGui {
                 }
                 StageConfig::PowerAmp(cfg) => {
                     chain.add_stage(Box::new(PowerAmpStage::new(
-                        &format!("PowerAmp {}", idx),
+                        &format!("PowerAmp {idx}"),
                         cfg.drive,
                         cfg.amp_type,
                         cfg.sag,
@@ -517,10 +517,7 @@ impl AmplifierGui {
                     )));
                 }
                 StageConfig::Level(cfg) => {
-                    chain.add_stage(Box::new(LevelStage::new(
-                        &format!("Level {}", idx),
-                        cfg.gain,
-                    )));
+                    chain.add_stage(Box::new(LevelStage::new(&format!("Level {idx}"), cfg.gain)));
                 }
             }
         }
