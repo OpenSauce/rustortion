@@ -1,15 +1,13 @@
-use super::{labeled_slider, stage_header};
-use crate::gui::amp::{CompressorConfig, Message};
 use iced::widget::{column, container};
 use iced::{Element, Length};
 
+use crate::gui::components::widgets::common::{labeled_slider, stage_header};
+use crate::gui::config::CompressorConfig;
+use crate::gui::messages::{CompressorMessage, Message, StageMessage};
+
 const HEADER_TEXT: &str = "Compressor";
 
-pub fn compressor_widget(
-    idx: usize,
-    cfg: &CompressorConfig,
-    total_stages: usize,
-) -> Element<Message> {
+pub fn view(idx: usize, cfg: &CompressorConfig, total_stages: usize) -> Element<Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
 
     let body = column![
@@ -17,7 +15,10 @@ pub fn compressor_widget(
             "Threshold",
             -60.0..=0.0,
             cfg.threshold_db,
-            move |v| Message::CompressorThresholdChanged(idx, v),
+            move |v| Message::Stage(
+                idx,
+                StageMessage::Compressor(CompressorMessage::ThresholdChanged(v))
+            ),
             |v| format!("{v:.1} dB"),
             1.0
         ),
@@ -25,23 +26,32 @@ pub fn compressor_widget(
             "Ratio",
             1.0..=20.0,
             cfg.ratio,
-            move |v| Message::CompressorRatioChanged(idx, v),
+            move |v| Message::Stage(
+                idx,
+                StageMessage::Compressor(CompressorMessage::RatioChanged(v))
+            ),
             |v| format!("{v:.1}:1"),
-            1.0
+            0.1
         ),
         labeled_slider(
             "Attack",
             0.1..=100.0,
             cfg.attack_ms,
-            move |v| Message::CompressorAttackChanged(idx, v),
+            move |v| Message::Stage(
+                idx,
+                StageMessage::Compressor(CompressorMessage::AttackChanged(v))
+            ),
             |v| format!("{v:.1} ms"),
-            1.0
+            0.1
         ),
         labeled_slider(
             "Release",
             10.0..=1000.0,
             cfg.release_ms,
-            move |v| Message::CompressorReleaseChanged(idx, v),
+            move |v| Message::Stage(
+                idx,
+                StageMessage::Compressor(CompressorMessage::ReleaseChanged(v))
+            ),
             |v| format!("{v:.0} ms"),
             1.0
         ),
@@ -49,9 +59,12 @@ pub fn compressor_widget(
             "Makeup",
             -12.0..=24.0,
             cfg.makeup_db,
-            move |v| Message::CompressorMakeupChanged(idx, v),
-            |v| format!("{v:.2} dB"),
-            1.0
+            move |v| Message::Stage(
+                idx,
+                StageMessage::Compressor(CompressorMessage::MakeupChanged(v))
+            ),
+            |v| format!("{v:.1} dB"),
+            0.1
         ),
     ]
     .spacing(5);

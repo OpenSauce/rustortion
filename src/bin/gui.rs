@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use log::info;
-use rustortion::gui::amp::start;
+use rustortion::gui::start;
 use rustortion::io::manager::ProcessorManager;
 
 pub fn main() -> Result<()> {
