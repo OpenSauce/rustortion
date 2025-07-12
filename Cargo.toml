@@ -2,6 +2,15 @@
 name = "rustortion"
 version = "0.1.0"
 edition = "2024"
+default-run = "gui"
+
+[[bin]]
+name = "gui"
+path = "src/bin/gui.rs"
+
+[[bin]]
+name = "cli"
+path = "src/bin/cli.rs"
 
 [dependencies]
 jack = "0.13"

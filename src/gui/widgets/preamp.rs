@@ -33,7 +33,7 @@ pub fn preamp_widget(idx: usize, cfg: &PreampConfig, total_stages: usize) -> Ele
             0.0..=10.0,
             cfg.gain,
             move |v| Message::PreampGainChanged(idx, v),
-            |v| format!("{:.1}", v),
+            |v| format!("{v:.1}"),
             1.0
         ),
         labeled_slider(
@@ -41,7 +41,7 @@ pub fn preamp_widget(idx: usize, cfg: &PreampConfig, total_stages: usize) -> Ele
             -1.0..=1.0,
             cfg.bias,
             move |v| Message::PreampBiasChanged(idx, v),
-            |v| format!("{:.2}", v),
+            |v| format!("{v:.2}"),
             0.1
         ),
     ]

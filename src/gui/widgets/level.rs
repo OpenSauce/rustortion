@@ -13,7 +13,7 @@ pub fn level_widget(idx: usize, cfg: &LevelConfig, total_stages: usize) -> Eleme
         0.0..=2.0,
         cfg.gain,
         move |v| Message::LevelGainChanged(idx, v),
-        |v| format!("{:.2}", v),
+        |v| format!("{v:.2}"),
         0.05
     ),]
     .spacing(5);

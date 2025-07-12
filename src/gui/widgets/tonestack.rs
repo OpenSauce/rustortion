@@ -36,7 +36,7 @@ pub fn tonestack_widget(
             0.0..=1.0,
             cfg.bass,
             move |v| Message::ToneStackBassChanged(idx, v),
-            |v| format!("{:.2}", v),
+            |v| format!("{v:.2}"),
             0.1
         ),
         labeled_slider(
@@ -44,7 +44,7 @@ pub fn tonestack_widget(
             0.0..=1.0,
             cfg.mid,
             move |v| Message::ToneStackMidChanged(idx, v),
-            |v| format!("{:.2}", v),
+            |v| format!("{v:.2}"),
             0.1
         ),
         labeled_slider(
@@ -52,7 +52,7 @@ pub fn tonestack_widget(
             0.0..=1.0,
             cfg.treble,
             move |v| Message::ToneStackTrebleChanged(idx, v),
-            |v| format!("{:.2}", v),
+            |v| format!("{v:.2}"),
             0.1
         ),
         labeled_slider(
@@ -60,7 +60,7 @@ pub fn tonestack_widget(
             0.0..=1.0,
             cfg.presence,
             move |v| Message::ToneStackPresenceChanged(idx, v),
-            |v| format!("{:.2}", v),
+            |v| format!("{v:.2}"),
             0.1
         ),
     ]

@@ -32,7 +32,7 @@ pub fn filter_widget(idx: usize, cfg: &FilterConfig, total_stages: usize) -> Ele
             20.0..=20_000.0,
             cfg.cutoff_hz,
             move |v| Message::FilterCutoffChanged(idx, v),
-            |v| format!("{:.0} Hz", v),
+            |v| format!("{v:.0} Hz"),
             0.05
         ),
         labeled_slider(
@@ -40,7 +40,7 @@ pub fn filter_widget(idx: usize, cfg: &FilterConfig, total_stages: usize) -> Ele
             0.0..=1.0,
             cfg.resonance,
             move |v| Message::FilterResonanceChanged(idx, v),
-            |v| format!("{:.2}", v),
+            |v| format!("{v:.2}"),
             0.05
         ),
     ]
