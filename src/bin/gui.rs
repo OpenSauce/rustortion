@@ -29,7 +29,8 @@ __________                __                 __  .__
     }
 
     // Create ProcessorManager with proper error handling
-    let processor_manager = ProcessorManager::new().context("failed to create ProcessorManager")?;
+    let processor_manager =
+        ProcessorManager::new(None).context("failed to create ProcessorManager")?;
 
     info!("ProcessorManager created successfully, starting GUI...");
 

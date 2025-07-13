@@ -58,13 +58,13 @@ __________                __                 __  .__
     }
 
     let mut processor_manager =
-        ProcessorManager::new().context("failed to create ProcessorManager")?;
+        ProcessorManager::new(None).context("failed to create ProcessorManager")?;
 
     let chain = create_mesa_boogie_dual_rectifier(processor_manager.sample_rate());
 
     if recording {
         processor_manager
-            .enable_recording(&args.recording_dir)
+            .enable_recording()
             .with_context(|| format!("failed to enable recording in '{}'", args.recording_dir))?;
     }
 
