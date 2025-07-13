@@ -1,6 +1,7 @@
+use crate::gui::components::ICONS_FONT;
 use crate::gui::messages::Message;
 use iced::widget::{button, row, slider, text};
-use iced::{Alignment, Element, Font, Length};
+use iced::{Alignment, Element, Length};
 
 pub fn labeled_slider<'a, F: 'a + Fn(f32) -> Message>(
     label: &'a str,
@@ -21,8 +22,6 @@ pub fn labeled_slider<'a, F: 'a + Fn(f32) -> Message>(
     .align_y(Alignment::Center)
     .into()
 }
-
-const ICONS_FONT: Font = Font::MONOSPACE;
 
 pub fn icon_button<'a>(
     icon: &'a str,

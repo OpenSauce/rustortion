@@ -23,7 +23,7 @@ impl jack::NotificationHandler for Notifications {}
 
 impl ProcessorManager {
     /// Creates a new ProcessorManager
-    pub fn new() -> Result<Self> {
+    pub fn new(recorder: Option<Recorder>) -> Result<Self> {
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
             .context("failed to create JACK client")?;
 
@@ -41,7 +41,7 @@ impl ProcessorManager {
         Ok(Self {
             sample_rate,
             _active_client,
-            recorder: None,
+            recorder,
             amp_tx: tx_amp,
         })
     }
@@ -57,16 +57,11 @@ impl ProcessorManager {
     }
 
     /// Starts recording if enabled
-    pub fn enable_recording(&mut self, record_dir: &str) -> Result<()> {
+    pub fn enable_recording(&mut self) -> Result<()> {
         if self.recorder.is_some() {
             return Ok(());
         }
 
-        let recorder = Recorder::new(self.sample_rate as u32, record_dir)
-            .context("failed to start recorder")?;
-        let _ = recorder.sender();
-
-        self.recorder = Some(recorder);
         Ok(())
     }
 

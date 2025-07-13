@@ -1,4 +1,5 @@
 use iced::{Element, Length, Task, Theme};
+use log::{error, info};
 
 use crate::gui::components::{control::Control, stage_list::StageList};
 use crate::gui::config::{StageConfig, StageType};
@@ -11,6 +12,7 @@ pub struct AmplifierApp {
     processor_manager: ProcessorManager,
     stages: Vec<StageConfig>,
     selected_stage_type: StageType,
+    is_recording: bool,
 }
 
 impl AmplifierApp {
@@ -19,6 +21,7 @@ impl AmplifierApp {
             processor_manager,
             stages: Vec::new(),
             selected_stage_type: StageType::default(),
+            is_recording: false,
         }
     }
 
@@ -51,6 +54,20 @@ impl AmplifierApp {
             }
             Message::StageTypeSelected(stage_type) => {
                 self.selected_stage_type = stage_type;
+            }
+            Message::StartRecording => match self.processor_manager.enable_recording() {
+                Ok(()) => {
+                    self.is_recording = true;
+                    info!("Recording started");
+                }
+                Err(e) => {
+                    error!("Failed to start recording: {e}");
+                }
+            },
+            Message::StopRecording => {
+                self.processor_manager.disable_recording();
+                self.is_recording = false;
+                info!("Recording stopped");
             }
             Message::Stage(idx, stage_msg) => {
                 if self.update_stage(idx, stage_msg) {
@@ -144,7 +161,7 @@ impl AmplifierApp {
         container(
             column![
                 StageList::new(&self.stages).view(),
-                Control::new(self.selected_stage_type).view()
+                Control::new(self.selected_stage_type, self.is_recording).view()
             ]
             .spacing(20)
             .padding(20),
