@@ -9,8 +9,8 @@ use rubato::{
 };
 
 const CHANNELS: usize = 1;
-const OVERSAMPLE_FACTOR: f64 = 4.0;
-const MAX_BLOCK_SIZE: usize = 4096;
+const OVERSAMPLE_FACTOR: f64 = 8.0;
+const MAX_BLOCK_SIZE: usize = 8192;
 
 pub struct Processor {
     /// Amplifier chain, used for processing amp simulations on the input.
@@ -59,17 +59,17 @@ impl Processor {
             .context("failed to connect to out port right")?;
 
         let interp_params = SincInterpolationParameters {
-            sinc_len: 256,
+            sinc_len: 128,
             f_cutoff: 0.95,
-            interpolation: SincInterpolationType::Cubic,
-            oversampling_factor: 160,
+            interpolation: SincInterpolationType::Linear,
+            oversampling_factor: 128,
             window: WindowFunction::BlackmanHarris2,
         };
         let down_interp_params = SincInterpolationParameters {
-            sinc_len: 256,
+            sinc_len: 128,
             f_cutoff: 0.95,
-            interpolation: SincInterpolationType::Cubic,
-            oversampling_factor: 160,
+            interpolation: SincInterpolationType::Linear,
+            oversampling_factor: 128,
             window: WindowFunction::BlackmanHarris2,
         };
 
