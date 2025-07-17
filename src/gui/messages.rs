@@ -12,6 +12,10 @@ pub enum Message {
     MoveStageDown(usize),
     StageTypeSelected(StageType),
 
+    // Recording messages
+    StartRecording,
+    StopRecording,
+
     // Stage-specific messages
     Stage(usize, StageMessage),
 }
