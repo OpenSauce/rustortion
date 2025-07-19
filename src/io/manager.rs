@@ -12,7 +12,7 @@ pub struct ProcessorManager {
     _active_client: AsyncClient<Notifications, Processor>,
     recorder: Option<Recorder>,
     /// GUI → audio thread: push a completely new preset
-    amp_tx: Sender<ProcessorMessage>,
+    tx_updates: Sender<ProcessorMessage>,
     sample_rate: f32,
 }
 
@@ -41,7 +41,7 @@ impl ProcessorManager {
             sample_rate,
             _active_client,
             recorder,
-            amp_tx: tx_amp,
+            tx_updates: tx_amp,
         })
     }
 
@@ -49,7 +49,7 @@ impl ProcessorManager {
     /// Never blocks; silently drops if the buffer is full.
     pub fn set_amp_chain(&self, new_chain: AmplifierChain) {
         let update = ProcessorMessage::SetAmpChain(Box::new(new_chain));
-        self.amp_tx.try_send(update).unwrap_or_else(|e| {
+        self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send new amplifier chain: {e}");
         });
     }
@@ -64,7 +64,7 @@ impl ProcessorManager {
         let audio_tx = recorder.sender();
 
         let update = ProcessorMessage::SetRecording(Some(audio_tx));
-        self.amp_tx.try_send(update).unwrap_or_else(|e| {
+        self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send new amplifier chain: {e}");
         });
 
@@ -79,7 +79,7 @@ impl ProcessorManager {
         }
 
         let update = ProcessorMessage::SetRecording(None);
-        self.amp_tx.try_send(update).unwrap_or_else(|e| {
+        self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send new amplifier chain: {e}");
         });
 
