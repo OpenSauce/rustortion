@@ -1,4 +1,3 @@
-use crate::gui::components::ICONS_FONT;
 use crate::gui::messages::Message;
 use iced::widget::{button, row, slider, text};
 use iced::{Alignment, Element, Length};
@@ -28,9 +27,7 @@ pub fn icon_button<'a>(
     message: Option<Message>,
     style: fn(&iced::Theme, button::Status) -> iced::widget::button::Style,
 ) -> Element<'a, Message> {
-    let btn = button(text(icon).font(ICONS_FONT))
-        .width(Length::Fixed(30.0))
-        .style(style);
+    let btn = button(text(icon)).width(Length::Fixed(30.0)).style(style);
 
     if let Some(msg) = message {
         btn.on_press(msg).into()
