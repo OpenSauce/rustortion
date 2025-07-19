@@ -65,7 +65,7 @@ impl ProcessorManager {
 
         let update = ProcessorMessage::SetRecording(Some(audio_tx));
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
-            error!("Failed to send new amplifier chain: {e}");
+            error!("Failed to send recording update: {e}");
         });
 
         self.recorder = Some(recorder);
