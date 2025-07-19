@@ -177,7 +177,7 @@ impl AmplifierApp {
 }
 
 fn build_amplifier_chain(stages: &[StageConfig], sample_rate: f32) -> AmplifierChain {
-    let mut chain = AmplifierChain::new("Custom Amp Chain");
+    let mut chain = AmplifierChain::new();
 
     for (idx, stage) in stages.iter().enumerate() {
         match stage {

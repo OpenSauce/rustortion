@@ -111,7 +111,7 @@ impl Processor {
         debug_stats(client);
 
         Ok(Self {
-            chain: Box::new(AmplifierChain::new("Default")),
+            chain: Box::new(AmplifierChain::new()),
             rx_updates,
             tx_audio,
             in_port,
