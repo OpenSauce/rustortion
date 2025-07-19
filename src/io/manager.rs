@@ -1,10 +1,9 @@
-// TODO: Merge the contents of this file with `src/io/processor.rs`
 use anyhow::{Context, Result};
 use crossbeam::channel::{Sender, bounded};
 use jack::{AsyncClient, Client, ClientOptions};
 use log::error;
 
-use crate::io::processor::Processor;
+use crate::io::processor::{Processor, ProcessorMessage};
 use crate::io::recorder::Recorder;
 use crate::sim::chain::AmplifierChain;
 
@@ -13,7 +12,7 @@ pub struct ProcessorManager {
     _active_client: AsyncClient<Notifications, Processor>,
     recorder: Option<Recorder>,
     /// GUI → audio thread: push a completely new preset
-    amp_tx: Sender<Box<AmplifierChain>>,
+    tx_updates: Sender<ProcessorMessage>,
     sample_rate: f32,
 }
 
@@ -27,7 +26,7 @@ impl ProcessorManager {
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
             .context("failed to create JACK client")?;
 
-        let (tx_amp, rx_amp) = bounded::<Box<AmplifierChain>>(1);
+        let (tx_amp, rx_amp) = bounded::<ProcessorMessage>(10);
 
         let processor =
             Processor::new(&client, rx_amp, None).context("error creating processor")?;
@@ -42,18 +41,17 @@ impl ProcessorManager {
             sample_rate,
             _active_client,
             recorder,
-            amp_tx: tx_amp,
+            tx_updates: tx_amp,
         })
     }
 
     /// Push a new amplifier chain from the GUI side.
     /// Never blocks; silently drops if the buffer is full.
     pub fn set_amp_chain(&self, new_chain: AmplifierChain) {
-        self.amp_tx
-            .try_send(Box::new(new_chain))
-            .unwrap_or_else(|e| {
-                error!("Failed to send new amplifier chain: {e}");
-            });
+        let update = ProcessorMessage::SetAmpChain(Box::new(new_chain));
+        self.tx_updates.try_send(update).unwrap_or_else(|e| {
+            error!("Failed to send new amplifier chain: {e}");
+        });
     }
 
     /// Starts recording if enabled
@@ -62,6 +60,15 @@ impl ProcessorManager {
             return Ok(());
         }
 
+        let recorder = Recorder::new(self.sample_rate as u32, "./recordings")?;
+        let audio_tx = recorder.sender();
+
+        let update = ProcessorMessage::SetRecording(Some(audio_tx));
+        self.tx_updates.try_send(update).unwrap_or_else(|e| {
+            error!("Failed to send recording update: {e}");
+        });
+
+        self.recorder = Some(recorder);
         Ok(())
     }
 
@@ -70,6 +77,11 @@ impl ProcessorManager {
         if self.recorder.is_none() {
             return;
         }
+
+        let update = ProcessorMessage::SetRecording(None);
+        self.tx_updates.try_send(update).unwrap_or_else(|e| {
+            error!("Failed to send recording update: {e}");
+        });
 
         if let Some(recorder) = self.recorder.take() {
             if let Err(e) = recorder.stop() {

@@ -8,6 +8,11 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
+pub enum ProcessorMessage {
+    SetAmpChain(Box<AmplifierChain>),
+    SetRecording(Option<Sender<AudioBlock>>),
+}
+
 const CHANNELS: usize = 1;
 const OVERSAMPLE_FACTOR: f64 = 8.0;
 const MAX_BLOCK_SIZE: usize = 8192;
@@ -16,7 +21,7 @@ pub struct Processor {
     /// Amplifier chain, used for processing amp simulations on the input.
     chain: Box<AmplifierChain>,
     /// Channel for updating the amplifier chain.
-    rx_chain: Receiver<Box<AmplifierChain>>,
+    rx_updates: Receiver<ProcessorMessage>,
     /// Optional recorder channel.
     tx_audio: Option<Sender<AudioBlock>>,
     in_port: Port<AudioIn>,
@@ -35,7 +40,7 @@ pub struct Processor {
 impl Processor {
     pub fn new(
         client: &Client,
-        rx_chain: Receiver<Box<AmplifierChain>>,
+        rx_updates: Receiver<ProcessorMessage>,
         tx_audio: Option<Sender<AudioBlock>>,
     ) -> Result<Self> {
         let in_port = client
@@ -107,7 +112,7 @@ impl Processor {
 
         Ok(Self {
             chain: Box::new(AmplifierChain::new("Default")),
-            rx_chain,
+            rx_updates,
             tx_audio,
             in_port,
             out_port_left,
@@ -123,9 +128,17 @@ impl Processor {
 
 impl ProcessHandler for Processor {
     fn process(&mut self, _c: &Client, ps: &ProcessScope) -> Control {
-        if let Ok(new_chain) = self.rx_chain.try_recv() {
-            self.chain = new_chain;
-            debug!("Received new chain");
+        if let Ok(message) = self.rx_updates.try_recv() {
+            match message {
+                ProcessorMessage::SetAmpChain(chain) => {
+                    self.chain = chain;
+                    debug!("Received new amplifier chain");
+                }
+                ProcessorMessage::SetRecording(tx) => {
+                    self.tx_audio = tx;
+                    debug!("Recording channel updated");
+                }
+            }
         }
 
         let n_frames = ps.n_frames() as usize;
