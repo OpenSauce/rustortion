@@ -3025,6 +3025,7 @@ dependencies = [
  "iced",
  "jack",
  "log",
+ "realfft",
  "rubato",
  "serde",
 ]

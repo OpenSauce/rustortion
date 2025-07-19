@@ -1,3 +1,4 @@
+pub mod cabinet;
 pub mod clipper;
 pub mod compressor;
 pub mod filter;

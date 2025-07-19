@@ -25,6 +25,7 @@ impl Control {
             StageType::ToneStack,
             StageType::PowerAmp,
             StageType::Level,
+            StageType::Cabinet,
         ];
 
         let stage_controls = row![

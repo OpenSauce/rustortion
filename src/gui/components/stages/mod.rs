@@ -1,3 +1,4 @@
+pub mod cabinet;
 pub mod compressor;
 pub mod filter;
 pub mod level;

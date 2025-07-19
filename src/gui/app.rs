@@ -207,6 +207,10 @@ fn build_amplifier_chain(stages: &[StageConfig], sample_rate: f32) -> AmplifierC
             StageConfig::Level(cfg) => {
                 chain.add_stage(Box::new(cfg.to_stage(&format!("Level {idx}"))));
             }
+            StageConfig::Cabinet(cfg) => {
+                let stage = cfg.to_stage(&format!("Cabinet {idx}")).expect("Error");
+                chain.add_stage(Box::new(stage));
+            }
         }
     }
 
