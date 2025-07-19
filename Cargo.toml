@@ -8,10 +8,6 @@ default-run = "gui"
 name = "gui"
 path = "src/bin/gui.rs"
 
-[[bin]]
-name = "cli"
-path = "src/bin/cli.rs"
-
 [dependencies]
 jack = "0.13"
 hound = "3.5"
