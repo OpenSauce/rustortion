@@ -27,6 +27,7 @@ impl<'a> StageList<'a> {
                 StageConfig::ToneStack(cfg) => stages::tonestack::view(idx, cfg, self.stages.len()),
                 StageConfig::PowerAmp(cfg) => stages::poweramp::view(idx, cfg, self.stages.len()),
                 StageConfig::Level(cfg) => stages::level::view(idx, cfg, self.stages.len()),
+                StageConfig::Cabinet(cfg) => stages::cabinet::view(idx, cfg, self.stages.len()),
             };
             col = col.push(widget);
         }
