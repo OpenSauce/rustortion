@@ -1,7 +1,6 @@
 use iced::widget::{button, container, pick_list, row, text};
 use iced::{Alignment, Element, Length};
 
-use crate::gui::components::ICONS_FONT;
 use crate::gui::config::StageType;
 use crate::gui::messages::Message;
 
@@ -41,11 +40,11 @@ impl Control {
 
         // Recording controls
         let record_button = if self.is_recording {
-            button(text("Stop Recording").font(ICONS_FONT))
+            button(text("Stop Recording"))
                 .on_press(Message::StopRecording)
                 .style(iced::widget::button::danger)
         } else {
-            button(text("Start Recording").font(ICONS_FONT))
+            button(text("Start Recording"))
                 .on_press(Message::StartRecording)
                 .style(iced::widget::button::success)
         };
