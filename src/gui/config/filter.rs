@@ -1,6 +1,7 @@
 use crate::sim::stages::filter::{FilterStage, FilterType};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct FilterConfig {
     pub filter_type: FilterType,
     pub cutoff_hz: f32,

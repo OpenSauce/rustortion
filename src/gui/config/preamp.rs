@@ -1,6 +1,7 @@
 use crate::sim::stages::{clipper::ClipperType, preamp::PreampStage};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct PreampConfig {
     pub gain: f32,
     pub bias: f32,

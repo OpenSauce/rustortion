@@ -1,6 +1,7 @@
 use crate::sim::stages::poweramp::{PowerAmpStage, PowerAmpType};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct PowerAmpConfig {
     pub drive: f32,
     pub amp_type: PowerAmpType,
