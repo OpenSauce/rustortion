@@ -12,6 +12,17 @@ pub enum Message {
     MoveStageDown(usize),
     StageTypeSelected(StageType),
 
+    // Preset settings
+    PresetSelected(String),
+    SavePreset,
+    CancelSavePreset,
+    ShowSavePreset,
+    PresetNameChanged(String),
+    UpdateCurrentPreset,
+    DeletePreset(String),
+    ConfirmOverwritePreset,
+    CancelOverwritePreset,
+
     // Recording messages
     StartRecording,
     StopRecording,

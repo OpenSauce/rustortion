@@ -1,0 +1,35 @@
+{
+  "name": "Clean",
+  "description": "Clean and pristine tone with subtle warmth",
+  "author": "Rustortion",
+  "stages": [
+    {
+      "Filter": {
+        "filter_type": "Highpass",
+        "cutoff_hz": 80.0,
+        "resonance": 0.0
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 2.0,
+        "bias": 0.0,
+        "clipper_type": "Soft"
+      }
+    },
+    {
+      "ToneStack": {
+        "model": "American",
+        "bass": 0.6,
+        "mid": 0.5,
+        "treble": 0.7,
+        "presence": 0.4
+      }
+    },
+    {
+      "Level": {
+        "gain": 0.8
+      }
+    }
+  ]
+}
