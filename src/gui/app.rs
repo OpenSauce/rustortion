@@ -169,11 +169,11 @@ impl AmplifierApp {
                                 self.selected_preset = Some(first_preset.name.clone());
                                 self.preset_bar
                                     .set_selected_preset(Some(first_preset.name.clone()));
-                                should_update_chain = true;
                             } else {
                                 self.stages.clear();
-                                should_update_chain = true;
                             }
+
+                            should_update_chain = true;
                         }
                     }
                     Err(e) => {

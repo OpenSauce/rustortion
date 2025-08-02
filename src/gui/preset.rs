@@ -24,13 +24,13 @@ impl Preset {
         }
     }
 
-    pub fn with_description(mut self, description: String) -> Self {
-        self.description = Some(description);
+    pub fn with_description(mut self, description: &str) -> Self {
+        self.description = Some(description.to_string());
         self
     }
 
-    pub fn with_author(mut self, author: String) -> Self {
-        self.author = Some(author);
+    pub fn with_author(mut self, author: &str) -> Self {
+        self.author = Some(author.to_string());
         self
     }
 }
@@ -179,8 +179,8 @@ fn create_default_presets() -> Vec<Preset> {
                 StageConfig::Level(LevelConfig { gain: 0.8 }),
             ],
         )
-        .with_description("Clean and pristine tone with subtle warmth".to_string())
-        .with_author("Rustortion".to_string()),
+        .with_description("Clean and pristine tone with subtle warmth")
+        .with_author("Rustortion"),
         // Crunch preset
         Preset::new(
             "Crunch".to_string(),
@@ -212,8 +212,8 @@ fn create_default_presets() -> Vec<Preset> {
                 StageConfig::Level(LevelConfig { gain: 0.9 }),
             ],
         )
-        .with_description("Classic rock crunch with mid-forward character".to_string())
-        .with_author("Rustortion".to_string()),
+        .with_description("Classic rock crunch with mid-forward character")
+        .with_author("Rustortion"),
         // Lead preset
         Preset::new(
             "Lead".to_string(),
@@ -245,8 +245,8 @@ fn create_default_presets() -> Vec<Preset> {
                 StageConfig::Level(LevelConfig { gain: 1.1 }),
             ],
         )
-        .with_description("High-gain lead tone with sustain and clarity".to_string())
-        .with_author("Rustortion".to_string()),
+        .with_description("High-gain lead tone with sustain and clarity")
+        .with_author("Rustortion"),
     ]
 }
 
