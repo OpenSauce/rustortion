@@ -6,14 +6,14 @@
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 120.0,
+        "cutoff_hz": 68.0,
         "resonance": 0.2
       }
     },
     {
       "Filter": {
-        "filter_type": "Highpass",
-        "cutoff_hz": 100.0,
+        "filter_type": "Lowpass",
+        "cutoff_hz": 15166.0,
         "resonance": 0.0
       }
     },
@@ -39,7 +39,7 @@
         "release_ms": 80.0,
         "threshold_db": -12.0,
         "ratio": 4.0,
-        "makeup_db": 13.6
+        "makeup_db": 11.400001
       }
     },
     {
@@ -56,7 +56,7 @@
     },
     {
       "Level": {
-        "gain": 0.55
+        "gain": 0.6
       }
     }
   ]
