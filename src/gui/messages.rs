@@ -39,6 +39,16 @@ pub enum StageMessage {
     ToneStack(ToneStackMessage),
     PowerAmp(PowerAmpMessage),
     Level(LevelMessage),
+    NoiseGate(NoiseGateMessage),
+}
+
+#[derive(Debug, Clone)]
+pub enum NoiseGateMessage {
+    ThresholdChanged(f32),
+    RatioChanged(f32),
+    AttackChanged(f32),
+    HoldChanged(f32),
+    ReleaseChanged(f32),
 }
 
 #[derive(Debug, Clone)]
