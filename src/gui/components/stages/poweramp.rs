@@ -13,7 +13,7 @@ const POWER_AMP_TYPES: [PowerAmpType; 3] = [
     PowerAmpType::ClassB,
 ];
 
-pub fn view(idx: usize, cfg: &PowerAmpConfig, total_stages: usize) -> Element<Message> {
+pub fn view(idx: usize, cfg: &PowerAmpConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
 
     let type_picker = row![
