@@ -15,6 +15,7 @@ const STAGE_TYPES: &[StageType] = &[
     StageType::ToneStack,
     StageType::PowerAmp,
     StageType::Level,
+    StageType::NoiseGate,
 ];
 
 impl Control {

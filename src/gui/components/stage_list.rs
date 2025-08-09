@@ -31,6 +31,9 @@ impl StageList {
                 StageConfig::ToneStack(cfg) => stages::tonestack::view(idx, cfg, self.stages.len()),
                 StageConfig::PowerAmp(cfg) => stages::poweramp::view(idx, cfg, self.stages.len()),
                 StageConfig::Level(cfg) => stages::level::view(idx, cfg, self.stages.len()),
+                StageConfig::NoiseGate(cfg) => {
+                    stages::noise_gate::view(idx, cfg, self.stages.len())
+                }
             };
             col = col.push(widget);
         }

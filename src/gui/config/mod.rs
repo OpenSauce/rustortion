@@ -1,6 +1,7 @@
 pub mod compressor;
 pub mod filter;
 pub mod level;
+pub mod noise_gate;
 pub mod poweramp;
 pub mod preamp;
 pub mod tonestack;
@@ -8,6 +9,7 @@ pub mod tonestack;
 pub use compressor::CompressorConfig;
 pub use filter::FilterConfig;
 pub use level::LevelConfig;
+pub use noise_gate::NoiseGateConfig;
 pub use poweramp::PowerAmpConfig;
 pub use preamp::PreampConfig;
 pub use tonestack::ToneStackConfig;
@@ -24,6 +26,7 @@ pub enum StageType {
     ToneStack,
     PowerAmp,
     Level,
+    NoiseGate,
 }
 
 impl std::fmt::Display for StageType {
@@ -35,6 +38,7 @@ impl std::fmt::Display for StageType {
             StageType::ToneStack => write!(f, "Tone Stack"),
             StageType::PowerAmp => write!(f, "Power Amp"),
             StageType::Level => write!(f, "Level"),
+            StageType::NoiseGate => write!(f, "Noise Gate"),
         }
     }
 }
@@ -48,6 +52,7 @@ pub enum StageConfig {
     ToneStack(ToneStackConfig),
     PowerAmp(PowerAmpConfig),
     Level(LevelConfig),
+    NoiseGate(NoiseGateConfig),
 }
 
 impl StageConfig {
@@ -59,6 +64,7 @@ impl StageConfig {
             StageType::ToneStack => StageConfig::ToneStack(ToneStackConfig::default()),
             StageType::PowerAmp => StageConfig::PowerAmp(PowerAmpConfig::default()),
             StageType::Level => StageConfig::Level(LevelConfig::default()),
+            StageType::NoiseGate => StageConfig::NoiseGate(NoiseGateConfig::default()),
         }
     }
 
@@ -70,6 +76,7 @@ impl StageConfig {
             StageConfig::ToneStack(_) => "Tone Stack",
             StageConfig::PowerAmp(_) => "Power Amp",
             StageConfig::Level(_) => "Level",
+            StageConfig::NoiseGate(_) => "Noise Gate",
         }
     }
 }

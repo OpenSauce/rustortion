@@ -291,6 +291,17 @@ impl AmplifierApp {
                     }
                     true
                 }
+                (StageConfig::NoiseGate(cfg), StageMessage::NoiseGate(msg)) => {
+                    use crate::gui::messages::NoiseGateMessage::*;
+                    match msg {
+                        ThresholdChanged(v) => cfg.threshold_db = v,
+                        RatioChanged(v) => cfg.ratio = v,
+                        AttackChanged(v) => cfg.attack_ms = v,
+                        HoldChanged(v) => cfg.hold_ms = v,
+                        ReleaseChanged(v) => cfg.release_ms = v,
+                    }
+                    true
+                }
                 _ => false,
             }
         } else {
@@ -376,6 +387,11 @@ fn build_amplifier_chain(stages: &[StageConfig], sample_rate: f32) -> AmplifierC
             }
             StageConfig::Level(cfg) => {
                 chain.add_stage(Box::new(cfg.to_stage(&format!("Level {idx}"))));
+            }
+            StageConfig::NoiseGate(cfg) => {
+                chain.add_stage(Box::new(
+                    cfg.to_stage(&format!("NoiseGate {idx}"), sample_rate),
+                ));
             }
         }
     }
