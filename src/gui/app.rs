@@ -99,7 +99,7 @@ impl AmplifierApp {
                 }
             }
             Message::StageTypeSelected(stage_type) => {
-                self.control_bar.set_selected_stage_type(stage_type);
+                self.control_bar.set_selected(stage_type);
             }
             Message::PresetSelected(preset_name) => {
                 if let Some(preset) = self.preset_manager.get_preset_by_name(&preset_name) {
@@ -376,6 +376,10 @@ fn build_amplifier_chain(stages: &[StageConfig], sample_rate: f32) -> AmplifierC
             }
             StageConfig::Level(cfg) => {
                 chain.add_stage(Box::new(cfg.to_stage(&format!("Level {idx}"))));
+            }
+            StageConfig::Cabinet(cfg) => {
+                let stage = cfg.to_stage(&format!("Cabinet {idx}")).expect("Error");
+                chain.add_stage(Box::new(stage));
             }
         }
     }

@@ -24,10 +24,6 @@ impl Control {
         }
     }
 
-    pub fn set_selected_stage_type(&mut self, ty: StageType) {
-        self.selected_stage_type = ty;
-    }
-
     pub fn view(&self, is_recording: bool) -> Element<'_, Message> {
         let stage_controls = row![
             pick_list(
