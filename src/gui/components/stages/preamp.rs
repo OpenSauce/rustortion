@@ -15,7 +15,7 @@ const CLIPPER_TYPES: [ClipperType; 5] = [
     ClipperType::ClassA,
 ];
 
-pub fn view(idx: usize, cfg: &PreampConfig, total_stages: usize) -> Element<Message> {
+pub fn view(idx: usize, cfg: &PreampConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
 
     let clipper_picker = row![

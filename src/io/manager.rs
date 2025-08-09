@@ -83,10 +83,10 @@ impl ProcessorManager {
             error!("Failed to send recording update: {e}");
         });
 
-        if let Some(recorder) = self.recorder.take() {
-            if let Err(e) = recorder.stop() {
-                error!("Failed to stop recorder: {e}");
-            }
+        if let Some(recorder) = self.recorder.take()
+            && let Err(e) = recorder.stop()
+        {
+            error!("Failed to stop recorder: {e}");
         }
     }
 

@@ -1,0 +1,58 @@
+{
+  "name": "High Gain",
+  "description": null,
+  "author": null,
+  "stages": [
+    {
+      "Filter": {
+        "filter_type": "Highpass",
+        "cutoff_hz": 68.0,
+        "resonance": 0.2
+      }
+    },
+    {
+      "Filter": {
+        "filter_type": "Lowpass",
+        "cutoff_hz": 5737.0,
+        "resonance": 0.15
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 6.7000003,
+        "bias": 0.0,
+        "clipper_type": "ClassA"
+      }
+    },
+    {
+      "ToneStack": {
+        "model": "British",
+        "bass": 0.65000004,
+        "mid": 0.90000004,
+        "treble": 0.7,
+        "presence": 0.4
+      }
+    },
+    {
+      "Compressor": {
+        "attack_ms": 1.0,
+        "release_ms": 80.0,
+        "threshold_db": -16.0,
+        "ratio": 4.0,
+        "makeup_db": 17.9
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 6.8,
+        "bias": 0.0,
+        "clipper_type": "Hard"
+      }
+    },
+    {
+      "Level": {
+        "gain": 0.3
+      }
+    }
+  ]
+}
