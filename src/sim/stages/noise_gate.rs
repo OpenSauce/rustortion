@@ -1,4 +1,3 @@
-// src/sim/stages/noisegate.rs
 use crate::sim::stages::Stage;
 
 /// Noise gate stage for eliminating unwanted noise when not playing

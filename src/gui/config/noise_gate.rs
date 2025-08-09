@@ -1,4 +1,3 @@
-// src/gui/config/noisegate.rs
 use crate::sim::stages::noise_gate::NoiseGateStage;
 use serde::{Deserialize, Serialize};
 

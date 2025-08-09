@@ -1,4 +1,3 @@
-// src/gui/components/stages/noisegate.rs
 use iced::widget::{column, container};
 use iced::{Element, Length};
 
