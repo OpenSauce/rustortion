@@ -14,8 +14,10 @@ pub use poweramp::PowerAmpConfig;
 pub use preamp::PreampConfig;
 pub use tonestack::ToneStackConfig;
 
+use serde::{Deserialize, Serialize};
+
 // Stage type enum
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StageType {
     #[default]
     Filter,
@@ -42,7 +44,7 @@ impl std::fmt::Display for StageType {
 }
 
 // Stage configurations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum StageConfig {
     Filter(FilterConfig),
     Preamp(PreampConfig),

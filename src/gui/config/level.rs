@@ -1,6 +1,7 @@
 use crate::sim::stages::level::LevelStage;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct LevelConfig {
     pub gain: f32,
 }

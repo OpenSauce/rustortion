@@ -5,16 +5,20 @@ use crate::gui::components::stages;
 use crate::gui::config::StageConfig;
 use crate::gui::messages::Message;
 
-pub struct StageList<'a> {
-    stages: &'a [StageConfig],
+pub struct StageList {
+    stages: Vec<StageConfig>,
 }
 
-impl<'a> StageList<'a> {
-    pub fn new(stages: &'a [StageConfig]) -> Self {
+impl StageList {
+    pub fn new(stages: Vec<StageConfig>) -> Self {
         Self { stages }
     }
 
-    pub fn view(&self) -> Element<'a, Message> {
+    pub fn set_stages(&mut self, stages: &[StageConfig]) {
+        self.stages = stages.to_vec();
+    }
+
+    pub fn view(&self) -> Element<'_, Message> {
         let mut col = column![].spacing(10).width(Length::Fill);
 
         for (idx, stage) in self.stages.iter().enumerate() {

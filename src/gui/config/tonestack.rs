@@ -1,6 +1,7 @@
 use crate::sim::stages::tonestack::{ToneStackModel, ToneStackStage};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct ToneStackConfig {
     pub model: ToneStackModel,
     pub bass: f32,

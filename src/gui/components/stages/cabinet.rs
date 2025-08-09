@@ -7,7 +7,7 @@ use crate::gui::messages::Message;
 
 const HEADER_TEXT: &str = "Cabinet";
 
-pub fn view(idx: usize, _cfg: &CabinetConfig, total_stages: usize) -> Element<Message> {
+pub fn view(idx: usize, _cfg: &CabinetConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
 
     let body = text("Cabinet");

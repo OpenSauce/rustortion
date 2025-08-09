@@ -2,6 +2,7 @@ pub mod app;
 pub mod components;
 pub mod config;
 pub mod messages;
+pub mod preset;
 
 pub use app::AmplifierApp;
 use iced::Font;

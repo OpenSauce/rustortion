@@ -1,6 +1,7 @@
 use crate::sim::stages::compressor::CompressorStage;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CompressorConfig {
     pub attack_ms: f32,
     pub release_ms: f32,

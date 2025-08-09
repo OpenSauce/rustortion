@@ -20,7 +20,6 @@ pub struct CabinetStage {
     fft_buffer: Vec<f32>,
     spectrum_buffer: Vec<Complex32>,
     output_buffer: Vec<f32>,
-    output_pos: usize,
 
     // Configuration
     block_size: usize,
@@ -73,7 +72,6 @@ impl CabinetStage {
             fft_buffer: vec![0.0; fft_size],
             spectrum_buffer: vec![Complex32::new(0.0, 0.0); fft_size / 2 + 1],
             output_buffer: vec![0.0; fft_size],
-            output_pos: 0,
             block_size,
             buffer_pos: 0,
             enabled: true,

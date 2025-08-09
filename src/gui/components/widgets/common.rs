@@ -36,7 +36,7 @@ pub fn icon_button<'a>(
     }
 }
 
-pub fn stage_header(stage_name: &str, idx: usize, total_stages: usize) -> Element<Message> {
+pub fn stage_header(stage_name: &str, idx: usize, total_stages: usize) -> Element<'_, Message> {
     let header_text = format!("{} {}", stage_name, idx + 1);
 
     let move_up_btn = if idx > 0 {

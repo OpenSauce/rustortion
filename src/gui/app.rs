@@ -1,59 +1,203 @@
 use iced::{Element, Length, Task, Theme};
 use log::{error, info};
 
-use crate::gui::components::{control::Control, stage_list::StageList};
+use crate::gui::components::{control::Control, preset_bar::PresetBar, stage_list::StageList};
 use crate::gui::config::{StageConfig, StageType};
 use crate::gui::messages::{Message, StageMessage};
+use crate::gui::preset::{Preset, PresetManager};
 use crate::io::manager::ProcessorManager;
 use crate::sim::chain::AmplifierChain;
 
-#[derive(Debug)]
 pub struct AmplifierApp {
     processor_manager: ProcessorManager,
     stages: Vec<StageConfig>,
-    selected_stage_type: StageType,
     is_recording: bool,
+    preset_manager: PresetManager,
+    selected_preset: Option<String>,
+    preset_bar: PresetBar,
+    stage_list: StageList,
+    control_bar: Control,
+    new_preset_name: String,
+    show_save_input: bool,
 }
 
 impl AmplifierApp {
     pub fn new(processor_manager: ProcessorManager) -> Self {
-        Self {
+        let preset_manager = PresetManager::new("./presets").unwrap_or_else(|e| {
+            error!("Failed to create preset manager: {e}");
+            // Create an empty preset manager as fallback
+            PresetManager::new(std::env::temp_dir().join("rustortion_presets_fallback"))
+                .expect("Failed to create fallback preset manager")
+        });
+
+        let presets = preset_manager.get_presets();
+        let selected_preset = presets.first().map(|p| p.name.clone());
+        let preset_bar = PresetBar::new(presets, selected_preset.clone());
+
+        // Load the first preset if available
+        let stages = if let Some(preset_name) = &selected_preset {
+            preset_manager
+                .get_preset_by_name(preset_name)
+                .map(|p| p.stages.clone())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        let stage_list = StageList::new(stages.clone());
+        let control_bar = Control::new(StageType::default());
+
+        let app = Self {
             processor_manager,
-            stages: Vec::new(),
-            selected_stage_type: StageType::default(),
+            stages,
             is_recording: false,
-        }
+            preset_manager,
+            selected_preset,
+            preset_bar,
+            stage_list,
+            control_bar,
+            new_preset_name: String::new(),
+            show_save_input: false,
+        };
+
+        // Update the processor chain with the loaded preset
+        app.update_processor_chain();
+
+        app
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         let mut should_update_chain = false;
+        let mut should_update_stages = false;
 
         match message {
             Message::AddStage => {
-                let new_stage = StageConfig::create_default(self.selected_stage_type);
+                let new_stage = StageConfig::create_default(self.control_bar.selected());
                 self.stages.push(new_stage);
                 should_update_chain = true;
+                should_update_stages = true;
             }
             Message::RemoveStage(idx) => {
                 if idx < self.stages.len() {
                     self.stages.remove(idx);
                 }
                 should_update_chain = true;
+                should_update_stages = true;
             }
             Message::MoveStageUp(idx) => {
                 if idx > 0 {
                     self.stages.swap(idx - 1, idx);
                     should_update_chain = true;
+                    should_update_stages = true;
                 }
             }
             Message::MoveStageDown(idx) => {
                 if idx < self.stages.len().saturating_sub(1) {
                     self.stages.swap(idx, idx + 1);
                     should_update_chain = true;
+                    should_update_stages = true;
                 }
             }
             Message::StageTypeSelected(stage_type) => {
-                self.selected_stage_type = stage_type;
+                self.control_bar.set_selected(stage_type);
+            }
+            Message::PresetSelected(preset_name) => {
+                if let Some(preset) = self.preset_manager.get_preset_by_name(&preset_name) {
+                    self.stages = preset.stages.clone();
+                    self.selected_preset = Some(preset_name.clone());
+                    self.preset_bar
+                        .set_selected_preset(Some(preset_name.clone()));
+                    should_update_chain = true;
+                    should_update_stages = true;
+                    info!("Loaded preset: {preset_name}");
+                }
+            }
+            Message::ShowSavePreset => {
+                self.show_save_input = true;
+                self.preset_bar.show_save_input(true);
+            }
+            Message::CancelSavePreset => {
+                self.show_save_input = false;
+                self.new_preset_name.clear();
+                self.preset_bar.show_save_input(false);
+            }
+            Message::PresetNameChanged(name) => {
+                self.new_preset_name = name.clone();
+                self.preset_bar.set_new_preset_name(name);
+            }
+            Message::SavePreset => {
+                if !self.new_preset_name.trim().is_empty() {
+                    let preset = Preset::new(self.new_preset_name.clone(), self.stages.clone());
+
+                    match self.preset_manager.save_preset(&preset) {
+                        Ok(()) => {
+                            info!("Saved preset: {}", self.new_preset_name);
+                            self.selected_preset = Some(self.new_preset_name.clone());
+                            self.preset_bar
+                                .update_presets(self.preset_manager.get_presets());
+                            self.preset_bar
+                                .set_selected_preset(Some(self.new_preset_name.clone()));
+                            self.show_save_input = false;
+                            self.preset_bar.show_save_input(false);
+                            self.new_preset_name.clear();
+                        }
+                        Err(e) => {
+                            error!("Failed to save preset: {e}");
+                        }
+                    }
+                }
+            }
+            Message::UpdateCurrentPreset => {
+                if let Some(ref preset_name) = self.selected_preset {
+                    let preset = Preset::new(preset_name.clone(), self.stages.clone());
+
+                    match self.preset_manager.save_preset(&preset) {
+                        Ok(()) => {
+                            info!("Updated preset: {preset_name}");
+                            self.preset_bar
+                                .update_presets(self.preset_manager.get_presets());
+                        }
+                        Err(e) => {
+                            error!("Failed to update preset: {e}");
+                        }
+                    }
+                }
+            }
+            Message::DeletePreset(preset_name) => {
+                match self.preset_manager.delete_preset(&preset_name) {
+                    Ok(()) => {
+                        info!("Deleted preset: {preset_name}");
+                        self.preset_bar
+                            .update_presets(self.preset_manager.get_presets());
+
+                        // Clear selection if we deleted the current preset
+                        if self.selected_preset.as_ref() == Some(&preset_name) {
+                            self.selected_preset = None;
+                            self.preset_bar.set_selected_preset(None);
+                            // Optionally load the first available preset or clear stages
+                            if let Some(first_preset) = self.preset_manager.get_presets().first() {
+                                self.stages = first_preset.stages.clone();
+                                self.selected_preset = Some(first_preset.name.clone());
+                                self.preset_bar
+                                    .set_selected_preset(Some(first_preset.name.clone()));
+                            } else {
+                                self.stages.clear();
+                            }
+
+                            should_update_chain = true;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to delete preset: {e}");
+                    }
+                }
+            }
+            Message::ConfirmOverwritePreset => {
+                self.save_current_preset();
+                self.preset_bar.hide_overwrite_confirmation();
+            }
+            Message::CancelOverwritePreset => {
+                self.preset_bar.hide_overwrite_confirmation();
             }
             Message::StartRecording => match self.processor_manager.enable_recording() {
                 Ok(()) => {
@@ -72,12 +216,17 @@ impl AmplifierApp {
             Message::Stage(idx, stage_msg) => {
                 if self.update_stage(idx, stage_msg) {
                     should_update_chain = true;
+                    should_update_stages = true
                 }
             }
         }
 
         if should_update_chain {
             self.update_processor_chain();
+        }
+
+        if should_update_stages {
+            self.stage_list.set_stages(&self.stages);
         }
 
         Task::none()
@@ -149,19 +298,40 @@ impl AmplifierApp {
         }
     }
 
+    fn save_current_preset(&mut self) {
+        let preset = Preset::new(self.new_preset_name.clone(), self.stages.clone());
+
+        match self.preset_manager.save_preset(&preset) {
+            Ok(()) => {
+                info!("Saved preset: {}", self.new_preset_name);
+                self.selected_preset = Some(self.new_preset_name.clone());
+                self.preset_bar
+                    .update_presets(self.preset_manager.get_presets());
+                self.preset_bar
+                    .set_selected_preset(Some(self.new_preset_name.clone()));
+                self.show_save_input = false;
+                self.preset_bar.show_save_input(false);
+                self.new_preset_name.clear();
+            }
+            Err(e) => {
+                error!("Failed to save preset: {e}");
+            }
+        }
+    }
     fn update_processor_chain(&self) {
         let sample_rate = self.processor_manager.sample_rate();
         let chain = build_amplifier_chain(&self.stages, sample_rate);
         self.processor_manager.set_amp_chain(chain);
     }
 
-    pub fn view(&self) -> Element<Message> {
+    pub fn view(&self) -> Element<'_, Message> {
         use iced::widget::{column, container};
 
         container(
             column![
-                StageList::new(&self.stages).view(),
-                Control::new(self.selected_stage_type, self.is_recording).view()
+                self.preset_bar.view(),
+                self.stage_list.view(),
+                self.control_bar.view(self.is_recording),
             ]
             .spacing(20)
             .padding(20),
@@ -177,7 +347,7 @@ impl AmplifierApp {
 }
 
 fn build_amplifier_chain(stages: &[StageConfig], sample_rate: f32) -> AmplifierChain {
-    let mut chain = AmplifierChain::new("Custom Amp Chain");
+    let mut chain = AmplifierChain::new();
 
     for (idx, stage) in stages.iter().enumerate() {
         match stage {

@@ -6,31 +6,28 @@ use crate::gui::messages::Message;
 
 pub struct Control {
     selected_stage_type: StageType,
-    is_recording: bool,
 }
 
+const STAGE_TYPES: &[StageType] = &[
+    StageType::Filter,
+    StageType::Preamp,
+    StageType::Compressor,
+    StageType::ToneStack,
+    StageType::PowerAmp,
+    StageType::Level,
+];
+
 impl Control {
-    pub fn new(selected_stage_type: StageType, is_recording: bool) -> Self {
+    pub fn new(selected_stage_type: StageType) -> Self {
         Self {
             selected_stage_type,
-            is_recording,
         }
     }
 
-    pub fn view(&self) -> Element<'static, Message> {
-        let stage_types = vec![
-            StageType::Filter,
-            StageType::Preamp,
-            StageType::Compressor,
-            StageType::ToneStack,
-            StageType::PowerAmp,
-            StageType::Level,
-            StageType::Cabinet,
-        ];
-
+    pub fn view(&self, is_recording: bool) -> Element<'_, Message> {
         let stage_controls = row![
             pick_list(
-                stage_types,
+                STAGE_TYPES,
                 Some(self.selected_stage_type),
                 Message::StageTypeSelected
             ),
@@ -40,7 +37,7 @@ impl Control {
         .align_y(Alignment::Center);
 
         // Recording controls
-        let record_button = if self.is_recording {
+        let record_button = if is_recording {
             button(text("Stop Recording"))
                 .on_press(Message::StopRecording)
                 .style(iced::widget::button::danger)
@@ -50,7 +47,7 @@ impl Control {
                 .style(iced::widget::button::success)
         };
 
-        let recording_status = if self.is_recording {
+        let recording_status = if is_recording {
             text("Recording...").style(|_| iced::widget::text::Style {
                 color: Some(iced::Color::from_rgb(1.0, 0.3, 0.3)),
             })
@@ -76,5 +73,12 @@ impl Control {
         .align_y(Alignment::Center)
         .width(Length::Fill)
         .into()
+    }
+
+    pub fn set_selected(&mut self, t: StageType) {
+        self.selected_stage_type = t;
+    }
+    pub fn selected(&self) -> StageType {
+        self.selected_stage_type
     }
 }

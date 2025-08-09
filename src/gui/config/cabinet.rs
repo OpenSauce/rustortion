@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::sim::stages::cabinet::CabinetStage;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CabinetConfig {
     pub ir_path: String,
     pub enabled: bool,

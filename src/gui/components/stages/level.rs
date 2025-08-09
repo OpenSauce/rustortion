@@ -7,7 +7,7 @@ use crate::gui::messages::{LevelMessage, Message, StageMessage};
 
 const HEADER_TEXT: &str = "Level";
 
-pub fn view(idx: usize, cfg: &LevelConfig, total_stages: usize) -> Element<Message> {
+pub fn view(idx: usize, cfg: &LevelConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
 
     let body = column![labeled_slider(
