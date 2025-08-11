@@ -2,16 +2,14 @@ use crate::sim::stages::Stage;
 use crate::sim::stages::clipper::ClipperType;
 
 pub struct PreampStage {
-    name: String,
     gain: f32, // 0..10 → 0..+20 dB roughly
     bias: f32, // −1..+1  (≈ ±1 V)
     clipper_type: ClipperType,
 }
 
 impl PreampStage {
-    pub fn new(name: &str, gain: f32, bias: f32, clipper: ClipperType) -> Self {
+    pub fn new(gain: f32, bias: f32, clipper: ClipperType) -> Self {
         Self {
-            name: name.into(),
             gain,
             bias: bias.clamp(-1.0, 1.0),
             clipper_type: clipper,
@@ -58,9 +56,5 @@ impl Stage for PreampStage {
             "bias" => Ok(self.bias),
             _ => Err("Unknown parameter"),
         }
-    }
-
-    fn name(&self) -> &str {
-        &self.name
     }
 }

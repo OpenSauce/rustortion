@@ -23,9 +23,8 @@ impl Default for ToneStackConfig {
 }
 
 impl ToneStackConfig {
-    pub fn to_stage(&self, name: &str, sample_rate: f32) -> ToneStackStage {
+    pub fn to_stage(&self, sample_rate: f32) -> ToneStackStage {
         ToneStackStage::new(
-            name,
             self.model,
             self.bass,
             self.mid,

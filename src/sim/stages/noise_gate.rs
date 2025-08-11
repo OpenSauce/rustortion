@@ -8,7 +8,6 @@ use crate::sim::stages::Stage;
 /// - Hold: How long to stay open after signal drops
 /// - Release: How fast the gate closes
 pub struct NoiseGateStage {
-    name: String,
     threshold: f32,  // Linear scale (converted from dB)
     ratio: f32,      // Reduction ratio when gate is closed (e.g., 10:1)
     attack_ms: f32,  // Attack time in milliseconds
@@ -30,7 +29,6 @@ pub struct NoiseGateStage {
 
 impl NoiseGateStage {
     pub fn new(
-        name: &str,
         threshold_db: f32,
         ratio: f32,
         attack_ms: f32,
@@ -50,7 +48,6 @@ impl NoiseGateStage {
         let env_release_coeff = calculate_coefficient(10.0, sample_rate); // 10ms for smoother release
 
         Self {
-            name: name.to_string(),
             threshold,
             ratio,
             attack_ms,
@@ -190,10 +187,6 @@ impl Stage for NoiseGateStage {
             "release" => Ok(self.release_ms),
             _ => Err("Unknown parameter name"),
         }
-    }
-
-    fn name(&self) -> &str {
-        &self.name
     }
 }
 

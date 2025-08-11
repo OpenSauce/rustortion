@@ -23,9 +23,8 @@ impl Default for CompressorConfig {
 }
 
 impl CompressorConfig {
-    pub fn to_stage(&self, name: &str, sample_rate: f32) -> CompressorStage {
+    pub fn to_stage(&self, sample_rate: f32) -> CompressorStage {
         CompressorStage::new(
-            name,
             self.attack_ms,
             self.release_ms,
             self.threshold_db,

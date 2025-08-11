@@ -19,9 +19,8 @@ impl Default for FilterConfig {
 }
 
 impl FilterConfig {
-    pub fn to_stage(&self, name: &str, sample_rate: f32) -> FilterStage {
+    pub fn to_stage(&self, sample_rate: f32) -> FilterStage {
         FilterStage::new(
-            name,
             self.filter_type,
             self.cutoff_hz,
             self.resonance,

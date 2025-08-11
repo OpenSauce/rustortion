@@ -20,7 +20,6 @@ impl std::fmt::Display for PowerAmpType {
 }
 
 pub struct PowerAmpStage {
-    name: String,
     drive: f32,
     amp_type: PowerAmpType,
     sag: f32,
@@ -29,9 +28,8 @@ pub struct PowerAmpStage {
 }
 
 impl PowerAmpStage {
-    pub fn new(name: &str, drive: f32, amp_type: PowerAmpType, sag: f32, sample_rate: f32) -> Self {
+    pub fn new(drive: f32, amp_type: PowerAmpType, sag: f32, sample_rate: f32) -> Self {
         Self {
-            name: name.to_string(),
             drive: drive.clamp(0.0, 1.0),
             amp_type,
             sag: sag.clamp(0.0, 1.0),
@@ -125,9 +123,5 @@ impl Stage for PowerAmpStage {
             "sag" => Ok(self.sag),
             _ => Err("Unknown parameter name"),
         }
-    }
-
-    fn name(&self) -> &str {
-        &self.name
     }
 }

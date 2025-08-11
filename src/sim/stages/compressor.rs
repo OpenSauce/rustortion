@@ -1,7 +1,6 @@
 use crate::sim::stages::Stage;
 
 pub struct CompressorStage {
-    name: String,
     attack: f32,      // Attack coefficient (0-1)
     release: f32,     // Release coefficient (0-1)
     attack_ms: f32,   // Attack time in milliseconds
@@ -20,7 +19,6 @@ fn db_to_lin(db: f32) -> f32 {
 
 impl CompressorStage {
     pub fn new(
-        name: &str,
         attack_ms: f32,
         release_ms: f32,
         threshold_db: f32,
@@ -34,7 +32,6 @@ impl CompressorStage {
         let release = (-1.0 / (sample_rate * 0.001 * release_ms)).exp();
 
         Self {
-            name: name.to_string(),
             attack,
             release,
             attack_ms,
@@ -152,9 +149,5 @@ impl Stage for CompressorStage {
             "makeup" => Ok(20.0 * self.makeup.log10()), // Convert back to dB
             _ => Err("Unknown parameter name"),
         }
-    }
-
-    fn name(&self) -> &str {
-        &self.name
     }
 }

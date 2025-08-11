@@ -13,7 +13,7 @@ impl Default for LevelConfig {
 }
 
 impl LevelConfig {
-    pub fn to_stage(&self, name: &str) -> LevelStage {
-        LevelStage::new(name, self.gain)
+    pub fn to_stage(&self) -> LevelStage {
+        LevelStage::new(self.gain)
     }
 }
