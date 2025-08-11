@@ -31,7 +31,6 @@ impl std::fmt::Display for ToneStackModel {
 /// * All controls are 0.0 – 1.0, with 0.5 meaning “flat”.
 /// * Internally uses first‑order filters → ~0.005 % CPU on modern hardware.
 pub struct ToneStackStage {
-    name: String,
     model: ToneStackModel,
     bass: f32,
     mid: f32,
@@ -53,7 +52,6 @@ pub struct ToneStackStage {
 
 impl ToneStackStage {
     pub fn new(
-        name: &str,
         model: ToneStackModel,
         bass: f32,
         mid: f32,
@@ -62,7 +60,6 @@ impl ToneStackStage {
         sample_rate: f32,
     ) -> Self {
         Self {
-            name: name.to_owned(),
             model,
             bass: bass.clamp(0.0, 1.0),
             mid: mid.clamp(0.0, 1.0),
@@ -194,9 +191,5 @@ impl Stage for ToneStackStage {
             "presence" => Ok(self.presence),
             _ => Err("Unknown parameter name"),
         }
-    }
-
-    fn name(&self) -> &str {
-        &self.name
     }
 }

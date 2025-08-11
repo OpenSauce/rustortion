@@ -360,38 +360,28 @@ impl AmplifierApp {
 fn build_amplifier_chain(stages: &[StageConfig], sample_rate: f32) -> AmplifierChain {
     let mut chain = AmplifierChain::new();
 
-    for (idx, stage) in stages.iter().enumerate() {
+    for stage in stages.iter() {
         match stage {
             StageConfig::Filter(cfg) => {
-                chain.add_stage(Box::new(
-                    cfg.to_stage(&format!("Filter {idx}"), sample_rate),
-                ));
+                chain.add_stage(Box::new(cfg.to_stage(sample_rate)));
             }
             StageConfig::Preamp(cfg) => {
-                chain.add_stage(Box::new(cfg.to_stage(&format!("Preamp {idx}"))));
+                chain.add_stage(Box::new(cfg.to_stage()));
             }
             StageConfig::Compressor(cfg) => {
-                chain.add_stage(Box::new(
-                    cfg.to_stage(&format!("Compressor {idx}"), sample_rate),
-                ));
+                chain.add_stage(Box::new(cfg.to_stage(sample_rate)));
             }
             StageConfig::ToneStack(cfg) => {
-                chain.add_stage(Box::new(
-                    cfg.to_stage(&format!("ToneStack {idx}"), sample_rate),
-                ));
+                chain.add_stage(Box::new(cfg.to_stage(sample_rate)));
             }
             StageConfig::PowerAmp(cfg) => {
-                chain.add_stage(Box::new(
-                    cfg.to_stage(&format!("PowerAmp {idx}"), sample_rate),
-                ));
+                chain.add_stage(Box::new(cfg.to_stage(sample_rate)));
             }
             StageConfig::Level(cfg) => {
-                chain.add_stage(Box::new(cfg.to_stage(&format!("Level {idx}"))));
+                chain.add_stage(Box::new(cfg.to_stage()));
             }
             StageConfig::NoiseGate(cfg) => {
-                chain.add_stage(Box::new(
-                    cfg.to_stage(&format!("NoiseGate {idx}"), sample_rate),
-                ));
+                chain.add_stage(Box::new(cfg.to_stage(sample_rate)));
             }
         }
     }

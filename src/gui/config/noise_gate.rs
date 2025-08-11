@@ -23,9 +23,8 @@ impl Default for NoiseGateConfig {
 }
 
 impl NoiseGateConfig {
-    pub fn to_stage(&self, name: &str, sample_rate: f32) -> NoiseGateStage {
+    pub fn to_stage(&self, sample_rate: f32) -> NoiseGateStage {
         NoiseGateStage::new(
-            name,
             self.threshold_db,
             self.ratio,
             self.attack_ms,

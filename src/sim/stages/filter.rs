@@ -23,7 +23,6 @@ impl std::fmt::Display for FilterType {
 }
 
 pub struct FilterStage {
-    name: String,
     filter_type: FilterType,
     cutoff: f32,
     resonance: f32,
@@ -34,13 +33,7 @@ pub struct FilterStage {
 }
 
 impl FilterStage {
-    pub fn new(
-        name: &str,
-        filter_type: FilterType,
-        cutoff: f32,
-        resonance: f32,
-        sample_rate: f32,
-    ) -> Self {
+    pub fn new(filter_type: FilterType, cutoff: f32, resonance: f32, sample_rate: f32) -> Self {
         // Calculate initial alpha value from cutoff
         let alpha = match filter_type {
             FilterType::Highpass => {
@@ -60,7 +53,6 @@ impl FilterStage {
         };
 
         Self {
-            name: name.to_string(),
             filter_type,
             cutoff,
             resonance,
@@ -163,9 +155,5 @@ impl Stage for FilterStage {
             "resonance" => Ok(self.resonance),
             _ => Err("Unknown parameter name"),
         }
-    }
-
-    fn name(&self) -> &str {
-        &self.name
     }
 }

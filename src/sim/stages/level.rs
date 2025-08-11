@@ -1,24 +1,16 @@
 use crate::sim::stages::Stage;
 
 pub struct LevelStage {
-    name: String,
     gain: f32,
 }
 
 impl LevelStage {
-    pub fn new(name: &str, gain: f32) -> Self {
-        Self {
-            name: name.into(),
-            gain,
-        }
+    pub fn new(gain: f32) -> Self {
+        Self { gain }
     }
 }
 
 impl Stage for LevelStage {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
     fn process(&mut self, input: f32) -> f32 {
         input * self.gain
     }
@@ -37,11 +29,29 @@ impl Stage for LevelStage {
         }
     }
 
-    // Get a parameter value by name
     fn get_parameter(&self, name: &str) -> Result<f32, &'static str> {
         match name {
             "gain" => Ok(self.gain),
             _ => Err("Unknown parameter name"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_level_stage() {
+        let mut stage = LevelStage::new(1.0);
+        assert_eq!(stage.process(1.0), 1.0);
+
+        stage.set_parameter("gain", 2.0).unwrap();
+        assert_eq!(stage.process(1.0), 2.0);
+
+        stage.set_parameter("gain", 0.5).unwrap();
+        assert_eq!(stage.process(1.0), 0.5);
+
+        assert!(stage.set_parameter("gain", 3.0).is_err());
     }
 }

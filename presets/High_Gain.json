@@ -6,7 +6,7 @@
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 68.0,
+        "cutoff_hz": 575.0,
         "resonance": 0.2
       }
     },
@@ -27,10 +27,10 @@
     {
       "ToneStack": {
         "model": "British",
-        "bass": 0.65000004,
-        "mid": 0.90000004,
-        "treble": 0.7,
-        "presence": 0.4
+        "bass": 0.75,
+        "mid": 0.8,
+        "treble": 0.75,
+        "presence": 0.65000004
       }
     },
     {
@@ -45,7 +45,7 @@
     {
       "Preamp": {
         "gain": 6.8,
-        "bias": 0.0,
+        "bias": 1.4901161e-8,
         "clipper_type": "Hard"
       }
     },
@@ -61,6 +61,11 @@
         "attack_ms": 3.7,
         "hold_ms": 10.0,
         "release_ms": 100.0
+      }
+    },
+    {
+      "Level": {
+        "gain": 0.75
       }
     }
   ]
