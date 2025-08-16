@@ -87,7 +87,6 @@ impl AmplifierApp {
 
         match message {
             Message::RebuildTick => {
-                println!("Rebuild tick received");
                 if self.dirty_chain {
                     self.update_processor_chain();
                     self.dirty_chain = false;
