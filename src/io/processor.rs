@@ -1,3 +1,4 @@
+use crate::gui::settings::AudioSettings;
 use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
 use crate::sim::chain::AmplifierChain;
 use anyhow::{Context, Result};
@@ -42,6 +43,7 @@ impl Processor {
         client: &Client,
         rx_updates: Receiver<ProcessorMessage>,
         tx_audio: Option<Sender<AudioBlock>>,
+        _settings: &AudioSettings,
     ) -> Result<Self> {
         let in_port = client
             .register_port("in_port", AudioIn::default())
@@ -52,16 +54,6 @@ impl Processor {
         let out_port_right = client
             .register_port("out_port_right", AudioOut::default())
             .context("failed to register out port right")?;
-
-        client
-            .connect_ports_by_name("system:capture_1", "rustortion:in_port")
-            .context("failed to connect to in port")?;
-        client
-            .connect_ports_by_name("rustortion:out_port_left", "system:playback_1")
-            .context("failed to connect to out port left")?;
-        client
-            .connect_ports_by_name("rustortion:out_port_right", "system:playback_2")
-            .context("failed to connect to out port right")?;
 
         let interp_params = SincInterpolationParameters {
             sinc_len: 128,

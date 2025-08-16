@@ -157,3 +157,59 @@ impl Stage for FilterStage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::stages::Stage;
+
+    #[test]
+    fn highpass_blocks_low_frequencies_and_passes_high() {
+        let sr = 48_000.0;
+        let cutoff = 1_000.0;
+
+        // ---------- DC rejection ----------
+        let mut hp = FilterStage::new(FilterType::Highpass, cutoff, 0.0, sr);
+
+        // Warm up on DC to let the step transient decay.
+        for _ in 0..512 {
+            hp.process(1.0);
+        }
+
+        // Now measure on DC after warm-up.
+        let mut dc_sum = 0.0;
+        let n = 256;
+        for _ in 0..n {
+            dc_sum += hp.process(1.0);
+        }
+        let dc_avg = dc_sum / n as f32;
+        assert!(
+            dc_avg.abs() < 1e-3,
+            "DC not attenuated enough after warm-up: avg={dc_avg}"
+        );
+
+        // ---------- High-frequency passthrough ----------
+        // Recreate to reset state.
+        let mut hp = FilterStage::new(FilterType::Highpass, cutoff, 0.0, sr);
+
+        // Use a very high-frequency square (~24 kHz): alternating +1/-1.
+        // Warm up a little (filters have transients even with HF).
+        for i in 0..64 {
+            let s = if i % 2 == 0 { 1.0 } else { -1.0 };
+            hp.process(s);
+        }
+
+        let mut acc = 0.0;
+        for i in 0..256 {
+            let s = if i % 2 == 0 { 1.0 } else { -1.0 };
+            acc += hp.process(s).abs();
+        }
+        let hf_avg_abs = acc / 256.0;
+
+        // Should be largely passed (don’t demand unity; first-order HPF still shapes HF).
+        assert!(
+            hf_avg_abs > 0.5,
+            "High-frequency attenuated too much: avg_abs={hf_avg_abs}"
+        );
+    }
+}
