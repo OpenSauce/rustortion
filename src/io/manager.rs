@@ -140,7 +140,13 @@ impl ProcessorManager {
 
         if let Some(port) = client.port_by_name("rustortion:out_port_right") {
             client.disconnect(&port).unwrap_or_else(|e| {
-                error!("Failed to disconnect in_port: {e}");
+                error!("Failed to disconnect out_port_left: {e}");
+            });
+        }
+
+        if let Some(port) = client.port_by_name("rustortion:out_port_right") {
+            client.disconnect(&port).unwrap_or_else(|e| {
+                error!("Failed to disconnect out_port_right: {e}");
             });
         }
     }
