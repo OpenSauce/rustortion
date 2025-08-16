@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use log::info;
+use rustortion::gui::settings::Settings;
 use rustortion::gui::start;
 use rustortion::io::manager::ProcessorManager;
 
@@ -28,14 +29,28 @@ __________                __                 __  .__
         }
     }
 
+    // Load settings (will use defaults if no settings file exists)
+    let settings = Settings::load().unwrap_or_else(|e| {
+        info!("Could not load settings, using defaults: {}", e);
+        Settings::default()
+    });
+
+    info!("Audio Settings:");
+    info!("  Input: {}", settings.audio.input_port);
+    info!("  Output L: {}", settings.audio.output_left_port);
+    info!("  Output R: {}", settings.audio.output_right_port);
+    info!("  Buffer Size: {}", settings.audio.buffer_size);
+    info!("  Sample Rate: {}", settings.audio.sample_rate);
+    info!("  Auto-connect: {}", settings.audio.auto_connect);
+
     // Create ProcessorManager with proper error handling
-    let processor_manager =
-        ProcessorManager::new(None).context("failed to create ProcessorManager")?;
+    let processor_manager = ProcessorManager::new(settings.audio.clone())
+        .context("failed to create ProcessorManager")?;
 
     info!("ProcessorManager created successfully, starting GUI...");
 
     // Start the GUI with the processor manager
-    start(processor_manager).map_err(|e| anyhow::anyhow!("GUI error: {}", e))?;
+    start(processor_manager, settings).map_err(|e| anyhow::anyhow!("GUI error: {}", e))?;
 
     Ok(())
 }

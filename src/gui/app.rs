@@ -1,10 +1,13 @@
 use iced::{Element, Length, Task, Theme};
 use log::{error, info};
 
-use crate::gui::components::{control::Control, preset_bar::PresetBar, stage_list::StageList};
+use crate::gui::components::{
+    control::Control, preset_bar::PresetBar, settings_dialog::SettingsDialog, stage_list::StageList,
+};
 use crate::gui::config::{StageConfig, StageType};
 use crate::gui::messages::{Message, StageMessage};
 use crate::gui::preset::{Preset, PresetManager};
+use crate::gui::settings::Settings;
 use crate::io::manager::ProcessorManager;
 use crate::sim::chain::AmplifierChain;
 
@@ -19,10 +22,12 @@ pub struct AmplifierApp {
     control_bar: Control,
     new_preset_name: String,
     show_save_input: bool,
+    settings: Settings,
+    settings_dialog: SettingsDialog,
 }
 
 impl AmplifierApp {
-    pub fn new(processor_manager: ProcessorManager) -> Self {
+    pub fn new(processor_manager: ProcessorManager, settings: Settings) -> Self {
         let preset_manager = PresetManager::new("./presets").unwrap_or_else(|e| {
             error!("Failed to create preset manager: {e}");
             // Create an empty preset manager as fallback
@@ -46,6 +51,7 @@ impl AmplifierApp {
 
         let stage_list = StageList::new(stages.clone());
         let control_bar = Control::new(StageType::default());
+        let settings_dialog = SettingsDialog::new(&settings.audio);
 
         let app = Self {
             processor_manager,
@@ -58,6 +64,8 @@ impl AmplifierApp {
             control_bar,
             new_preset_name: String::new(),
             show_save_input: false,
+            settings,
+            settings_dialog,
         };
 
         // Update the processor chain with the loaded preset
@@ -213,6 +221,69 @@ impl AmplifierApp {
                 self.is_recording = false;
                 info!("Recording stopped");
             }
+
+            Message::OpenSettings => {
+                let inputs = self.processor_manager.get_available_inputs();
+                let outputs = self.processor_manager.get_available_outputs();
+                self.settings_dialog
+                    .show(&self.settings.audio, inputs, outputs);
+            }
+            Message::CancelSettings => {
+                self.settings_dialog.hide();
+            }
+            Message::ApplySettings => {
+                let new_audio_settings = self.settings_dialog.get_settings();
+                self.settings.audio = new_audio_settings.clone();
+
+                // Apply to processor manager
+                if let Err(e) = self.processor_manager.apply_settings(new_audio_settings) {
+                    error!("Failed to apply audio settings: {e}");
+                }
+
+                // Save settings
+                if let Err(e) = self.settings.save() {
+                    error!("Failed to save settings: {e}");
+                }
+
+                self.settings_dialog.hide();
+                info!("Audio settings applied successfully");
+            }
+            Message::RefreshPorts => {
+                let inputs = self.processor_manager.get_available_inputs();
+                let outputs = self.processor_manager.get_available_outputs();
+                self.settings_dialog
+                    .show(&self.settings.audio, inputs, outputs);
+            }
+            Message::InputPortChanged(port) => {
+                let mut temp_settings = self.settings_dialog.get_settings();
+                temp_settings.input_port = port;
+                self.settings_dialog.update_temp_settings(temp_settings);
+            }
+            Message::OutputLeftPortChanged(port) => {
+                let mut temp_settings = self.settings_dialog.get_settings();
+                temp_settings.output_left_port = port;
+                self.settings_dialog.update_temp_settings(temp_settings);
+            }
+            Message::OutputRightPortChanged(port) => {
+                let mut temp_settings = self.settings_dialog.get_settings();
+                temp_settings.output_right_port = port;
+                self.settings_dialog.update_temp_settings(temp_settings);
+            }
+            Message::BufferSizeChanged(size) => {
+                let mut temp_settings = self.settings_dialog.get_settings();
+                temp_settings.buffer_size = size;
+                self.settings_dialog.update_temp_settings(temp_settings);
+            }
+            Message::SampleRateChanged(rate) => {
+                let mut temp_settings = self.settings_dialog.get_settings();
+                temp_settings.sample_rate = rate;
+                self.settings_dialog.update_temp_settings(temp_settings);
+            }
+            Message::AutoConnectToggled(enabled) => {
+                let mut temp_settings = self.settings_dialog.get_settings();
+                temp_settings.auto_connect = enabled;
+                self.settings_dialog.update_temp_settings(temp_settings);
+            }
             Message::Stage(idx, stage_msg) => {
                 if self.update_stage(idx, stage_msg) {
                     should_update_chain = true;
@@ -336,20 +407,34 @@ impl AmplifierApp {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        use iced::widget::{column, container};
+        use iced::widget::{Space, button, column, container, row};
 
-        container(
-            column![
-                self.preset_bar.view(),
-                self.stage_list.view(),
-                self.control_bar.view(self.is_recording),
-            ]
-            .spacing(20)
-            .padding(20),
-        )
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .into()
+        // Main content with settings button in top bar
+        let top_bar = row![
+            Space::new(Length::Fill, Length::Fixed(0.0)),
+            button("Settings").on_press(Message::OpenSettings)
+        ];
+
+        let main_content = column![
+            top_bar,
+            self.preset_bar.view(),
+            self.stage_list.view(),
+            self.control_bar.view(self.is_recording),
+        ]
+        .spacing(20)
+        .padding(20);
+
+        // If settings dialog is open, show it as an overlay
+        if let Some(dialog) = self.settings_dialog.view() {
+            // The dialog already includes a semi-transparent background
+            // that covers the entire window, so we just return it
+            dialog
+        } else {
+            container(main_content)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .into()
+        }
     }
 
     pub fn theme(&self) -> Theme {

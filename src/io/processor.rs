@@ -53,16 +53,6 @@ impl Processor {
             .register_port("out_port_right", AudioOut::default())
             .context("failed to register out port right")?;
 
-        client
-            .connect_ports_by_name("system:capture_1", "rustortion:in_port")
-            .context("failed to connect to in port")?;
-        client
-            .connect_ports_by_name("rustortion:out_port_left", "system:playback_1")
-            .context("failed to connect to out port left")?;
-        client
-            .connect_ports_by_name("rustortion:out_port_right", "system:playback_2")
-            .context("failed to connect to out port right")?;
-
         let interp_params = SincInterpolationParameters {
             sinc_len: 128,
             f_cutoff: 0.95,

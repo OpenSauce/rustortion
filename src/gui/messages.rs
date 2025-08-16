@@ -27,6 +27,18 @@ pub enum Message {
     StartRecording,
     StopRecording,
 
+    // Settings messages
+    OpenSettings,
+    CancelSettings,
+    ApplySettings,
+    RefreshPorts,
+    InputPortChanged(String),
+    OutputLeftPortChanged(String),
+    OutputRightPortChanged(String),
+    BufferSizeChanged(u32),
+    SampleRateChanged(u32),
+    AutoConnectToggled(bool),
+
     // Stage-specific messages
     Stage(usize, StageMessage),
 }
