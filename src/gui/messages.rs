@@ -11,6 +11,7 @@ pub enum Message {
     MoveStageUp(usize),
     MoveStageDown(usize),
     StageTypeSelected(StageType),
+    RebuildTick,
 
     // Preset settings
     PresetSelected(String),

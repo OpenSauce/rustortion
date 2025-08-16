@@ -1,4 +1,4 @@
-use iced::{Element, Length, Task, Theme};
+use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
 use log::{error, info};
 
 use crate::gui::components::{
@@ -24,6 +24,8 @@ pub struct AmplifierApp {
     show_save_input: bool,
     settings: Settings,
     settings_dialog: SettingsDialog,
+
+    dirty_chain: bool,
 }
 
 impl AmplifierApp {
@@ -53,7 +55,7 @@ impl AmplifierApp {
         let control_bar = Control::new(StageType::default());
         let settings_dialog = SettingsDialog::new(&settings.audio);
 
-        let app = Self {
+        Self {
             processor_manager,
             stages,
             is_recording: false,
@@ -66,43 +68,54 @@ impl AmplifierApp {
             show_save_input: false,
             settings,
             settings_dialog,
-        };
 
-        // Update the processor chain with the loaded preset
-        app.update_processor_chain();
+            // Set dirty chain to true to trigger initial rebuild
+            dirty_chain: true,
+        }
+    }
 
-        app
+    pub fn subscription(&self) -> Subscription<Message> {
+        if self.dirty_chain {
+            time::every(Duration::from_millis(100)).map(|_| Message::RebuildTick)
+        } else {
+            Subscription::none()
+        }
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
-        let mut should_update_chain = false;
         let mut should_update_stages = false;
 
         match message {
+            Message::RebuildTick => {
+                if self.dirty_chain {
+                    self.update_processor_chain();
+                    self.dirty_chain = false;
+                }
+            }
             Message::AddStage => {
                 let new_stage = StageConfig::create_default(self.control_bar.selected());
                 self.stages.push(new_stage);
-                should_update_chain = true;
+                self.dirty_chain = true;
                 should_update_stages = true;
             }
             Message::RemoveStage(idx) => {
                 if idx < self.stages.len() {
                     self.stages.remove(idx);
                 }
-                should_update_chain = true;
+                self.dirty_chain = true;
                 should_update_stages = true;
             }
             Message::MoveStageUp(idx) => {
                 if idx > 0 {
                     self.stages.swap(idx - 1, idx);
-                    should_update_chain = true;
+                    self.dirty_chain = true;
                     should_update_stages = true;
                 }
             }
             Message::MoveStageDown(idx) => {
                 if idx < self.stages.len().saturating_sub(1) {
                     self.stages.swap(idx, idx + 1);
-                    should_update_chain = true;
+                    self.dirty_chain = true;
                     should_update_stages = true;
                 }
             }
@@ -115,7 +128,7 @@ impl AmplifierApp {
                     self.selected_preset = Some(preset_name.clone());
                     self.preset_bar
                         .set_selected_preset(Some(preset_name.clone()));
-                    should_update_chain = true;
+                    self.dirty_chain = true;
                     should_update_stages = true;
                     info!("Loaded preset: {preset_name}");
                 }
@@ -192,7 +205,7 @@ impl AmplifierApp {
                                 self.stages.clear();
                             }
 
-                            should_update_chain = true;
+                            self.dirty_chain = true;
                         }
                     }
                     Err(e) => {
@@ -286,14 +299,10 @@ impl AmplifierApp {
             }
             Message::Stage(idx, stage_msg) => {
                 if self.update_stage(idx, stage_msg) {
-                    should_update_chain = true;
+                    self.dirty_chain = true;
                     should_update_stages = true
                 }
             }
-        }
-
-        if should_update_chain {
-            self.update_processor_chain();
         }
 
         if should_update_stages {
