@@ -44,15 +44,13 @@ __________                __                 __  .__
     info!("  Auto-connect: {}", settings.audio.auto_connect);
 
     // Create ProcessorManager with proper error handling
-    let processor_manager =
-        ProcessorManager::new(settings.audio.clone(), settings.audio.auto_connect)
-            .context("failed to create ProcessorManager")?;
+    let processor_manager = ProcessorManager::new(settings.audio.clone())
+        .context("failed to create ProcessorManager")?;
 
     info!("ProcessorManager created successfully, starting GUI...");
 
     // Start the GUI with the processor manager
-    start(processor_manager, Settings::default())
-        .map_err(|e| anyhow::anyhow!("GUI error: {}", e))?;
+    start(processor_manager, settings).map_err(|e| anyhow::anyhow!("GUI error: {}", e))?;
 
     Ok(())
 }

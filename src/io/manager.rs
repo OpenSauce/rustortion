@@ -24,14 +24,14 @@ impl jack::NotificationHandler for Notifications {}
 
 impl ProcessorManager {
     /// Creates a new ProcessorManager
-    pub fn new(settings: AudioSettings, auto_connect: bool) -> Result<Self> {
+    pub fn new(settings: AudioSettings) -> Result<Self> {
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
             .context("failed to create JACK client")?;
 
         let (tx_amp, rx_amp) = bounded::<ProcessorMessage>(10);
 
         let processor =
-            Processor::new(&client, rx_amp, None, &settings).context("error creating processor")?;
+            Processor::new(&client, rx_amp, None).context("error creating processor")?;
 
         let sample_rate = client.sample_rate() as f32;
 
@@ -48,7 +48,7 @@ impl ProcessorManager {
         };
 
         // Auto-connect if requested
-        if auto_connect && settings.auto_connect {
+        if settings.auto_connect {
             manager.connect_ports(&settings);
         }
 
@@ -133,12 +133,6 @@ impl ProcessorManager {
         }
 
         if let Some(port) = client.port_by_name("rustortion:out_port_left") {
-            client.disconnect(&port).unwrap_or_else(|e| {
-                error!("Failed to disconnect in_port: {e}");
-            });
-        }
-
-        if let Some(port) = client.port_by_name("rustortion:out_port_right") {
             client.disconnect(&port).unwrap_or_else(|e| {
                 error!("Failed to disconnect out_port_left: {e}");
             });

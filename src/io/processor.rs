@@ -1,4 +1,3 @@
-use crate::gui::settings::AudioSettings;
 use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
 use crate::sim::chain::AmplifierChain;
 use anyhow::{Context, Result};
@@ -43,7 +42,6 @@ impl Processor {
         client: &Client,
         rx_updates: Receiver<ProcessorMessage>,
         tx_audio: Option<Sender<AudioBlock>>,
-        _settings: &AudioSettings,
     ) -> Result<Self> {
         let in_port = client
             .register_port("in_port", AudioIn::default())
