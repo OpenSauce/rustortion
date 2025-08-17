@@ -3074,7 +3074,9 @@ dependencies = [
  "iced",
  "jack",
  "log",
+ "realfft",
  "rubato",
+ "rustfft",
  "serde",
  "serde_json",
 ]

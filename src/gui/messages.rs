@@ -40,6 +40,12 @@ pub enum Message {
     SampleRateChanged(u32),
     AutoConnectToggled(bool),
 
+    // IR Cabinet messages - ADD THESE
+    IrSelected(String),
+    IrBypassed(bool),
+    IrGainChanged(f32),
+    RefreshIrs,
+
     // Stage-specific messages
     Stage(usize, StageMessage),
 }

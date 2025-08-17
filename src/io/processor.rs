@@ -1,9 +1,12 @@
+use std::path::Path;
+
 use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
 use crate::sim::chain::AmplifierChain;
+use crate::sim::ir_cabinet::IrCabinet;
 use anyhow::{Context, Result};
 use crossbeam::channel::{Receiver, Sender};
 use jack::{AudioIn, AudioOut, Client, Control, Frames, Port, ProcessHandler, ProcessScope};
-use log::{debug, error};
+use log::{debug, error, warn};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
@@ -11,6 +14,9 @@ use rubato::{
 pub enum ProcessorMessage {
     SetAmpChain(Box<AmplifierChain>),
     SetRecording(Option<Sender<AudioBlock>>),
+    SetIrCabinet(Option<String>), // ADD THIS - IR name to load
+    SetIrBypass(bool),            // ADD THIS
+    SetIrGain(f32),               // ADD THIS
 }
 
 const CHANNELS: usize = 1;
@@ -20,6 +26,8 @@ const MAX_BLOCK_SIZE: usize = 8192;
 pub struct Processor {
     /// Amplifier chain, used for processing amp simulations on the input.
     chain: Box<AmplifierChain>,
+    /// IR Cabinet processor - ADD THIS
+    ir_cabinet: Option<IrCabinet>,
     /// Channel for updating the amplifier chain.
     rx_updates: Receiver<ProcessorMessage>,
     /// Optional recorder channel.
@@ -98,10 +106,23 @@ impl Processor {
         let upsampled_buffer = upsampler.output_buffer_allocate(true);
         let downsampled_buffer = downsampler.output_buffer_allocate(true);
 
+        // Try to load IR cabinet - ADD THIS
+        let ir_cabinet = match IrCabinet::new(Path::new("./ir"), client.sample_rate() as u32) {
+            Ok(cab) => {
+                debug!("IR Cabinet loaded successfully");
+                Some(cab)
+            }
+            Err(e) => {
+                warn!("Failed to load IR Cabinet: {}", e);
+                None
+            }
+        };
+
         debug_stats(client);
 
         Ok(Self {
             chain: Box::new(AmplifierChain::new()),
+            ir_cabinet,
             rx_updates,
             tx_audio,
             in_port,
@@ -127,6 +148,29 @@ impl ProcessHandler for Processor {
                 ProcessorMessage::SetRecording(tx) => {
                     self.tx_audio = tx;
                     debug!("Recording channel updated");
+                }
+                ProcessorMessage::SetIrCabinet(ir_name) => {
+                    if let Some(ref mut cab) = self.ir_cabinet
+                        && let Some(name) = ir_name
+                    {
+                        if let Err(e) = cab.set_ir_by_name(&name) {
+                            error!("Failed to set IR: {}", e);
+                        } else {
+                            debug!("IR Cabinet set to: {}", name);
+                        }
+                    }
+                }
+                ProcessorMessage::SetIrBypass(bypass) => {
+                    if let Some(ref mut cab) = self.ir_cabinet {
+                        cab.set_bypass(bypass);
+                        debug!("IR Cabinet bypass: {}", bypass);
+                    }
+                }
+                ProcessorMessage::SetIrGain(gain) => {
+                    if let Some(ref mut cab) = self.ir_cabinet {
+                        cab.set_gain(gain);
+                        debug!("IR Cabinet gain: {}", gain);
+                    }
                 }
             }
         }
@@ -172,7 +216,12 @@ impl ProcessHandler for Processor {
             }
         };
 
-        let final_samples = &self.downsampled_buffer[0][..downsampled_frames];
+        let final_samples = &mut self.downsampled_buffer[0][..downsampled_frames];
+
+        if let Some(ref mut cab) = self.ir_cabinet {
+            cab.process_block(final_samples);
+        }
+
         let frames_to_copy = final_samples.len().min(n_frames);
 
         let out_buffer_left = self.out_port_left.as_mut_slice(ps);

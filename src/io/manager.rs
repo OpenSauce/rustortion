@@ -210,6 +210,30 @@ impl ProcessorManager {
         }
     }
 
+    /// Set the active IR cabinet
+    pub fn set_ir_cabinet(&self, ir_name: Option<String>) {
+        let update = ProcessorMessage::SetIrCabinet(ir_name);
+        self.tx_updates.try_send(update).unwrap_or_else(|e| {
+            error!("Failed to send IR cabinet update: {e}");
+        });
+    }
+
+    /// Set IR cabinet bypass state
+    pub fn set_ir_bypass(&self, bypass: bool) {
+        let update = ProcessorMessage::SetIrBypass(bypass);
+        self.tx_updates.try_send(update).unwrap_or_else(|e| {
+            error!("Failed to send IR bypass update: {e}");
+        });
+    }
+
+    /// Set IR cabinet mix level (0.0 = dry, 1.0 = wet)
+    pub fn set_ir_gain(&self, gain: f32) {
+        let update = ProcessorMessage::SetIrGain(gain);
+        self.tx_updates.try_send(update).unwrap_or_else(|e| {
+            error!("Failed to send IR gain update: {e}");
+        });
+    }
+
     /// Returns the sample rate
     pub fn sample_rate(&self) -> f32 {
         self.sample_rate
