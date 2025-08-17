@@ -40,7 +40,7 @@ pub enum Message {
     SampleRateChanged(u32),
     AutoConnectToggled(bool),
 
-    // IR Cabinet messages - ADD THESE
+    // IR Cabinet messages
     IrSelected(String),
     IrBypassed(bool),
     IrGainChanged(f32),

@@ -14,9 +14,9 @@ use rubato::{
 pub enum ProcessorMessage {
     SetAmpChain(Box<AmplifierChain>),
     SetRecording(Option<Sender<AudioBlock>>),
-    SetIrCabinet(Option<String>), // ADD THIS - IR name to load
-    SetIrBypass(bool),            // ADD THIS
-    SetIrGain(f32),               // ADD THIS
+    SetIrCabinet(Option<String>),
+    SetIrBypass(bool),
+    SetIrGain(f32),
 }
 
 const CHANNELS: usize = 1;
@@ -26,7 +26,7 @@ const MAX_BLOCK_SIZE: usize = 8192;
 pub struct Processor {
     /// Amplifier chain, used for processing amp simulations on the input.
     chain: Box<AmplifierChain>,
-    /// IR Cabinet processor - ADD THIS
+    /// IR Cabinet processor
     ir_cabinet: Option<IrCabinet>,
     /// Channel for updating the amplifier chain.
     rx_updates: Receiver<ProcessorMessage>,
@@ -106,7 +106,6 @@ impl Processor {
         let upsampled_buffer = upsampler.output_buffer_allocate(true);
         let downsampled_buffer = downsampler.output_buffer_allocate(true);
 
-        // Try to load IR cabinet - ADD THIS
         let ir_cabinet = match IrCabinet::new(Path::new("./ir"), client.sample_rate() as u32) {
             Ok(cab) => {
                 debug!("IR Cabinet loaded successfully");
