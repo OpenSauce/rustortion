@@ -1,6 +1,7 @@
 use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
 use log::{error, info};
 
+use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::{
     control::Control, preset_bar::PresetBar, settings_dialog::SettingsDialog, stage_list::StageList,
 };
@@ -27,8 +28,8 @@ pub struct AmplifierApp {
     show_save_input: bool,
     settings: Settings,
     settings_dialog: SettingsDialog,
-
     dirty_chain: bool,
+    ir_cabinet_control: IrCabinetControl,
 }
 
 impl AmplifierApp {
@@ -55,6 +56,18 @@ impl AmplifierApp {
         let control_bar = Control::new(StageType::default());
         let settings_dialog = SettingsDialog::new(&settings.audio);
 
+        let mut ir_cabinet_control = IrCabinetControl::new();
+
+        // Load available IRs from the ir/ directory
+        if let Ok(irs) = Self::scan_ir_directory() {
+            ir_cabinet_control.set_available_irs(irs);
+
+            // Set the first IR as active if available
+            if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
+                processor_manager.set_ir_cabinet(Some(first_ir));
+            }
+        }
+
         Self {
             processor_manager,
             stages,
@@ -68,9 +81,9 @@ impl AmplifierApp {
             show_save_input: false,
             settings,
             settings_dialog,
-
             // Set dirty chain to true to trigger initial rebuild
             dirty_chain: true,
+            ir_cabinet_control,
         }
     }
 
@@ -86,6 +99,7 @@ impl AmplifierApp {
             top_bar,
             self.preset_bar.view(),
             self.stage_list.view(),
+            self.ir_cabinet_control.view(),
             self.control_bar.view(self.is_recording),
         ]
         .spacing(20)
@@ -241,6 +255,28 @@ impl AmplifierApp {
             Message::BufferSizeChanged(x) => self.with_temp_settings(|s| s.buffer_size = x),
             Message::SampleRateChanged(x) => self.with_temp_settings(|s| s.sample_rate = x),
             Message::AutoConnectToggled(b) => self.with_temp_settings(|s| s.auto_connect = b),
+            Message::IrSelected(ir_name) => {
+                self.ir_cabinet_control
+                    .set_selected_ir(Some(ir_name.clone()));
+                self.processor_manager.set_ir_cabinet(Some(ir_name));
+            }
+            Message::IrBypassed(bypassed) => {
+                self.ir_cabinet_control.set_bypassed(bypassed);
+                self.processor_manager.set_ir_bypass(bypassed);
+            }
+            Message::IrGainChanged(gain) => {
+                self.ir_cabinet_control.set_gain(gain);
+                self.processor_manager.set_ir_gain(gain);
+            }
+            Message::RefreshIrs => {
+                if let Ok(irs) = Self::scan_ir_directory() {
+                    self.ir_cabinet_control.set_available_irs(irs);
+                    // Re-apply current selection
+                    if let Some(selected) = self.ir_cabinet_control.get_selected_ir() {
+                        self.processor_manager.set_ir_cabinet(Some(selected));
+                    }
+                }
+            }
             Message::Stage(idx, stage_msg) => {
                 if let Some(stage) = self.stages.get_mut(idx)
                     && stage.apply(stage_msg)
@@ -251,6 +287,30 @@ impl AmplifierApp {
         }
 
         Task::none()
+    }
+
+    // Add helper method to scan IR directory
+    fn scan_ir_directory() -> Result<Vec<String>, std::io::Error> {
+        use std::fs;
+        use std::path::Path;
+
+        let ir_path = Path::new("./ir");
+        if !ir_path.exists() {
+            fs::create_dir_all(ir_path)?;
+        }
+
+        let mut irs = Vec::new();
+        for entry in fs::read_dir(ir_path)? {
+            let entry = entry?;
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("wav")
+                && let Some(name) = path.file_stem().and_then(|s| s.to_str())
+            {
+                irs.push(name.to_string());
+            }
+        }
+
+        Ok(irs)
     }
 
     fn rebuild_if_dirty(&mut self) {
