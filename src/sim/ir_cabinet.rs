@@ -14,7 +14,7 @@ const PARTITION_SIZE: usize = FFT_BLOCK_SIZE / 2;
 // Zero-latency head length (time-domain)
 const HEAD_LEN: usize = 256; // you already have this
 const TAIL_OFFSET_SAMPLES: usize = HEAD_LEN % FFT_BLOCK_SIZE;
-const TAIL_MIX: f32 = 0.1; // Mix factor for tail output
+const TAIL_MIX: f32 = 0.35; // Mix factor for tail output
 
 #[derive(Clone)]
 pub struct ImpulseResponse {
@@ -58,6 +58,8 @@ pub struct IrCabinet {
     time_scratch: Vec<f32>,              // len = FFT_BLOCK_SIZE
     freq_scratch: Vec<Complex<f32>>,     // len = FFT_BLOCK_SIZE/2 + 1
     freq_accumulator: Vec<Complex<f32>>, // len = FFT_BLOCK_SIZE/2 + 1
+    r2c_scratch: Vec<realfft::num_complex::Complex32>,
+    c2r_scratch: Vec<realfft::num_complex::Complex32>,
 
     // Head FIR input ring
     head_ring: Vec<f32>, // len = HEAD_LEN
@@ -76,6 +78,8 @@ impl IrCabinet {
         let mut planner = RealFftPlanner::<f32>::new();
         let r2c = planner.plan_fft_forward(FFT_BLOCK_SIZE);
         let c2r = planner.plan_fft_inverse(FFT_BLOCK_SIZE);
+        let r2c_scratch = r2c.make_scratch_vec();
+        let c2r_scratch = c2r.make_scratch_vec();
 
         let mut cabinet = Self {
             current_ir: None,
@@ -97,6 +101,8 @@ impl IrCabinet {
             time_scratch: vec![0.0; FFT_BLOCK_SIZE],
             freq_scratch: vec![Complex::new(0.0, 0.0); FFT_BLOCK_SIZE / 2 + 1],
             freq_accumulator: vec![Complex::new(0.0, 0.0); FFT_BLOCK_SIZE / 2 + 1],
+            r2c_scratch,
+            c2r_scratch,
 
             head_ring: vec![0.0; HEAD_LEN],
             head_w: 0,
@@ -200,6 +206,14 @@ impl IrCabinet {
                 *s *= g;
             }
         }
+
+        // drop very quiet end (e.g. below -60 dB) to reduce partitions & denormal risk
+        let mut end = truncated.len();
+        while end > 0 && truncated[end - 1].abs() < 1.0e-3 {
+            // ≈ -60 dB
+            end -= 1;
+        }
+        truncated.truncate(end.max(HEAD_LEN)); // never shorter than head
 
         // Split into head (time-domain) and tail (FFT partitions)
         let head_len = truncated.len().min(HEAD_LEN);
@@ -349,8 +363,8 @@ impl IrCabinet {
         self.input_buffer[widx] = input;
 
         // Read current tail output sample (OLA)
-        let tail_out = self.ola_buf[self.ola_r];
-        self.ola_buf[self.ola_r] = 0.0; // consume
+        let tail_out = zap_denormal(self.ola_buf[self.ola_r]);
+        self.ola_buf[self.ola_r] = 0.0;
         self.ola_r = (self.ola_r + 1) % FFT_BLOCK_SIZE;
 
         // Advance hop; process a partition when hop completes
@@ -393,36 +407,56 @@ impl IrCabinet {
 
         // Forward real FFT -> freq_scratch
         self.r2c
-            .process(&mut self.time_scratch, &mut self.freq_scratch)
+            .process_with_scratch(
+                &mut self.time_scratch,
+                &mut self.freq_scratch,
+                &mut self.r2c_scratch,
+            )
             .expect("realfft forward failed");
 
         // Store newest into history (no alloc)
-        self.history[self.hist_head].copy_from_slice(&self.freq_scratch);
-        self.hist_head = (self.hist_head + self.history.len() - 1) % self.history.len();
+        if !self.history.is_empty() {
+            self.history[self.hist_head].copy_from_slice(&self.freq_scratch); // or &self.fft_scratch
+            // advance to next write position
+            self.hist_head = (self.hist_head + 1) % self.history.len();
+        }
 
-        // Accumulate Y(f) = Σ X[n-j](f) * H_tail[j](f)   over bins 0..N/2
+        // Accumulate Y(f) = Σ X[n-j](f) * H_tail[j](f)
         self.freq_accumulator.fill(Complex::new(0.0, 0.0));
-        let len = self.history.len().min(ir.tail_partitions.len());
+        let hlen = self.history.len();
+        let plen = ir.tail_partitions.len();
+        let len = hlen.min(plen);
+
         for j in 0..len {
-            let idx = (self.hist_head + j) % self.history.len();
+            // newest is at hist_head - 1
+            let newest = (self.hist_head + hlen - 1) % hlen;
+            // X[n-j]
+            let idx = (newest + hlen - j) % hlen;
             let x = &self.history[idx];
             let h = &ir.tail_partitions[j];
-            for k in 0..(FFT_BLOCK_SIZE / 2 + 1) {
+
+            for k in 0..self.freq_accumulator.len() {
+                // N/2+1 for realfft, N for complex
                 self.freq_accumulator[k] += x[k] * h[k];
             }
         }
-
         // Inverse real FFT -> time_scratch (len N)
         self.c2r
-            .process(&mut self.freq_accumulator, &mut self.time_scratch)
+            .process_with_scratch(
+                &mut self.freq_accumulator,
+                &mut self.time_scratch,
+                &mut self.c2r_scratch,
+            )
             .expect("realfft inverse failed");
 
         // Overlap-add into circular buffer with HEAD offset (to align tail to head)
-        let scale = 1.0 / FFT_BLOCK_SIZE as f32; // realfft is also unscaled
+        let scale = 1.0 / FFT_BLOCK_SIZE as f32;
         let base = (self.ola_w + TAIL_OFFSET_SAMPLES) % FFT_BLOCK_SIZE;
         for i in 0..FFT_BLOCK_SIZE {
             let pos = (base + i) % FFT_BLOCK_SIZE;
-            self.ola_buf[pos] += self.time_scratch[i] * scale;
+            // denormal-safe write
+            let v = zap_denormal(self.time_scratch[i] * scale);
+            self.ola_buf[pos] += v;
         }
 
         // Advance write head by hop size
@@ -472,4 +506,9 @@ fn resample_linear(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
         out.push(s);
     }
     out
+}
+
+#[inline]
+fn zap_denormal(x: f32) -> f32 {
+    if x.abs() < 1.0e-30 { 0.0 } else { x }
 }
