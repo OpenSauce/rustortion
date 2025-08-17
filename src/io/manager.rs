@@ -226,7 +226,7 @@ impl ProcessorManager {
         });
     }
 
-    /// Set IR cabinet mix level (0.0 = dry, 1.0 = wet)
+    /// Set IR cabinet gain level
     pub fn set_ir_gain(&self, gain: f32) {
         let update = ProcessorMessage::SetIrGain(gain);
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
