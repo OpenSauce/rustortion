@@ -6,7 +6,7 @@
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 131.0,
+        "cutoff_hz": 65.0,
         "resonance": 0.2
       }
     },
