@@ -6,14 +6,14 @@
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 575.0,
+        "cutoff_hz": 131.0,
         "resonance": 0.2
       }
     },
     {
       "Filter": {
         "filter_type": "Lowpass",
-        "cutoff_hz": 5737.0,
+        "cutoff_hz": 7013.0,
         "resonance": 0.15
       }
     },
