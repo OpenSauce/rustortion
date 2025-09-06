@@ -19,6 +19,7 @@ impl Default for PowerAmpConfig {
 }
 
 impl PowerAmpConfig {
+    #[must_use]
     pub fn to_stage(&self, sample_rate: f32) -> PowerAmpStage {
         PowerAmpStage::new(self.drive, self.amp_type, self.sag, sample_rate)
     }

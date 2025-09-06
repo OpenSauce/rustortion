@@ -10,6 +10,7 @@ pub struct StageList {
 }
 
 impl StageList {
+    #[must_use]
     pub fn new(stages: Vec<StageConfig>) -> Self {
         Self { stages }
     }
@@ -18,6 +19,7 @@ impl StageList {
         self.stages = stages.to_vec();
     }
 
+    #[must_use]
     pub fn view(&self) -> Element<'_, Message> {
         let mut col = column![].spacing(10).width(Length::Fill);
 

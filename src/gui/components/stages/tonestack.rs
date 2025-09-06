@@ -14,6 +14,7 @@ const TONE_STACK_MODELS: [ToneStackModel; 4] = [
     ToneStackModel::Flat,
 ];
 
+#[must_use]
 pub fn view(idx: usize, cfg: &ToneStackConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
 

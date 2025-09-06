@@ -14,6 +14,7 @@ const FILTER_TYPES: [FilterType; 4] = [
     FilterType::Notch,
 ];
 
+#[must_use]
 pub fn view(idx: usize, cfg: &FilterConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
 

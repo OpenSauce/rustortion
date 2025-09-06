@@ -28,6 +28,7 @@ pub struct NoiseGateStage {
 }
 
 impl NoiseGateStage {
+    #[must_use]
     pub fn new(
         threshold_db: f32,
         ratio: f32,

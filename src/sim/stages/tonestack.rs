@@ -51,6 +51,7 @@ pub struct ToneStackStage {
 }
 
 impl ToneStackStage {
+    #[must_use]
     pub fn new(
         model: ToneStackModel,
         bass: f32,

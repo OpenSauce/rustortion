@@ -7,6 +7,7 @@ use crate::gui::messages::{Message, NoiseGateMessage, StageMessage};
 
 const HEADER_TEXT: &str = "Noise Gate";
 
+#[must_use]
 pub fn view(idx: usize, cfg: &NoiseGateConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
 

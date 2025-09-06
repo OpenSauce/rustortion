@@ -23,6 +23,7 @@ impl Default for ToneStackConfig {
 }
 
 impl ToneStackConfig {
+    #[must_use]
     pub fn to_stage(&self, sample_rate: f32) -> ToneStackStage {
         ToneStackStage::new(
             self.model,

@@ -28,6 +28,7 @@ pub struct PowerAmpStage {
 }
 
 impl PowerAmpStage {
+    #[must_use]
     pub fn new(drive: f32, amp_type: PowerAmpType, sag: f32, sample_rate: f32) -> Self {
         Self {
             drive: drive.clamp(0.0, 1.0),

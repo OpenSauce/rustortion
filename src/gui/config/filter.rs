@@ -19,6 +19,7 @@ impl Default for FilterConfig {
 }
 
 impl FilterConfig {
+    #[must_use]
     pub fn to_stage(&self, sample_rate: f32) -> FilterStage {
         FilterStage::new(
             self.filter_type,

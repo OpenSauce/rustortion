@@ -54,7 +54,7 @@ impl Settings {
                 fs::read_to_string(&settings_path).context("Failed to read settings file")?;
             let settings: Settings =
                 serde_json::from_str(&contents).context("Failed to parse settings")?;
-            info!("Loaded settings from {:?}", settings_path);
+            info!("Loaded settings from {settings_path:?}");
             Ok(settings)
         } else {
             info!("No settings file found, using defaults");
@@ -77,7 +77,7 @@ impl Settings {
 
         fs::write(&settings_path, json).context("Failed to write settings file")?;
 
-        info!("Saved settings to {:?}", settings_path);
+        info!("Saved settings to {settings_path:?}");
         Ok(())
     }
 
@@ -98,6 +98,7 @@ impl Settings {
         }
     }
 
+    #[must_use]
     pub fn get_pipewire_latency(&self) -> String {
         format!("{}/{}", self.audio.buffer_size, self.audio.sample_rate)
     }

@@ -22,11 +22,11 @@ pub fn labeled_slider<'a, F: 'a + Fn(f32) -> Message>(
     .into()
 }
 
-pub fn icon_button<'a>(
-    icon: &'a str,
+pub fn icon_button(
+    icon: &str,
     message: Option<Message>,
     style: fn(&iced::Theme, button::Status) -> iced::widget::button::Style,
-) -> Element<'a, Message> {
+) -> Element<'_, Message> {
     let btn = button(text(icon)).width(Length::Fixed(30.0)).style(style);
 
     if let Some(msg) = message {

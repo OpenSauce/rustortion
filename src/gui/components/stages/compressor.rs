@@ -7,6 +7,7 @@ use crate::gui::messages::{CompressorMessage, Message, StageMessage};
 
 const HEADER_TEXT: &str = "Compressor";
 
+#[must_use]
 pub fn view(idx: usize, cfg: &CompressorConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
 

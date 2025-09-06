@@ -15,6 +15,7 @@ const CLIPPER_TYPES: [ClipperType; 5] = [
     ClipperType::ClassA,
 ];
 
+#[must_use]
 pub fn view(idx: usize, cfg: &PreampConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
 

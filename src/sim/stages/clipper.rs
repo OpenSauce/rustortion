@@ -24,6 +24,7 @@ impl std::fmt::Display for ClipperType {
 }
 
 impl ClipperType {
+    #[must_use]
     pub fn process(&self, input: f32, drive: f32) -> f32 {
         let driven = input * drive;
 

@@ -17,6 +17,7 @@ impl Default for IrCabinetControl {
 }
 
 impl IrCabinetControl {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             available_irs: Vec::new(),
@@ -46,14 +47,17 @@ impl IrCabinetControl {
         self.gain = gain;
     }
 
+    #[must_use]
     pub fn get_selected_ir(&self) -> Option<String> {
         self.selected_ir.clone()
     }
 
+    #[must_use]
     pub fn is_bypassed(&self) -> bool {
         self.bypassed
     }
 
+    #[must_use]
     pub fn get_gain(&self) -> f32 {
         self.gain
     }
@@ -98,7 +102,7 @@ impl IrCabinetControl {
                     color: Some(iced::Color::from_rgb(0.7, 0.7, 0.7)),
                 })
         } else if let Some(ref ir_name) = self.selected_ir {
-            text(format!("Active: {}", ir_name))
+            text(format!("Active: {ir_name}"))
                 .size(14)
                 .style(|_| iced::widget::text::Style {
                     color: Some(iced::Color::from_rgb(0.3, 1.0, 0.3)),

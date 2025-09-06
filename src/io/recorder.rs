@@ -31,6 +31,7 @@ impl Recorder {
     }
 
     /// Returns a clone of the sender for sending audio blocks.
+    #[must_use]
     pub fn sender(&self) -> Sender<AudioBlock> {
         self.tx.clone()
     }

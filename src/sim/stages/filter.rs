@@ -33,6 +33,7 @@ pub struct FilterStage {
 }
 
 impl FilterStage {
+    #[must_use]
     pub fn new(filter_type: FilterType, cutoff: f32, resonance: f32, sample_rate: f32) -> Self {
         // Calculate initial alpha value from cutoff
         let alpha = match filter_type {

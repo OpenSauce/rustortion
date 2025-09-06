@@ -75,6 +75,7 @@ pub enum StageConfig {
 }
 
 impl StageConfig {
+    #[must_use]
     pub fn to_runtime(&self, sample_rate: f32) -> Box<dyn crate::sim::stages::Stage> {
         match self {
             StageConfig::Filter(cfg) => Box::new(cfg.to_stage(sample_rate)),

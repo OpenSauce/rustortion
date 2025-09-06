@@ -125,7 +125,7 @@ impl IrCabinet {
     pub fn load_all_irs(&mut self, ir_directory: &Path, target_sample_rate: u32) -> Result<()> {
         if !ir_directory.exists() {
             fs::create_dir_all(ir_directory).context("Failed to create IR directory")?;
-            warn!("IR directory created at {:?}", ir_directory);
+            warn!("IR directory created at {ir_directory:?}");
             return Ok(());
         }
 
@@ -144,7 +144,7 @@ impl IrCabinet {
                         );
                         self.available_irs.push(ir);
                     }
-                    Err(e) => warn!("Failed to load IR file {:?}: {}", path, e),
+                    Err(e) => warn!("Failed to load IR file {path:?}: {e}"),
                 }
             }
         }
@@ -175,21 +175,21 @@ impl IrCabinet {
         let mono = if spec.channels > 1 {
             samples
                 .chunks(spec.channels as usize)
-                .map(|c| c.iter().sum::<f32>() / spec.channels as f32)
+                .map(|c| c.iter().sum::<f32>() / f32::from(spec.channels))
                 .collect()
         } else {
             samples
         };
 
         // Resample if needed
-        let resampled = if spec.sample_rate != target_sample_rate {
+        let resampled = if spec.sample_rate == target_sample_rate {
+            mono
+        } else {
             debug!(
                 "Resampling IR from {} Hz to {} Hz",
                 spec.sample_rate, target_sample_rate
             );
             resample_linear(&mono, spec.sample_rate, target_sample_rate)
-        } else {
-            mono
         };
 
         // Cap length
@@ -349,7 +349,7 @@ impl IrCabinet {
         // head_coeffs[0] is earliest tap; we want latest input to multiply head_coeffs[0] or vice versa.
         // Use reversed indexing so head_coeffs[0] aligns with current sample (common IR layout).
         let mut idx = self.head_w;
-        for &h in ir.head_coeffs.iter() {
+        for &h in &ir.head_coeffs {
             head_out += h * self.head_ring[idx];
             // move backwards with wrap
             idx = if idx == 0 { HEAD_LEN - 1 } else { idx - 1 };
@@ -463,6 +463,7 @@ impl IrCabinet {
         self.ola_w = (self.ola_w + PARTITION_SIZE) % FFT_BLOCK_SIZE;
     }
 
+    #[must_use]
     pub fn get_available_irs(&self) -> Vec<String> {
         self.available_irs
             .iter()
@@ -470,6 +471,7 @@ impl IrCabinet {
             .collect()
     }
 
+    #[must_use]
     pub fn get_current_ir_name(&self) -> Option<String> {
         self.current_ir.as_ref().map(|ir| ir.name.clone())
     }
@@ -487,7 +489,7 @@ impl IrCabinet {
 }
 
 fn resample_linear(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
-    let ratio = from_rate as f64 / to_rate as f64;
+    let ratio = f64::from(from_rate) / f64::from(to_rate);
     let new_len = (samples.len() as f64 / ratio) as usize;
     let mut out = Vec::with_capacity(new_len);
 

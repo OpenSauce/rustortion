@@ -23,6 +23,7 @@ impl Default for NoiseGateConfig {
 }
 
 impl NoiseGateConfig {
+    #[must_use]
     pub fn to_stage(&self, sample_rate: f32) -> NoiseGateStage {
         NoiseGateStage::new(
             self.threshold_db,

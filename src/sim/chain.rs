@@ -9,6 +9,7 @@ pub struct AmplifierChain {
 }
 
 impl AmplifierChain {
+    #[must_use]
     pub fn new() -> Self {
         Self {
             stages: Vec::new(),

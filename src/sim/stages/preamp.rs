@@ -13,6 +13,7 @@ pub struct PreampStage {
 }
 
 impl PreampStage {
+    #[must_use]
     pub fn new(gain: f32, bias: f32, clipper: ClipperType) -> Self {
         // choose a very low cutoff; tweak as you like
         let fs = 48_000.0;

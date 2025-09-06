@@ -10,14 +10,14 @@ pub fn main() -> Result<()> {
 
     info!("Rustortion GUI v{}", env!("CARGO_PKG_VERSION"));
     info!(
-        r#"
+        r"
 __________                __                 __  .__               
 \______   \__ __  _______/  |_  ____________/  |_|__| ____   ____  
  |       _/  |  \/  ___/\   __\/  _ \_  __ \   __\  |/  _ \ /    \ 
  |    |   \  |  /\___ \  |  | (  <_> )  | \/|  | |  (  <_> )   |  \
  |____|_  /____//____  > |__|  \____/|__|   |__| |__|\____/|___|  /
         \/           \/                                         \/ 
-    "#
+    "
     );
 
     // Check required environment variables (same as CLI)
@@ -31,7 +31,7 @@ __________                __                 __  .__
 
     // Load settings (will use defaults if no settings file exists)
     let settings = Settings::load().unwrap_or_else(|e| {
-        info!("Could not load settings, using defaults: {}", e);
+        info!("Could not load settings, using defaults: {e}");
         Settings::default()
     });
 

@@ -19,6 +19,7 @@ const STAGE_TYPES: &[StageType] = &[
 ];
 
 impl Control {
+    #[must_use]
     pub fn new(selected_stage_type: StageType) -> Self {
         Self {
             selected_stage_type,
@@ -83,6 +84,7 @@ impl Control {
     pub fn set_selected(&mut self, t: StageType) {
         self.selected_stage_type = t;
     }
+    #[must_use]
     pub fn selected(&self) -> StageType {
         self.selected_stage_type
     }

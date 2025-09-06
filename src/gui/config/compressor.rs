@@ -23,6 +23,7 @@ impl Default for CompressorConfig {
 }
 
 impl CompressorConfig {
+    #[must_use]
     pub fn to_stage(&self, sample_rate: f32) -> CompressorStage {
         CompressorStage::new(
             self.attack_ms,

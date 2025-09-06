@@ -14,6 +14,7 @@ pub struct PresetBar {
 }
 
 impl PresetBar {
+    #[must_use]
     pub fn new(presets: &[Preset], selected_preset: Option<String>) -> Self {
         let available_presets = presets.iter().map(|p| p.name.clone()).collect();
 

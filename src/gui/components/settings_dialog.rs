@@ -13,6 +13,7 @@ pub struct SettingsDialog {
 }
 
 impl SettingsDialog {
+    #[must_use]
     pub fn new(settings: &AudioSettings) -> Self {
         Self {
             temp_settings: settings.clone(),
@@ -62,10 +63,12 @@ impl SettingsDialog {
         self.show_dialog = false;
     }
 
+    #[must_use]
     pub fn is_visible(&self) -> bool {
         self.show_dialog
     }
 
+    #[must_use]
     pub fn get_settings(&self) -> AudioSettings {
         self.temp_settings.clone()
     }
@@ -155,7 +158,7 @@ impl SettingsDialog {
             / self.temp_settings.sample_rate as f32)
             * 1000.0;
         let latency_text =
-            text(format!("Latency: {:.2} ms", latency))
+            text(format!("Latency: {latency:.2} ms"))
                 .size(14)
                 .style(|_theme: &iced::Theme| iced::widget::text::Style {
                     color: Some(iced::Color::from_rgb(0.7, 0.7, 0.7)),

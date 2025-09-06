@@ -15,6 +15,7 @@ pub struct Preset {
 }
 
 impl Preset {
+    #[must_use]
     pub fn new(name: String, stages: Vec<StageConfig>) -> Self {
         Self {
             name,
@@ -24,11 +25,13 @@ impl Preset {
         }
     }
 
+    #[must_use]
     pub fn with_description(mut self, description: &str) -> Self {
         self.description = Some(description.to_string());
         self
     }
 
+    #[must_use]
     pub fn with_author(mut self, author: &str) -> Self {
         self.author = Some(author.to_string());
         self
@@ -119,14 +122,17 @@ impl PresetManager {
         }
     }
 
+    #[must_use]
     pub fn preset_exists(&self, name: &str) -> bool {
         self.presets.iter().any(|p| p.name == name)
     }
 
+    #[must_use]
     pub fn get_presets(&self) -> &[Preset] {
         &self.presets
     }
 
+    #[must_use]
     pub fn get_preset_by_name(&self, name: &str) -> Option<&Preset> {
         self.presets.iter().find(|p| p.name == name)
     }
@@ -149,7 +155,9 @@ impl PresetManager {
 }
 
 fn create_default_presets() -> Vec<Preset> {
-    use crate::gui::config::*;
+    use crate::gui::config::{
+        CompressorConfig, FilterConfig, LevelConfig, PreampConfig, StageConfig, ToneStackConfig,
+    };
     use crate::sim::stages::clipper::ClipperType;
     use crate::sim::stages::filter::FilterType;
     use crate::sim::stages::tonestack::ToneStackModel;

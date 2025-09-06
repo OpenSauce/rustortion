@@ -33,6 +33,7 @@ pub struct AmplifierApp {
 }
 
 impl AmplifierApp {
+    #[must_use]
     pub fn new(processor_manager: ProcessorManager, settings: Settings) -> Self {
         let preset_manager = PresetManager::new(PRESET_DIR).unwrap_or_else(|e| {
             error!("Failed to create preset manager: {e}");
@@ -87,6 +88,7 @@ impl AmplifierApp {
         }
     }
 
+    #[must_use]
     pub fn view(&self) -> Element<'_, Message> {
         use iced::widget::{Space, button, column, container, row};
 
@@ -115,6 +117,7 @@ impl AmplifierApp {
         }
     }
 
+    #[must_use]
     pub fn theme(&self) -> Theme {
         Theme::Dark
     }
@@ -247,10 +250,10 @@ impl AmplifierApp {
             }
             Message::InputPortChanged(p) => self.with_temp_settings(|s| s.input_port = p),
             Message::OutputLeftPortChanged(p) => {
-                self.with_temp_settings(|s| s.output_left_port = p)
+                self.with_temp_settings(|s| s.output_left_port = p);
             }
             Message::OutputRightPortChanged(p) => {
-                self.with_temp_settings(|s| s.output_right_port = p)
+                self.with_temp_settings(|s| s.output_right_port = p);
             }
             Message::BufferSizeChanged(x) => self.with_temp_settings(|s| s.buffer_size = x),
             Message::SampleRateChanged(x) => self.with_temp_settings(|s| s.sample_rate = x),

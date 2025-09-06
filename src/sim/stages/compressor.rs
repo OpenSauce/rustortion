@@ -18,6 +18,7 @@ fn db_to_lin(db: f32) -> f32 {
 }
 
 impl CompressorStage {
+    #[must_use]
     pub fn new(
         attack_ms: f32,
         release_ms: f32,

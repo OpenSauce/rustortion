@@ -112,7 +112,7 @@ impl Processor {
                 Some(cab)
             }
             Err(e) => {
-                warn!("Failed to load IR Cabinet: {}", e);
+                warn!("Failed to load IR Cabinet: {e}");
                 None
             }
         };
@@ -153,22 +153,22 @@ impl ProcessHandler for Processor {
                         && let Some(name) = ir_name
                     {
                         if let Err(e) = cab.set_ir_by_name(&name) {
-                            error!("Failed to set IR: {}", e);
+                            error!("Failed to set IR: {e}");
                         } else {
-                            debug!("IR Cabinet set to: {}", name);
+                            debug!("IR Cabinet set to: {name}");
                         }
                     }
                 }
                 ProcessorMessage::SetIrBypass(bypass) => {
                     if let Some(ref mut cab) = self.ir_cabinet {
                         cab.set_bypass(bypass);
-                        debug!("IR Cabinet bypass: {}", bypass);
+                        debug!("IR Cabinet bypass: {bypass}");
                     }
                 }
                 ProcessorMessage::SetIrGain(gain) => {
                     if let Some(ref mut cab) = self.ir_cabinet {
                         cab.set_gain(gain);
-                        debug!("IR Cabinet gain: {}", gain);
+                        debug!("IR Cabinet gain: {gain}");
                     }
                 }
             }
@@ -237,7 +237,8 @@ impl ProcessHandler for Processor {
         if let Some(ref tx) = self.tx_audio {
             let mut block = AudioBlock::with_capacity(BLOCK_FRAMES * 2);
             for &s in final_samples.iter().take(BLOCK_FRAMES) {
-                let v = (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                let v = (s * f32::from(i16::MAX)).clamp(f32::from(i16::MIN), f32::from(i16::MAX))
+                    as i16;
                 block.extend_from_slice(&[v, v]);
             }
 

@@ -23,7 +23,7 @@ struct Notifications;
 impl jack::NotificationHandler for Notifications {}
 
 impl ProcessorManager {
-    /// Creates a new ProcessorManager
+    /// Creates a new `ProcessorManager`
     pub fn new(settings: AudioSettings) -> Result<Self> {
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
             .context("failed to create JACK client")?;
@@ -146,6 +146,7 @@ impl ProcessorManager {
     }
 
     /// Get available input ports
+    #[must_use]
     pub fn get_available_inputs(&self) -> Vec<String> {
         self.active_client
             .as_client()
@@ -156,6 +157,7 @@ impl ProcessorManager {
     }
 
     /// Get available output ports
+    #[must_use]
     pub fn get_available_outputs(&self) -> Vec<String> {
         self.active_client
             .as_client()
@@ -235,6 +237,7 @@ impl ProcessorManager {
     }
 
     /// Returns the sample rate
+    #[must_use]
     pub fn sample_rate(&self) -> f32 {
         self.sample_rate
     }
