@@ -9,7 +9,7 @@ A guitar amp simulator built in Rust using JACK.
 - Impulse response (IR) cabinet simulation
 - Preset management system
 - Real-time recording capability
-- GUI using (Iced)[https://github.com/iced-rs/iced]
+- GUI using [Iced](https://github.com/iced-rs/iced)
 
 ## Requirements
 
