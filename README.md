@@ -20,23 +20,10 @@ A guitar amp simulator built in Rust using JACK.
   sudo apt-get install libjack-jackd2-dev pkg-config
   ```
 
-## Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/rustortion.git
-   cd rustortion
-   ```
-
-2. Build the project:
-   ```bash
-   cargo build --release
-   ```
-
 ## Running
 
 ```bash
-cargo run --bin gui
+cargo run --release
 ```
 
 ## License
