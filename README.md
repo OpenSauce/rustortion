@@ -1,6 +1,6 @@
 # Rustortion
 
-A real-time guitar amplifier simulator built in Rust using JACK audio and a GUI interface.
+A guitar amp simulator built in Rust using JACK.
 
 ## Features
 
