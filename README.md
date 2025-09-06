@@ -24,7 +24,7 @@ A guitar amp simulator built in Rust using JACK.
 
 1. Clone the repository:
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/yourusername/rustortion.git
    cd rustortion
    ```
 
