@@ -403,12 +403,6 @@ impl AmplifierApp {
             chain.add_stage(cfg.to_runtime(sample_rate));
         }
 
-        if !self.stages.is_empty() {
-            let stage_indices: Vec<usize> = (0..self.stages.len()).collect();
-            chain.define_channel(0, Vec::new(), stage_indices, Vec::new());
-            chain.set_channel(0);
-        }
-
         chain
     }
 }
