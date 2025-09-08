@@ -124,9 +124,11 @@ impl SettingsDialog {
         let buffer_sizes = vec![64u32, 128, 256, 512, 1024, 2048, 4096];
         let buffer_section = column![
             text("Buffer Size:").size(16),
-            pick_list(buffer_sizes, Some(self.temp_settings.buffer_size), |size| {
-                Message::BufferSizeChanged(size)
-            })
+            pick_list(
+                buffer_sizes,
+                Some(self.temp_settings.buffer_size),
+                Message::BufferSizeChanged
+            )
             .width(Length::Fill),
         ]
         .spacing(5);
@@ -135,9 +137,23 @@ impl SettingsDialog {
         let sample_rates = vec![44100u32, 48000, 88200, 96000, 176400, 192000];
         let sample_rate_section = column![
             text("Sample Rate:").size(16),
-            pick_list(sample_rates, Some(self.temp_settings.sample_rate), |rate| {
-                Message::SampleRateChanged(rate)
-            })
+            pick_list(
+                sample_rates,
+                Some(self.temp_settings.sample_rate),
+                Message::SampleRateChanged
+            )
+            .width(Length::Fill),
+        ]
+        .spacing(5);
+
+        let oversampling_factors = vec![1u32, 2, 4, 8, 16];
+        let oversampling_section = column![
+            text("Oversampling Factor:").size(16),
+            pick_list(
+                oversampling_factors,
+                Some(self.temp_settings.oversampling_factor),
+                Message::OversamplingFactorChanged
+            )
             .width(Length::Fill),
         ]
         .spacing(5);
@@ -181,6 +197,7 @@ impl SettingsDialog {
             output_right_section,
             buffer_section,
             sample_rate_section,
+            oversampling_section,
             auto_connect_section,
             latency_text,
             iced::widget::Space::new(Length::Fill, Length::Fixed(10.0)),

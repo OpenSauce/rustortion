@@ -20,7 +20,6 @@ pub enum ProcessorMessage {
 }
 
 const CHANNELS: usize = 1;
-const OVERSAMPLE_FACTOR: f64 = 8.0;
 const MAX_BLOCK_SIZE: usize = 8192;
 
 pub struct Processor {
@@ -43,6 +42,7 @@ pub struct Processor {
     upsampled_buffer: Vec<Vec<f32>>,
     /// Reusable buffer for downsampled frames.
     downsampled_buffer: Vec<Vec<f32>>,
+    oversample_factor: f64,
 }
 
 impl Processor {
@@ -50,6 +50,7 @@ impl Processor {
         client: &Client,
         rx_updates: Receiver<ProcessorMessage>,
         tx_audio: Option<Sender<AudioBlock>>,
+        oversample_factor: f64,
     ) -> Result<Self> {
         let in_port = client
             .register_port("in_port", AudioIn::default())
@@ -77,7 +78,7 @@ impl Processor {
         };
 
         let mut upsampler = SincFixedIn::<f32>::new(
-            OVERSAMPLE_FACTOR,
+            oversample_factor,
             1.0,
             interp_params,
             MAX_BLOCK_SIZE,
@@ -86,10 +87,10 @@ impl Processor {
         .context("failed to create upsampler")?;
 
         let mut downsampler = SincFixedIn::<f32>::new(
-            1.0 / OVERSAMPLE_FACTOR,
+            1.0 / oversample_factor,
             1.0,
             down_interp_params,
-            MAX_BLOCK_SIZE * OVERSAMPLE_FACTOR as usize,
+            MAX_BLOCK_SIZE * oversample_factor as usize,
             CHANNELS,
         )
         .context("failed to create downsampler")?;
@@ -99,7 +100,7 @@ impl Processor {
             .set_chunk_size(buffer_size)
             .context("failed to set upsampler chunk size")?;
         downsampler
-            .set_chunk_size(buffer_size * OVERSAMPLE_FACTOR as usize)
+            .set_chunk_size(buffer_size * oversample_factor as usize)
             .context("failed to set downsampler chunk size")?;
 
         let input_buffer = vec![Vec::with_capacity(buffer_size)];
@@ -132,6 +133,7 @@ impl Processor {
             input_buffer,
             upsampled_buffer,
             downsampled_buffer,
+            oversample_factor,
         })
     }
 }
@@ -265,7 +267,7 @@ impl ProcessHandler for Processor {
             self.upsampled_buffer = self.upsampler.output_buffer_allocate(true);
         }
 
-        let needed_down = new_size * OVERSAMPLE_FACTOR as usize;
+        let needed_down = new_size * self.oversample_factor as usize;
         if let Err(e) = self.downsampler.set_chunk_size(needed_down) {
             error!("Downsampler cannot grow to {needed_down}: {e}");
         } else {
