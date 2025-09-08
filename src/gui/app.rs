@@ -116,7 +116,7 @@ impl AmplifierApp {
     }
 
     pub fn theme(&self) -> Theme {
-        Theme::Dark
+        Theme::TokyoNight
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
