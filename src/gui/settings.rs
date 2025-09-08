@@ -13,6 +13,7 @@ pub struct AudioSettings {
     pub buffer_size: u32,
     pub sample_rate: u32,
     pub auto_connect: bool,
+    pub oversampling_factor: u32,
 }
 
 impl Default for AudioSettings {
@@ -24,6 +25,7 @@ impl Default for AudioSettings {
             buffer_size: 128,
             sample_rate: 48000,
             auto_connect: true,
+            oversampling_factor: 4,
         }
     }
 }

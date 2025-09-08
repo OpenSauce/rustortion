@@ -30,8 +30,8 @@ impl ProcessorManager {
 
         let (tx_amp, rx_amp) = bounded::<ProcessorMessage>(10);
 
-        let processor =
-            Processor::new(&client, rx_amp, None).context("error creating processor")?;
+        let processor = Processor::new(&client, rx_amp, None, settings.oversampling_factor.into())
+            .context("error creating processor")?;
 
         let sample_rate = client.sample_rate() as f32;
 
