@@ -6,7 +6,7 @@
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 65.0,
+        "cutoff_hz": 187.0,
         "resonance": 0.2
       }
     },
@@ -27,9 +27,9 @@
     {
       "ToneStack": {
         "model": "British",
-        "bass": 0.75,
-        "mid": 0.8,
-        "treble": 0.75,
+        "bass": 0.55,
+        "mid": 1.0,
+        "treble": 0.85,
         "presence": 0.65000004
       }
     },
