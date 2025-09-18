@@ -402,8 +402,10 @@ impl AmplifierApp {
     fn build_amplifier_chain(&self, sample_rate: f32) -> AmplifierChain {
         let mut chain = AmplifierChain::new();
 
+        let effective_sample_rate = sample_rate * self.settings.audio.oversampling_factor as f32;
+
         for cfg in &self.stages {
-            chain.add_stage(cfg.to_runtime(sample_rate));
+            chain.add_stage(cfg.to_runtime(effective_sample_rate));
         }
 
         chain
