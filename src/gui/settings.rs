@@ -103,4 +103,16 @@ impl Settings {
     pub fn get_pipewire_latency(&self) -> String {
         format!("{}/{}", self.audio.buffer_size, self.audio.sample_rate)
     }
+
+    pub fn apply_to_environment(&self) {
+        unsafe {
+            std::env::set_var("PIPEWIRE_LATENCY", self.get_pipewire_latency());
+            if std::env::var("JACK_PROMISCUOUS_SERVER").is_err() {
+                std::env::set_var("JACK_PROMISCUOUS_SERVER", "pipewire");
+            }
+            if std::env::var("RECORDING_DIR").is_err() {
+                std::env::set_var("RECORDING_DIR", &self.recording_dir);
+            }
+        }
+    }
 }
