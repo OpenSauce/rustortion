@@ -6,6 +6,14 @@ use rustortion::io::manager::ProcessorManager;
 
 pub fn main() -> Result<()> {
     dotenv::dotenv().ok();
+
+    let settings = Settings::load().unwrap_or_else(|e| {
+        info!("Could not load settings, using defaults: {}", e);
+        Settings::default()
+    });
+
+    settings.apply_to_environment();
+
     env_logger::init();
 
     info!("Rustortion GUI v{}", env!("CARGO_PKG_VERSION"));
@@ -20,7 +28,6 @@ __________                __                 __  .__
     "#
     );
 
-    // Check required environment variables (same as CLI)
     let required_vars = ["RUST_LOG", "PIPEWIRE_LATENCY", "JACK_PROMISCUOUS_SERVER"];
     for &key in &required_vars {
         match std::env::var(key) {
@@ -28,12 +35,6 @@ __________                __                 __  .__
             Err(_) => anyhow::bail!("environment variable '{}' must be set.", key),
         }
     }
-
-    // Load settings (will use defaults if no settings file exists)
-    let settings = Settings::load().unwrap_or_else(|e| {
-        info!("Could not load settings, using defaults: {}", e);
-        Settings::default()
-    });
 
     info!("Audio Settings:");
     info!("  Input: {}", settings.audio.input_port);
