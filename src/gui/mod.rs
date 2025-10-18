@@ -6,7 +6,7 @@ pub mod preset;
 pub mod settings;
 
 pub use app::AmplifierApp;
-use iced::Font;
+use iced::{Font, window};
 pub use messages::Message;
 
 use crate::{gui::settings::Settings, io::manager::ProcessorManager};
@@ -22,7 +22,7 @@ pub fn start(processor_manager: ProcessorManager, settings: Settings) -> iced::R
         .run_with(move || {
             (
                 AmplifierApp::new(processor_manager, settings),
-                iced::Task::none(),
+                window::get_latest().and_then(|id| window::maximize(id, true)),
             )
         })
 }
