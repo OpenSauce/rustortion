@@ -186,11 +186,9 @@ impl TunerDisplay {
                             color: Some(Color::from_rgb(0.6, 0.6, 0.6)),
                         }),
                     iced::widget::horizontal_space(),
-                    text(cents_text.to_owned())
-                        .size(22)
-                        .style(move |_: &iced::Theme| {
-                            iced::widget::text::Style { color: Some(color) }
-                        }),
+                    text(cents_text).size(22).style(move |_: &iced::Theme| {
+                        iced::widget::text::Style { color: Some(color) }
+                    }),
                     iced::widget::horizontal_space(),
                     text("SHARP ♯")
                         .size(14)

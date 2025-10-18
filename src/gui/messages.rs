@@ -52,7 +52,7 @@ pub enum Message {
 
     // Tuner messages
     ToggleTuner,
-    TunerUpdate(crate::sim::tuner::TunerInfo),
+    TunerUpdate,
 }
 
 #[derive(Debug, Clone)]

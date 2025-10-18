@@ -12,7 +12,6 @@ use crate::gui::preset::{Preset, PresetManager};
 use crate::gui::settings::Settings;
 use crate::io::manager::ProcessorManager;
 use crate::sim::chain::AmplifierChain;
-use crate::sim::tuner::TunerInfo;
 
 const PRESET_DIR: &str = "./presets";
 const REBUILD_INTERVAL_MS: Duration = Duration::from_millis(100);
@@ -139,8 +138,7 @@ impl AmplifierApp {
         };
 
         let tuner_sub = if self.tuner_enabled {
-            time::every(Duration::from_millis(16))
-                .map(|_| Message::TunerUpdate(TunerInfo::default()))
+            time::every(Duration::from_millis(16)).map(|_| Message::TunerUpdate)
         } else {
             Subscription::none()
         };
@@ -319,7 +317,7 @@ impl AmplifierApp {
                     self.processor_manager.set_tuner_enabled(false);
                 }
             }
-            Message::TunerUpdate(_) => {
+            Message::TunerUpdate => {
                 if self.tuner_enabled {
                     let mut latest_info = None;
                     while let Some(info) = self.processor_manager.poll_tuner_info() {
