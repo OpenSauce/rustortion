@@ -592,9 +592,8 @@ mod benches {
             accumulator.fill(Complex::new(0.0, 0.0));
 
             for j in 0..num_partitions {
-                for k in 0..num_bins {
-                    let prod = black_box(history[j][k]) * black_box(ir_partitions[j][k]);
-                    accumulator[k] += prod;
+                for (k, acc) in accumulator.iter_mut().enumerate().take(num_bins) {
+                    *acc += black_box(history[j][k]) * black_box(ir_partitions[j][k]);
                 }
             }
 
