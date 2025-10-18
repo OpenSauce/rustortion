@@ -25,7 +25,7 @@ pub fn start(processor_manager: ProcessorManager, settings: Settings) -> iced::R
         .run_with(move || {
             (
                 AmplifierApp::new(processor_manager, settings),
-                window::get_latest().and_then(|id| window::maximize(id, true)),
+                window::get_oldest().and_then(|id| window::maximize(id, true)),
             )
         })
 }
