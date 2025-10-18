@@ -2,6 +2,8 @@
 
 A guitar amp simulator built in Rust using JACK.
 
+![Rustortion](screenshots/rustortion.png)
+
 ## Features
 
 - Low-latency audio processing with oversampling
@@ -10,6 +12,7 @@ A guitar amp simulator built in Rust using JACK.
 - Preset management system
 - Real-time recording capability
 - GUI using [Iced](https://github.com/iced-rs/iced)
+- A tuner
 
 ## Requirements
 

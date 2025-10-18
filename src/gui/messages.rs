@@ -49,6 +49,10 @@ pub enum Message {
 
     // Stage-specific messages
     Stage(usize, StageMessage),
+
+    // Tuner messages
+    ToggleTuner,
+    TunerUpdate,
 }
 
 #[derive(Debug, Clone)]

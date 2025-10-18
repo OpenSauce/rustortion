@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
 use crate::sim::chain::AmplifierChain;
 use crate::sim::ir_cabinet::IrCabinet;
+use crate::sim::tuner::{Tuner, TunerInfo};
 use anyhow::{Context, Result};
 use crossbeam::channel::{Receiver, Sender};
 use jack::{AudioIn, AudioOut, Client, Control, Frames, Port, ProcessHandler, ProcessScope};
@@ -17,6 +18,7 @@ pub enum ProcessorMessage {
     SetIrCabinet(Option<String>),
     SetIrBypass(bool),
     SetIrGain(f32),
+    SetTunerEnabled(bool),
 }
 
 const CHANNELS: usize = 1;
@@ -43,6 +45,10 @@ pub struct Processor {
     /// Reusable buffer for downsampled frames.
     downsampled_buffer: Vec<Vec<f32>>,
     oversample_factor: f64,
+    tuner: Option<Tuner>,
+    tx_tuner: Option<Sender<TunerInfo>>,
+    sample_rate: f32,
+    tuner_update_counter: usize,
 }
 
 impl Processor {
@@ -51,6 +57,7 @@ impl Processor {
         rx_updates: Receiver<ProcessorMessage>,
         tx_audio: Option<Sender<AudioBlock>>,
         oversample_factor: f64,
+        tx_tuner: Option<Sender<TunerInfo>>,
     ) -> Result<Self> {
         let in_port = client
             .register_port("in_port", AudioIn::default())
@@ -134,6 +141,10 @@ impl Processor {
             upsampled_buffer,
             downsampled_buffer,
             oversample_factor,
+            tuner: None,
+            tx_tuner,
+            sample_rate: client.sample_rate() as f32,
+            tuner_update_counter: 0,
         })
     }
 }
@@ -173,11 +184,44 @@ impl ProcessHandler for Processor {
                         debug!("IR Cabinet gain: {}", gain);
                     }
                 }
+                ProcessorMessage::SetTunerEnabled(enabled) => {
+                    if enabled {
+                        if self.tuner.is_none() {
+                            self.tuner = Some(Tuner::new(self.sample_rate));
+                            debug!("Tuner enabled");
+                        }
+                    } else {
+                        self.tuner = None;
+                        debug!("Tuner disabled");
+                    }
+                }
             }
         }
 
         let n_frames = ps.n_frames() as usize;
         let input = self.in_port.as_slice(ps);
+
+        if let Some(ref mut tuner) = self.tuner {
+            for &sample in input.iter() {
+                tuner.process_sample(sample);
+            }
+
+            self.tuner_update_counter += n_frames;
+            if self.tuner_update_counter >= 2048 {
+                self.tuner_update_counter = 0;
+                if let Some(ref tx) = self.tx_tuner {
+                    let info = tuner.get_tuner_info();
+                    let _ = tx.try_send(info);
+                }
+            }
+
+            let out_left = self.out_port_left.as_mut_slice(ps);
+            let out_right = self.out_port_right.as_mut_slice(ps);
+            out_left[..n_frames].fill(0.0);
+            out_right[..n_frames].fill(0.0);
+
+            return Control::Continue;
+        }
 
         self.input_buffer[0].clear();
 

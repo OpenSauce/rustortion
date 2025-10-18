@@ -3,7 +3,8 @@ use log::{error, info};
 
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::{
-    control::Control, preset_bar::PresetBar, settings_dialog::SettingsDialog, stage_list::StageList,
+    control::Control, dialogs::settings::SettingsDialog, dialogs::tuner::TunerDisplay,
+    preset_bar::PresetBar, stage_list::StageList,
 };
 use crate::gui::config::{StageConfig, StageType};
 use crate::gui::messages::Message;
@@ -30,6 +31,8 @@ pub struct AmplifierApp {
     settings_dialog: SettingsDialog,
     dirty_chain: bool,
     ir_cabinet_control: IrCabinetControl,
+    tuner_dialog: TunerDisplay,
+    tuner_enabled: bool,
 }
 
 impl AmplifierApp {
@@ -84,6 +87,8 @@ impl AmplifierApp {
             // Set dirty chain to true to trigger initial rebuild
             dirty_chain: true,
             ir_cabinet_control,
+            tuner_dialog: TunerDisplay::new(),
+            tuner_enabled: false,
         }
     }
 
@@ -92,8 +97,12 @@ impl AmplifierApp {
 
         let top_bar = row![
             Space::with_width(Length::Fill),
-            button("Settings").on_press(Message::OpenSettings)
-        ];
+            button("Tuner")
+                .on_press(Message::ToggleTuner)
+                .style(iced::widget::button::secondary),
+            button("Settings").on_press(Message::OpenSettings),
+        ]
+        .spacing(5);
 
         let main_content = column![
             top_bar,
@@ -107,6 +116,8 @@ impl AmplifierApp {
 
         if let Some(dialog) = self.settings_dialog.view() {
             dialog
+        } else if let Some(tuner_dialog) = self.tuner_dialog.view() {
+            tuner_dialog
         } else {
             container(main_content)
                 .width(Length::Fill)
@@ -120,11 +131,19 @@ impl AmplifierApp {
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
-        if !self.dirty_chain {
-            return Subscription::none();
-        }
+        let rebuild_sub = if self.dirty_chain {
+            time::every(REBUILD_INTERVAL_MS).map(|_| Message::RebuildTick)
+        } else {
+            Subscription::none()
+        };
 
-        time::every(REBUILD_INTERVAL_MS).map(|_| Message::RebuildTick)
+        let tuner_sub = if self.tuner_enabled {
+            time::every(Duration::from_millis(16)).map(|_| Message::TunerUpdate)
+        } else {
+            Subscription::none()
+        };
+
+        Subscription::batch(vec![rebuild_sub, tuner_sub])
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -285,6 +304,29 @@ impl AmplifierApp {
                     && stage.apply(stage_msg)
                 {
                     self.mark_stages_dirty();
+                }
+            }
+            Message::ToggleTuner => {
+                self.tuner_enabled = !self.tuner_enabled;
+
+                if self.tuner_enabled {
+                    self.tuner_dialog.show();
+                    self.processor_manager.set_tuner_enabled(true);
+                } else {
+                    self.tuner_dialog.hide();
+                    self.processor_manager.set_tuner_enabled(false);
+                }
+            }
+            Message::TunerUpdate => {
+                if self.tuner_enabled {
+                    let mut latest_info = None;
+                    while let Some(info) = self.processor_manager.poll_tuner_info() {
+                        latest_info = Some(info);
+                    }
+
+                    if let Some(info) = latest_info {
+                        self.tuner_dialog.update(info);
+                    }
                 }
             }
         }
