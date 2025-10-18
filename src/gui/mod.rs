@@ -6,10 +6,7 @@ pub mod preset;
 pub mod settings;
 
 pub use app::AmplifierApp;
-use iced::{
-    Font,
-    window::{self},
-};
+use iced::{Font, window};
 pub use messages::Message;
 
 use crate::{gui::settings::Settings, io::manager::ProcessorManager};
