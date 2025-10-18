@@ -6,27 +6,29 @@ on:
   pull_request:
     branches: [ main ]
 
-defaults: &defaults
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v5
-    - name: Install system dependencies
-      run: sudo apt-get update && sudo apt-get install -y libjack-jackd2-dev pkg-config
-    - name: Set up Rust
-      uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
-
 jobs:
   lint:
-    <<: *defaults
     name: Lint
+    runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libjack-jackd2-dev pkg-config
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Lint
         run: make lint
 
   test:
-    <<: *defaults
     name: Test
+    runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libjack-jackd2-dev pkg-config
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Test
         run: make test
