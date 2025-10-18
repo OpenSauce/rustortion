@@ -2,6 +2,8 @@
 
 A guitar amp simulator built in Rust using JACK.
 
+## Screenshot
+
 ![Rustortion](screenshots/rustortion.png)
 
 ## Features
@@ -9,10 +11,10 @@ A guitar amp simulator built in Rust using JACK.
 - Low-latency audio processing with oversampling
 - Multiple amp simulation stages (preamp, compressor, tone stack, power amp, etc.)
 - Impulse response (IR) cabinet simulation
-- Preset management system
+- Save and load presets
 - Real-time recording capability
+- Built-in tuner
 - GUI using [Iced](https://github.com/iced-rs/iced)
-- A tuner
 
 ## Requirements
 
@@ -29,16 +31,20 @@ A guitar amp simulator built in Rust using JACK.
 cargo run --release
 ```
 
-## License
-
-This project is under development and should be used at your own risk.
-
 ## Contributing
 
 This is an experimental project. Feel free to open issues or submit pull requests.
 
+## License
 
-## Impulse Responses
+This project is provided under the **MIT License**.
+Rustortion is under active development and should be used at your own risk.
 
-This project uses impulse responses licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).  
-Original source: [Open AIR Library](https://www.openair.hosted.york.ac.uk/)
+### Impulse Responses
+
+This project includes freely licensed impulse responses from [freesound.org](https://freesound.org/):
+
+- [Multiple Cabinets – Jesterdyne](https://freesound.org/people/jesterdyne/)
+- [Harley Benton 4x12 – Vihaleipa](https://freesound.org/people/Vihaleipa/sounds/269662/)
+- [Bristol Mix – Mansardian](https://freesound.org/people/mansardian/sounds/648392/)
+- [Brown Cab – Tosha73](https://freesound.org/people/tosha73/sounds/507167/)

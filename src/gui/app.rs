@@ -1,5 +1,6 @@
 use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
 use log::{error, info};
+use std::path::Path;
 
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::{
@@ -334,7 +335,6 @@ impl AmplifierApp {
         Task::none()
     }
 
-    // Add helper method to scan IR directory
     fn scan_ir_directory() -> Result<Vec<String>, std::io::Error> {
         use std::fs;
         use std::path::Path;
@@ -345,17 +345,40 @@ impl AmplifierApp {
         }
 
         let mut irs = Vec::new();
-        for entry in fs::read_dir(ir_path)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) == Some("wav")
-                && let Some(name) = path.file_stem().and_then(|s| s.to_str())
-            {
-                irs.push(name.to_string());
-            }
-        }
+        Self::scan_ir_recursive(ir_path, ir_path, &mut irs)?;
+
+        irs.sort_by(|a, b| {
+            let a_sep_count = a.matches('/').count();
+            let b_sep_count = b.matches('/').count();
+            a_sep_count.cmp(&b_sep_count).then_with(|| a.cmp(b))
+        });
 
         Ok(irs)
+    }
+
+    fn scan_ir_recursive(
+        current_dir: &Path,
+        base_dir: &Path,
+        irs: &mut Vec<String>,
+    ) -> Result<(), std::io::Error> {
+        for entry in std::fs::read_dir(current_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                // Recursively scan subdirectories
+                Self::scan_ir_recursive(&path, base_dir, irs)?;
+            } else if path.extension().and_then(|s| s.to_str()) == Some("wav") {
+                // Get relative path from base_dir
+                let relative_path = path
+                    .strip_prefix(base_dir)
+                    .unwrap_or(&path)
+                    .to_string_lossy()
+                    .replace('\\', "/"); // Normalize path separators
+                irs.push(relative_path);
+            }
+        }
+        Ok(())
     }
 
     fn rebuild_if_dirty(&mut self) {
