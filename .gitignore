@@ -2,5 +2,5 @@
 /recordings/*.wav
 
 ir/*
-!/ir/church.wav
-!/ir/genesis_6_live_studio.wav
+!/ir/Misc
+!/ir/Jesterdyne
