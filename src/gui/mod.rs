@@ -16,13 +16,16 @@ pub const DEFAULT_FONT: Font = Font::MONOSPACE;
 pub fn start(processor_manager: ProcessorManager, settings: Settings) -> iced::Result {
     iced::application("Rustortion", AmplifierApp::update, AmplifierApp::view)
         .subscription(AmplifierApp::subscription)
-        .window_size((800.0, 600.0))
+        .window(iced::window::Settings {
+            min_size: Some(iced::Size::new(800.0, 600.0)),
+            ..iced::window::Settings::default()
+        })
         .theme(AmplifierApp::theme)
         .default_font(DEFAULT_FONT)
         .run_with(move || {
             (
                 AmplifierApp::new(processor_manager, settings),
-                window::get_latest().and_then(|id| window::maximize(id, true)),
+                window::get_oldest().and_then(|id| window::maximize(id, true)),
             )
         })
 }
