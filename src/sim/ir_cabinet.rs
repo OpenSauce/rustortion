@@ -9,10 +9,9 @@ use std::sync::Arc;
 
 const FFT_BLOCK_SIZE: usize = 1024;
 const PARTITION_SIZE: usize = FFT_BLOCK_SIZE / 2;
-
 // Zero-latency head length (time-domain)
 const HEAD_LEN: usize = 256;
-const TAIL_OFFSET_SAMPLES: usize = HEAD_LEN;
+const TAIL_OFFSET_SAMPLES: usize = HEAD_LEN % FFT_BLOCK_SIZE;
 const MAX_PARTITIONS: usize = 40;
 
 #[derive(Clone)]
