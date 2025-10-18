@@ -7,13 +7,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-const FFT_BLOCK_SIZE: usize = 2048;
+const FFT_BLOCK_SIZE: usize = 1024;
 const PARTITION_SIZE: usize = FFT_BLOCK_SIZE / 2;
 
 // Zero-latency head length (time-domain)
 const HEAD_LEN: usize = 256;
-const TAIL_OFFSET_SAMPLES: usize = HEAD_LEN % FFT_BLOCK_SIZE;
-const TAIL_MIX: f32 = 0.35;
+const TAIL_OFFSET_SAMPLES: usize = HEAD_LEN;
+const MAX_PARTITIONS: usize = 40;
 
 #[derive(Clone)]
 pub struct ImpulseResponse {
@@ -73,6 +73,8 @@ pub struct IrCabinet {
     dc_prev_x: f32,
     dc_prev_y: f32,
     dc_r: f32,
+
+    tail_mix: f32,
 }
 
 impl IrCabinet {
@@ -117,6 +119,8 @@ impl IrCabinet {
             dc_prev_x: 0.0,
             dc_prev_y: 0.0,
             dc_r: 0.995,
+
+            tail_mix: 0.35,
         };
 
         cabinet.scan_ir_directory()?;
@@ -257,7 +261,7 @@ impl IrCabinet {
         }
 
         let mut end = truncated.len();
-        while end > 0 && truncated[end - 1].abs() < 1.0e-3 {
+        while end > 0 && truncated[end - 1].abs() < 1.0e-5 {
             end -= 1;
         }
         truncated.truncate(end.max(HEAD_LEN));
@@ -290,7 +294,20 @@ impl IrCabinet {
         if tail_samples.is_empty() {
             return Ok(Vec::new());
         }
-        let num_partitions = tail_samples.len().div_ceil(PARTITION_SIZE);
+
+        let max_samples = MAX_PARTITIONS * PARTITION_SIZE;
+        let truncated = if tail_samples.len() > max_samples {
+            warn!(
+                "IR tail truncated from {} to {} samples for performance",
+                tail_samples.len(),
+                max_samples
+            );
+            &tail_samples[..max_samples]
+        } else {
+            tail_samples
+        };
+
+        let num_partitions = truncated.len().div_ceil(PARTITION_SIZE);
         let mut parts = Vec::with_capacity(num_partitions);
 
         for p in 0..num_partitions {
@@ -334,9 +351,18 @@ impl IrCabinet {
             let bins = FFT_BLOCK_SIZE / 2 + 1;
             self.history = vec![vec![Complex::new(0.0, 0.0); bins]; ir.num_tail_partitions];
             self.hist_head = 0;
+
+            self.tail_mix = if ir.original_length > 60000 {
+                0.10
+            } else if ir.original_length > 30000 {
+                0.20
+            } else {
+                0.35
+            };
         } else {
             self.history.clear();
             self.hist_head = 0;
+            self.tail_mix = 0.35;
         }
     }
 
@@ -383,7 +409,7 @@ impl IrCabinet {
             self.in_base = (self.in_base + PARTITION_SIZE) % FFT_BLOCK_SIZE;
         }
 
-        let mut y = head_out + TAIL_MIX * tail_out;
+        let mut y = head_out + self.tail_mix * tail_out;
 
         // DC blocker
         let dc = y - self.dc_prev_x + self.dc_r * self.dc_prev_y;
@@ -424,19 +450,25 @@ impl IrCabinet {
         }
 
         self.freq_accumulator.fill(Complex::new(0.0, 0.0));
-        let hlen = self.history.len();
-        let plen = ir.tail_partitions.len();
-        let len = hlen.min(plen);
 
-        for j in 0..len {
-            let newest = (self.hist_head + hlen - 1) % hlen;
-            let idx = (newest + hlen - j) % hlen;
-            let x = &self.history[idx];
+        let num_partitions = ir.tail_partitions.len();
+        for j in 0..num_partitions {
+            // Read from history in reverse time order
+            let history_idx = (self.hist_head + self.history.len() - 1 - j) % self.history.len();
+
+            let x = &self.history[history_idx];
             let h = &ir.tail_partitions[j];
 
             for k in 0..self.freq_accumulator.len() {
-                self.freq_accumulator[k] += x[k] * h[k];
+                let prod = x[k] * h[k];
+                self.freq_accumulator[k] +=
+                    Complex::new(zap_denormal(prod.re), zap_denormal(prod.im));
             }
+        }
+
+        self.freq_accumulator[0].im = 0.0;
+        if let Some(last) = self.freq_accumulator.last_mut() {
+            last.im = 0.0;
         }
 
         self.c2r
@@ -506,4 +538,140 @@ fn resample_linear(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
 #[inline]
 fn zap_denormal(x: f32) -> f32 {
     if x.abs() < 1.0e-30 { 0.0 } else { x }
+}
+
+#[cfg(test)]
+mod benches {
+    use super::*;
+    use std::hint::black_box;
+
+    #[test]
+    #[ignore] // Mark as ignored so it doesn't run with normal tests
+    fn bench_process_block_short() {
+        let cabinet = create_test_cabinet(1000);
+        bench_process_block(cabinet, "short_1k");
+    }
+
+    #[test]
+    #[ignore]
+    fn bench_process_block_medium() {
+        let cabinet = create_test_cabinet(13000);
+        bench_process_block(cabinet, "medium_13k");
+    }
+
+    #[test]
+    #[ignore]
+    fn bench_process_block_long() {
+        let cabinet = create_test_cabinet(34000);
+        bench_process_block(cabinet, "long_34k");
+    }
+
+    #[test]
+    #[ignore]
+    fn bench_process_block_very_long() {
+        let cabinet = create_test_cabinet(87000);
+        bench_process_block(cabinet, "very_long_87k");
+    }
+
+    #[test]
+    #[ignore]
+    fn bench_convolution_loop() {
+        let num_bins = FFT_BLOCK_SIZE / 2 + 1;
+        let num_partitions = 34;
+
+        let mut accumulator = vec![Complex::new(0.0, 0.0); num_bins];
+        let history: Vec<Vec<Complex<f32>>> =
+            vec![vec![Complex::new(0.5, 0.3); num_bins]; num_partitions];
+        let ir_partitions: Vec<Vec<Complex<f32>>> =
+            vec![vec![Complex::new(0.7, 0.2); num_bins]; num_partitions];
+
+        let start = std::time::Instant::now();
+        let iterations = 1000;
+
+        for _ in 0..iterations {
+            accumulator.fill(Complex::new(0.0, 0.0));
+
+            for j in 0..num_partitions {
+                for k in 0..num_bins {
+                    let prod = black_box(history[j][k]) * black_box(ir_partitions[j][k]);
+                    accumulator[k] += prod;
+                }
+            }
+
+            black_box(&accumulator);
+        }
+
+        let elapsed = start.elapsed();
+        println!(
+            "Convolution loop (34 partitions): {:.2}µs per iteration",
+            elapsed.as_micros() as f64 / iterations as f64
+        );
+    }
+
+    fn bench_process_block(mut cabinet: IrCabinet, name: &str) {
+        let mut samples = vec![0.5; 128];
+
+        // Warmup
+        for _ in 0..100 {
+            cabinet.process_block(&mut samples);
+        }
+
+        // Benchmark
+        let start = std::time::Instant::now();
+        let iterations = 1000;
+
+        for _ in 0..iterations {
+            cabinet.process_block(black_box(&mut samples));
+        }
+
+        let elapsed = start.elapsed();
+        println!(
+            "{}: {:.2}µs per 128-sample block",
+            name,
+            elapsed.as_micros() as f64 / iterations as f64
+        );
+    }
+
+    fn create_test_cabinet(ir_length: usize) -> IrCabinet {
+        let sample_rate = 48000;
+        let ir_dir = std::env::temp_dir().join("rustortion_bench_ir");
+        std::fs::create_dir_all(&ir_dir).unwrap();
+
+        let ir_path = ir_dir.join(format!("test_ir_{}.wav", ir_length));
+
+        if !ir_path.exists() {
+            create_synthetic_ir(&ir_path, ir_length, sample_rate);
+        }
+
+        let mut cabinet = IrCabinet::new(&ir_dir, sample_rate).unwrap();
+        cabinet
+            .set_ir_by_name(&format!("test_ir_{}.wav", ir_length))
+            .unwrap();
+
+        cabinet
+    }
+
+    fn create_synthetic_ir(path: &Path, length: usize, sample_rate: u32) {
+        use hound::{WavSpec, WavWriter};
+
+        let spec = WavSpec {
+            channels: 1,
+            sample_rate,
+            bits_per_sample: 16,
+            sample_format: hound::SampleFormat::Int,
+        };
+
+        let mut writer = WavWriter::create(path, spec).unwrap();
+
+        for i in 0..length {
+            let t = i as f32 / sample_rate as f32;
+            let decay = (-t * 3.0).exp();
+            let freq = 440.0 * 2.0 * std::f32::consts::PI;
+            let sample = (freq * t).sin() * decay;
+            let sample_i16 = (sample * i16::MAX as f32) as i16;
+            writer.write_sample(sample_i16).unwrap();
+        }
+
+        writer.finalize().unwrap();
+    }
 }
