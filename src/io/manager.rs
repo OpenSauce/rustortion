@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use crossbeam::channel::{Sender, bounded};
+use crossbeam::channel::{Receiver, Sender, bounded};
 use jack::{AsyncClient, Client, ClientOptions};
 use log::{error, info, warn};
 
@@ -7,6 +7,7 @@ use crate::gui::settings::AudioSettings;
 use crate::io::processor::{Processor, ProcessorMessage};
 use crate::io::recorder::Recorder;
 use crate::sim::chain::AmplifierChain;
+use crate::sim::tuner::TunerInfo;
 
 /// Manages the audio processing chain and JACK client
 pub struct ProcessorManager {
@@ -16,6 +17,7 @@ pub struct ProcessorManager {
     tx_updates: Sender<ProcessorMessage>,
     sample_rate: f32,
     current_settings: AudioSettings,
+    rx_tuner: Receiver<crate::sim::tuner::TunerInfo>, // NEW
 }
 
 /// JACK notifications handler
@@ -28,12 +30,19 @@ impl ProcessorManager {
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
             .context("failed to create JACK client")?;
 
-        let (tx_amp, rx_amp) = bounded::<ProcessorMessage>(10);
-
-        let processor = Processor::new(&client, rx_amp, None, settings.oversampling_factor.into())
-            .context("error creating processor")?;
-
         let sample_rate = client.sample_rate() as f32;
+
+        let (tx_amp, rx_amp) = bounded::<ProcessorMessage>(10);
+        let (tx_tuner, rx_tuner) = bounded::<TunerInfo>(5); // NEW
+
+        let processor = Processor::new(
+            &client,
+            rx_amp,
+            None,
+            settings.oversampling_factor.into(),
+            Some(tx_tuner.clone()), // NEW - pass tuner channel
+        )
+        .context("error creating processor")?;
 
         let active_client = client
             .activate_async(Notifications, processor)
@@ -45,6 +54,7 @@ impl ProcessorManager {
             tx_updates: tx_amp,
             sample_rate,
             current_settings: settings.clone(),
+            rx_tuner,
         };
 
         // Auto-connect if requested
@@ -232,6 +242,17 @@ impl ProcessorManager {
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send IR gain update: {e}");
         });
+    }
+
+    pub fn set_tuner_enabled(&self, enabled: bool) {
+        let update = ProcessorMessage::SetTunerEnabled(enabled);
+        self.tx_updates.try_send(update).unwrap_or_else(|e| {
+            error!("Failed to send tuner enable update: {e}");
+        });
+    }
+
+    pub fn poll_tuner_info(&self) -> Option<TunerInfo> {
+        self.rx_tuner.try_recv().ok()
     }
 
     /// Returns the sample rate
