@@ -17,7 +17,7 @@ pub struct ProcessorManager {
     tx_updates: Sender<ProcessorMessage>,
     sample_rate: f32,
     current_settings: AudioSettings,
-    rx_tuner: Receiver<crate::sim::tuner::TunerInfo>, // NEW
+    rx_tuner: Receiver<crate::sim::tuner::TunerInfo>,
 }
 
 /// JACK notifications handler
@@ -40,7 +40,7 @@ impl ProcessorManager {
             rx_amp,
             None,
             settings.oversampling_factor.into(),
-            Some(tx_tuner.clone()), // NEW - pass tuner channel
+            Some(tx_tuner.clone()),
         )
         .context("error creating processor")?;
 
