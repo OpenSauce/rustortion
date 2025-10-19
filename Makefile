@@ -24,4 +24,4 @@ test:
 	cargo test --all-targets --all-features
 
 bench:
-	cargo test --release -- --ignored --nocapture
+	cargo bench
