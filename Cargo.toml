@@ -28,6 +28,7 @@ realfft = "3.5"
 
 [dev-dependencies]
 criterion = {version = "0.7", features = ["html_reports"] }
+tempfile = "3.23"
 
 [[bench]]
 name = "impulse_responses"

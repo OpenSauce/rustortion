@@ -1,8 +1,8 @@
 use std::path::Path;
 
 use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
+use crate::ir::cabinet::IrCabinet;
 use crate::sim::chain::AmplifierChain;
-use crate::sim::impulse_response::IrCabinet;
 use crate::sim::tuner::{Tuner, TunerInfo};
 use anyhow::{Context, Result};
 use crossbeam::channel::{Receiver, Sender};
@@ -168,7 +168,7 @@ impl ProcessHandler for Processor {
                     if let Some(ref mut cab) = self.ir_cabinet
                         && let Some(name) = ir_name
                     {
-                        if let Err(e) = cab.set_ir_by_name(&name) {
+                        if let Err(e) = cab.select_ir(&name) {
                             error!("Failed to set IR: {}", e);
                         } else {
                             debug!("IR Cabinet set to: {}", name);

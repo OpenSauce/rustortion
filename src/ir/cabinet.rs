@@ -1,11 +1,11 @@
-use anyhow::{Context, Result};
-use hound::WavReader;
-use log::{debug, info, warn};
+use anyhow::Result;
+use log::warn;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 use rustfft::num_complex::Complex;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
+
+use crate::ir::{loader::IrLoader, model::ImpulseResponse};
 
 const FFT_BLOCK_SIZE: usize = 1024;
 const PARTITION_SIZE: usize = FFT_BLOCK_SIZE / 2;
@@ -14,28 +14,9 @@ const HEAD_LEN: usize = 256;
 const TAIL_OFFSET_SAMPLES: usize = HEAD_LEN % FFT_BLOCK_SIZE;
 const MAX_PARTITIONS: usize = 40;
 
-#[derive(Clone)]
-pub struct ImpulseResponse {
-    pub name: String,
-    pub path: PathBuf,
-
-    // Zero-latency head
-    pub head_coeffs: Vec<f32>,
-
-    // Partitioned FFT tail
-    pub tail_partitions: Vec<Vec<Complex<f32>>>,
-    pub num_tail_partitions: usize,
-
-    pub original_length: usize,
-    pub sample_rate: u32,
-}
-
 pub struct IrCabinet {
+    ir_loader: IrLoader,
     current_ir: Option<ImpulseResponse>,
-    // Just store paths, not loaded IRs
-    available_ir_paths: Vec<(String, PathBuf)>, // (display_name, full_path)
-    ir_directory: PathBuf,
-    target_sample_rate: u32,
 
     // FFT
     r2c: Arc<dyn RealToComplex<f32>>,
@@ -84,11 +65,9 @@ impl IrCabinet {
         let r2c_scratch = r2c.make_scratch_vec();
         let c2r_scratch = c2r.make_scratch_vec();
 
-        let mut cabinet = Self {
+        Ok(Self {
+            ir_loader: IrLoader::new(ir_directory, sample_rate)?,
             current_ir: None,
-            available_ir_paths: Vec::new(),
-            ir_directory: ir_directory.to_path_buf(),
-            target_sample_rate: sample_rate,
             r2c,
             c2r,
 
@@ -120,144 +99,22 @@ impl IrCabinet {
             dc_r: 0.995,
 
             tail_mix: 0.35,
-        };
-
-        cabinet.scan_ir_directory()?;
-
-        if !cabinet.available_ir_paths.is_empty() {
-            cabinet.set_ir_by_index(0)?;
-        }
-
-        Ok(cabinet)
+        })
     }
 
-    pub fn scan_ir_directory(&mut self) -> Result<()> {
-        if !self.ir_directory.exists() {
-            fs::create_dir_all(&self.ir_directory).context("Failed to create IR directory")?;
-            warn!("IR directory created at {:?}", self.ir_directory);
-            return Ok(());
-        }
+    pub fn select_ir(&mut self, name: &str) -> Result<()> {
+        let ir_sample = self.ir_loader.load_by_name(name)?;
 
-        self.available_ir_paths.clear();
-        let base = self.ir_directory.clone();
-        self.scan_recursive(&base, &base)?;
-
-        self.available_ir_paths.sort_by(|a, b| {
-            let a_sep_count = a.0.matches('/').count();
-            let b_sep_count = b.0.matches('/').count();
-            a_sep_count.cmp(&b_sep_count).then_with(|| a.0.cmp(&b.0))
-        });
-
-        info!(
-            "Found {} impulse response files",
-            self.available_ir_paths.len()
-        );
-        Ok(())
-    }
-
-    fn scan_recursive(&mut self, current_dir: &Path, base_dir: &Path) -> Result<()> {
-        for entry in fs::read_dir(current_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path.is_dir() {
-                self.scan_recursive(&path, base_dir)?;
-            } else if path.extension().and_then(|s| s.to_str()) == Some("wav") {
-                let relative_path = path
-                    .strip_prefix(base_dir)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/");
-
-                self.available_ir_paths.push((relative_path, path));
-            }
-        }
-        Ok(())
-    }
-
-    pub fn set_ir_by_index(&mut self, index: usize) -> Result<()> {
-        if index >= self.available_ir_paths.len() {
-            return Err(anyhow::anyhow!("IR index out of range"));
-        }
-
-        let (display_name, path) = self.available_ir_paths[index].clone();
-        info!("Loading IR: {}", display_name);
-
-        let ir = self.load_ir_file(&path, &display_name)?;
-
-        info!(
-            "Loaded IR: {} (head {} taps, tail {} partitions, {} samples)",
-            ir.name,
-            ir.head_coeffs.len(),
-            ir.num_tail_partitions,
-            ir.original_length
-        );
+        let ir = self.create_response(ir_sample)?;
 
         self.current_ir = Some(ir);
         self.reset_buffers();
         Ok(())
     }
 
-    pub fn set_ir_by_name(&mut self, name: &str) -> Result<()> {
-        let index = self
-            .available_ir_paths
-            .iter()
-            .position(|(n, _)| n == name)
-            .ok_or_else(|| anyhow::anyhow!("IR '{}' not found", name))?;
-
-        self.set_ir_by_index(index)
-    }
-
-    fn load_ir_file(&mut self, path: &Path, display_name: &str) -> Result<ImpulseResponse> {
-        let reader = WavReader::open(path).context("Failed to open WAV file")?;
-        let spec = reader.spec();
-
-        let samples: Vec<f32> = if spec.sample_format == hound::SampleFormat::Float {
-            reader
-                .into_samples::<f32>()
-                .collect::<Result<Vec<_>, _>>()
-                .context("Failed to read float samples")?
-        } else {
-            let max_val = (1 << (spec.bits_per_sample - 1)) as f32;
-            reader
-                .into_samples::<i32>()
-                .map(|s| s.map(|v| v as f32 / max_val))
-                .collect::<Result<Vec<_>, _>>()
-                .context("Failed to read integer samples")?
-        };
-
-        let mono = if spec.channels > 1 {
-            samples
-                .chunks(spec.channels as usize)
-                .map(|c| c.iter().sum::<f32>() / spec.channels as f32)
-                .collect()
-        } else {
-            samples
-        };
-
-        let resampled = if spec.sample_rate != self.target_sample_rate {
-            debug!(
-                "Resampling IR from {} Hz to {} Hz",
-                spec.sample_rate, self.target_sample_rate
-            );
-            resample_linear(&mono, spec.sample_rate, self.target_sample_rate)
-        } else {
-            mono
-        };
-
+    fn create_response(&mut self, ir_sample: Vec<f32>) -> Result<ImpulseResponse> {
         const MAX_IR_LENGTH: usize = 96000;
-        let mut truncated: Vec<f32> = resampled.into_iter().take(MAX_IR_LENGTH).collect();
-
-        // Normalize with headroom
-        if let Some(max) = truncated.iter().fold(None::<f32>, |m, &x| {
-            Some(m.map_or(x.abs(), |mm| mm.max(x.abs())))
-        }) && max > 0.0
-        {
-            let g = 0.9 / max;
-            for s in &mut truncated {
-                *s *= g;
-            }
-        }
+        let mut truncated: Vec<f32> = ir_sample.into_iter().take(MAX_IR_LENGTH).collect();
 
         let mut end = truncated.len();
         while end > 0 && truncated[end - 1].abs() < 1.0e-5 {
@@ -279,13 +136,10 @@ impl IrCabinet {
         let num_tail_partitions = tail_partitions.len();
 
         Ok(ImpulseResponse {
-            name: display_name.to_string(),
-            path: path.to_path_buf(),
             head_coeffs: head,
             tail_partitions,
             num_tail_partitions,
             original_length: truncated.len(),
-            sample_rate: self.target_sample_rate,
         })
     }
 
@@ -489,17 +343,6 @@ impl IrCabinet {
         self.ola_w = (self.ola_w + PARTITION_SIZE) % FFT_BLOCK_SIZE;
     }
 
-    pub fn get_available_irs(&self) -> Vec<String> {
-        self.available_ir_paths
-            .iter()
-            .map(|(name, _)| name.clone())
-            .collect()
-    }
-
-    pub fn get_current_ir_name(&self) -> Option<String> {
-        self.current_ir.as_ref().map(|ir| ir.name.clone())
-    }
-
     pub fn set_bypass(&mut self, bypass: bool) {
         self.bypassed = bypass;
         if bypass {
@@ -510,28 +353,6 @@ impl IrCabinet {
     pub fn set_gain(&mut self, gain: f32) {
         self.output_gain = gain.clamp(0.0, 1.0);
     }
-}
-
-fn resample_linear(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
-    let ratio = from_rate as f64 / to_rate as f64;
-    let new_len = (samples.len() as f64 / ratio) as usize;
-    let mut out = Vec::with_capacity(new_len);
-
-    for i in 0..new_len {
-        let src_pos = i as f64 * ratio;
-        let src_idx = src_pos as usize;
-        let frac = src_pos - src_idx as f64;
-
-        let s = if src_idx + 1 < samples.len() {
-            samples[src_idx] * (1.0 - frac as f32) + samples[src_idx + 1] * frac as f32
-        } else if src_idx < samples.len() {
-            samples[src_idx]
-        } else {
-            0.0
-        };
-        out.push(s);
-    }
-    out
 }
 
 #[inline]
