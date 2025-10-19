@@ -12,11 +12,15 @@ pub struct IrLoader {
 
 impl IrLoader {
     pub fn new(directory: &Path, target_sample_rate: u32) -> Result<IrLoader> {
-        Ok(IrLoader {
+        let mut loader = IrLoader {
             available_ir_paths: Vec::new(),
             ir_directory: directory.to_path_buf(),
             target_sample_rate,
-        })
+        };
+
+        loader.scan_ir_directory()?;
+
+        Ok(loader)
     }
 
     pub fn get_first(&self) -> Result<Vec<f32>> {

@@ -65,7 +65,7 @@ impl IrCabinet {
         let r2c_scratch = r2c.make_scratch_vec();
         let c2r_scratch = c2r.make_scratch_vec();
 
-        let mut cabinet = Self {
+        Ok(Self {
             ir_loader: IrLoader::new(ir_directory, sample_rate)?,
             current_ir: None,
             r2c,
@@ -99,16 +99,7 @@ impl IrCabinet {
             dc_r: 0.995,
 
             tail_mix: 0.35,
-        };
-
-        cabinet.ir_loader.scan_ir_directory()?;
-
-        if let Ok(ir_sample) = cabinet.ir_loader.get_first() {
-            let ir = cabinet.create_response(ir_sample)?;
-            cabinet.current_ir = Some(ir);
-        }
-
-        Ok(cabinet)
+        })
     }
 
     pub fn select_ir(&mut self, name: &str) -> Result<()> {
