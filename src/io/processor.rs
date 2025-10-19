@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
 use crate::sim::chain::AmplifierChain;
-use crate::sim::ir_cabinet::IrCabinet;
+use crate::sim::impulse_response::IrCabinet;
 use crate::sim::tuner::{Tuner, TunerInfo};
 use anyhow::{Context, Result};
 use crossbeam::channel::{Receiver, Sender};
@@ -114,7 +114,10 @@ impl Processor {
         let upsampled_buffer = upsampler.output_buffer_allocate(true);
         let downsampled_buffer = downsampler.output_buffer_allocate(true);
 
-        let ir_cabinet = match IrCabinet::new(Path::new("./ir"), client.sample_rate() as u32) {
+        let ir_cabinet = match IrCabinet::new(
+            Path::new("./impulse_responses"),
+            client.sample_rate() as u32,
+        ) {
             Ok(cab) => {
                 debug!("IR Cabinet loaded successfully");
                 Some(cab)
