@@ -1,6 +1,6 @@
 /target
 /recordings/*.wav
 
-ir/*
-!/ir/Misc
-!/ir/Jesterdyne
+impulse_responses/*
+!/impulse_responses/Misc
+!/impulse_responses/Jesterdyne
