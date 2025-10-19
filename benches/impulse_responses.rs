@@ -1,6 +1,6 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use hound::{WavSpec, WavWriter};
-use rustortion::sim::impulse_response::IrCabinet;
+use rustortion::ir::cabinet::IrCabinet;
 use std::fs;
 use std::hint::black_box;
 use std::path::Path;
@@ -65,7 +65,7 @@ fn create_test_cabinet(ir_length: usize) -> IrCabinet {
 
     let mut cabinet = IrCabinet::new(&ir_dir, SAMPLE_RATE).unwrap();
     cabinet
-        .set_ir_by_name(&format!("test_ir_{}.wav", ir_length))
+        .select_ir(&format!("test_ir_{}.wav", ir_length))
         .unwrap();
 
     cabinet
