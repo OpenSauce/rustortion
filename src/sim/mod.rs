@@ -1,4 +1,4 @@
 pub mod chain;
-pub mod ir_cabinet;
+pub mod impulse_response;
 pub mod stages;
 pub mod tuner;

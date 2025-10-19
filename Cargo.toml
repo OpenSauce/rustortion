@@ -25,3 +25,10 @@ dotenv = "0.15"
 anyhow = "1.0"
 rustfft = "6.4"
 realfft = "3.5"
+
+[dev-dependencies]
+criterion = {version = "0.7", features = ["html_reports"] }
+
+[[bench]]
+name = "impulse_responses"
+harness = false

@@ -339,7 +339,7 @@ impl AmplifierApp {
         use std::fs;
         use std::path::Path;
 
-        let ir_path = Path::new("./ir");
+        let ir_path = Path::new("./impulse_responses");
         if !ir_path.exists() {
             fs::create_dir_all(ir_path)?;
         }
