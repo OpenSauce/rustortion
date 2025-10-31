@@ -1,0 +1,13 @@
+/home/opensauce/Workspace/rustortion/xtask/target/debug/deps/toml-e7998c3a05500cbf.d: /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/lib.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/map.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/value.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/de.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/ser.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/macros.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/edit.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/fmt.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/table.rs
+
+/home/opensauce/Workspace/rustortion/xtask/target/debug/deps/libtoml-e7998c3a05500cbf.rmeta: /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/lib.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/map.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/value.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/de.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/ser.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/macros.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/edit.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/fmt.rs /home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/table.rs
+
+/home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/lib.rs:
+/home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/map.rs:
+/home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/value.rs:
+/home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/de.rs:
+/home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/ser.rs:
+/home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/macros.rs:
+/home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/edit.rs:
+/home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/fmt.rs:
+/home/opensauce/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/toml-0.7.8/src/table.rs:
