@@ -7,7 +7,7 @@ use crate::sim::tuner::{Tuner, TunerInfo};
 use anyhow::{Context, Result};
 use crossbeam::channel::{Receiver, Sender};
 use jack::{AudioIn, AudioOut, Client, Control, Frames, Port, ProcessHandler, ProcessScope};
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
@@ -299,27 +299,28 @@ impl ProcessHandler for Processor {
     }
 
     fn buffer_size(&mut self, client: &Client, frames: Frames) -> Control {
+        let new_size = frames as usize;
+        warn!("buffer_size changed to {new_size} frames");
         debug_stats(client);
 
-        let new_size = frames as usize;
-        let cap = self.input_buffer[0].capacity();
-
-        if cap < new_size {
-            self.input_buffer[0].reserve_exact(new_size - cap);
+        let buffer = &mut self.input_buffer[0];
+        if buffer.capacity() < new_size {
+            buffer.reserve_exact(new_size - buffer.len());
+            info!("Input buffer resized to {new_size}");
         }
 
         if let Err(e) = self.upsampler.set_chunk_size(new_size) {
             error!("Upsampler cannot grow to {new_size}: {e}");
-        } else {
-            self.upsampled_buffer = self.upsampler.output_buffer_allocate(true);
+            return Control::Quit;
         }
+        self.upsampled_buffer = self.upsampler.output_buffer_allocate(true);
 
-        let needed_down = new_size * self.oversample_factor as usize;
-        if let Err(e) = self.downsampler.set_chunk_size(needed_down) {
-            error!("Downsampler cannot grow to {needed_down}: {e}");
-        } else {
-            self.downsampled_buffer = self.downsampler.output_buffer_allocate(true);
+        let downsampler_size = new_size * self.oversample_factor as usize;
+        if let Err(e) = self.downsampler.set_chunk_size(downsampler_size) {
+            error!("Downsampler cannot grow to {downsampler_size}: {e}");
+            return Control::Quit;
         }
+        self.downsampled_buffer = self.downsampler.output_buffer_allocate(true);
 
         Control::Continue
     }
