@@ -3,9 +3,9 @@ use crossbeam::channel::{Receiver, Sender, bounded};
 use jack::{AsyncClient, Client, ClientOptions};
 use log::{error, info, warn};
 
+use crate::audio::processor::{Processor, ProcessorMessage};
+use crate::audio::recorder::Recorder;
 use crate::gui::settings::AudioSettings;
-use crate::io::processor::{Processor, ProcessorMessage};
-use crate::io::recorder::Recorder;
 use crate::sim::chain::AmplifierChain;
 use crate::sim::tuner::TunerInfo;
 

@@ -2,6 +2,7 @@ use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
 use log::{error, info};
 use std::path::Path;
 
+use crate::audio::manager::ProcessorManager;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::{
     control::Control, dialogs::settings::SettingsDialog, dialogs::tuner::TunerDisplay,
@@ -11,7 +12,6 @@ use crate::gui::config::{StageConfig, StageType};
 use crate::gui::messages::Message;
 use crate::gui::preset::{Preset, PresetManager};
 use crate::gui::settings::Settings;
-use crate::io::manager::ProcessorManager;
 use crate::sim::chain::AmplifierChain;
 
 const PRESET_DIR: &str = "./presets";

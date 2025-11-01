@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use log::info;
+use rustortion::audio::manager::ProcessorManager;
 use rustortion::gui::settings::Settings;
 use rustortion::gui::start;
-use rustortion::io::manager::ProcessorManager;
 
 pub fn main() -> Result<()> {
     dotenv::dotenv().ok();

@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
 use jack::{AudioIn, AudioOut, Client, Port, ProcessScope};
 
-pub struct AudioPorts {
+pub struct Ports {
     input: Port<AudioIn>,
     output_left: Port<AudioOut>,
     output_right: Port<AudioOut>,
 }
 
-impl AudioPorts {
+impl Ports {
     pub fn new(client: &Client) -> Result<Self> {
         Ok(Self {
             input: client
