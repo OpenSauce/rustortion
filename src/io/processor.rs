@@ -150,10 +150,8 @@ impl Processor {
             tuner_update_counter: 0,
         })
     }
-}
 
-impl ProcessHandler for Processor {
-    fn process(&mut self, _c: &Client, ps: &ProcessScope) -> Control {
+    pub fn handle_messages(&mut self) {
         if let Ok(message) = self.rx_updates.try_recv() {
             match message {
                 ProcessorMessage::SetAmpChain(chain) => {
@@ -200,6 +198,28 @@ impl ProcessHandler for Processor {
                 }
             }
         }
+    }
+
+    fn handle_recording(&self, buffer: &[f32]) {
+        if let Some(ref tx) = self.tx_audio {
+            let mut block = AudioBlock::with_capacity(BLOCK_FRAMES * 2);
+            for &s in buffer.iter().take(BLOCK_FRAMES) {
+                let v = (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                block.push(v);
+                block.push(v);
+            }
+
+            if let Err(e) = tx.try_send(block) {
+                error!("Error sending audio block: {e}");
+            }
+        }
+    }
+}
+
+impl ProcessHandler for Processor {
+    fn process(&mut self, _c: &Client, ps: &ProcessScope) -> Control {
+        // Handle messages received from the main thread.
+        self.handle_messages();
 
         let n_frames = ps.n_frames() as usize;
         let input = self.in_port.as_slice(ps);
@@ -282,18 +302,7 @@ impl ProcessHandler for Processor {
             out_buffer_right[i] = 0.0;
         }
 
-        // If the recording channel is available, handle sending audio blocks to the recorder.
-        if let Some(ref tx) = self.tx_audio {
-            let mut block = AudioBlock::with_capacity(BLOCK_FRAMES * 2);
-            for &s in final_samples.iter().take(BLOCK_FRAMES) {
-                let v = (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
-                block.extend_from_slice(&[v, v]);
-            }
-
-            if let Err(e) = tx.try_send(block) {
-                error!("Error sending audio block: {e}");
-            }
-        }
+        self.handle_recording(&self.downsampled_buffer[0][..downsampled_frames]);
 
         Control::Continue
     }
@@ -333,4 +342,81 @@ fn debug_stats(client: &Client) {
         "Sample rate: {sample_rate}, Buffer frames: {buffer_frames}, Calls p/s: {}",
         sample_rate / buffer_frames
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crossbeam::channel;
+
+    fn make_test_processor(tx_audio: Option<Sender<AudioBlock>>) -> Processor {
+        let (_, update_rx) = channel::unbounded();
+        let client = jack::Client::new("test", jack::ClientOptions::NO_START_SERVER)
+            .expect("Failed to create test JACK client")
+            .0;
+
+        let up_params = SincInterpolationParameters {
+            sinc_len: 8,
+            f_cutoff: 0.95,
+            interpolation: SincInterpolationType::Linear,
+            oversampling_factor: 8,
+            window: WindowFunction::BlackmanHarris2,
+        };
+
+        let down_params = SincInterpolationParameters {
+            sinc_len: 8,
+            f_cutoff: 0.95,
+            interpolation: SincInterpolationType::Linear,
+            oversampling_factor: 8,
+            window: WindowFunction::BlackmanHarris2,
+        };
+
+        let upsampler = SincFixedIn::<f32>::new(2.0, 1.0, up_params, MAX_BLOCK_SIZE, CHANNELS)
+            .expect("Failed to create upsampler");
+
+        let downsampler = SincFixedIn::<f32>::new(0.5, 1.0, down_params, MAX_BLOCK_SIZE, CHANNELS)
+            .expect("Failed to create downsampler");
+
+        Processor {
+            chain: Box::new(AmplifierChain::new()),
+            ir_cabinet: None,
+            rx_updates: update_rx,
+            tx_audio,
+            in_port: client.register_port("in", AudioIn::default()).unwrap(),
+            out_port_left: client.register_port("out_l", AudioOut::default()).unwrap(),
+            out_port_right: client.register_port("out_r", AudioOut::default()).unwrap(),
+            upsampler,
+            downsampler,
+            input_buffer: vec![Vec::new()],
+            upsampled_buffer: vec![Vec::new()],
+            downsampled_buffer: vec![Vec::new()],
+            oversample_factor: 2.0,
+            tuner: None,
+            tx_tuner: None,
+            sample_rate: 44100.0,
+            tuner_update_counter: 0,
+        }
+    }
+
+    #[test]
+    fn test_handle_recording_sends_audio_block() {
+        let (tx, rx) = channel::bounded::<AudioBlock>(1);
+        let processor = make_test_processor(Some(tx));
+
+        let buffer: Vec<f32> = (0..BLOCK_FRAMES)
+            .map(|i| (i as f32 / 100.0).sin())
+            .collect();
+
+        processor.handle_recording(&buffer);
+
+        let block = rx.try_recv().expect("expected an AudioBlock to be sent");
+        assert_eq!(block.len(), BLOCK_FRAMES * 2);
+        assert_eq!(block[0], block[1]);
+    }
+
+    #[test]
+    fn test_handle_recording_no_sender_does_nothing() {
+        let processor = make_test_processor(None);
+        processor.handle_recording(&[0.1, 0.2, 0.3]);
+    }
 }
