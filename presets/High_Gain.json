@@ -13,7 +13,7 @@
     {
       "Filter": {
         "filter_type": "Lowpass",
-        "cutoff_hz": 7013.0,
+        "cutoff_hz": 9913.0,
         "resonance": 0.15
       }
     },
@@ -39,7 +39,7 @@
         "release_ms": 80.0,
         "threshold_db": -16.0,
         "ratio": 4.0,
-        "makeup_db": 17.9
+        "makeup_db": 16.7
       }
     },
     {
@@ -66,6 +66,20 @@
     {
       "Level": {
         "gain": 1.0
+      }
+    },
+    {
+      "Filter": {
+        "filter_type": "Highpass",
+        "cutoff_hz": 181.0,
+        "resonance": 0.0
+      }
+    },
+    {
+      "Filter": {
+        "filter_type": "Lowpass",
+        "cutoff_hz": 7835.0,
+        "resonance": 0.0
       }
     }
   ]
