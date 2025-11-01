@@ -5,7 +5,6 @@ use log::{error, info};
 use std::{fs, thread};
 
 pub type AudioBlock = Vec<i16>;
-pub const BLOCK_FRAMES: usize = 128;
 const BLOCK_CHANNEL_CAPACITY: usize = 32;
 
 pub struct Recorder {
