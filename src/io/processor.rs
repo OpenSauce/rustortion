@@ -200,11 +200,13 @@ impl Processor {
         }
     }
 
-    fn handle_recording(&self, buffer: &[f32]) {
+    fn handle_recording(&self) {
+        let samples = &self.downsampled_buffer[0];
         if let Some(ref tx) = self.tx_audio {
-            let mut block = AudioBlock::with_capacity(buffer.len() * 2);
-            for &s in buffer.iter() {
-                let v = (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+            let mut block = AudioBlock::with_capacity(samples.len() * 2);
+            for &sample in samples.iter() {
+                // Quantize to i16 and duplicate for WAV.
+                let v = (sample * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
                 block.push(v);
                 block.push(v);
             }
@@ -212,6 +214,47 @@ impl Processor {
             if let Err(e) = tx.try_send(block) {
                 error!("Error sending audio block: {e}");
             }
+        }
+    }
+
+    fn handle_tuner(&mut self) {
+        if let Some(ref mut tuner) = self.tuner {
+            let samples = &self.input_buffer[0];
+            for &sample in samples.iter() {
+                tuner.process_sample(sample);
+            }
+
+            self.tuner_update_counter += samples.len();
+            if self.tuner_update_counter >= 2048 {
+                self.tuner_update_counter = 0;
+                if let Some(ref tx) = self.tx_tuner {
+                    let info = tuner.get_tuner_info();
+                    let _ = tx.try_send(info);
+                }
+            }
+        }
+    }
+
+    fn silence_output(&mut self, ps: &ProcessScope, frame_count: usize) {
+        let out_left = self.out_port_left.as_mut_slice(ps);
+        let out_right = self.out_port_right.as_mut_slice(ps);
+        out_left[..frame_count].fill(0.0);
+        out_right[..frame_count].fill(0.0);
+    }
+
+    fn output(&mut self, ps: &ProcessScope, n_frames: usize) {
+        let samples = &self.downsampled_buffer[0];
+        let frame_count = samples.len().min(ps.n_frames() as usize);
+
+        let out_left = self.out_port_left.as_mut_slice(ps);
+        let out_right = self.out_port_right.as_mut_slice(ps);
+        out_left[..frame_count].copy_from_slice(&samples[..frame_count]);
+        out_right[..frame_count].copy_from_slice(&samples[..frame_count]);
+
+        // If the sample is less than the required frame count, zero the rest.
+        for i in frame_count..n_frames {
+            out_left[i] = 0.0;
+            out_right[i] = 0.0;
         }
     }
 }
@@ -224,85 +267,44 @@ impl ProcessHandler for Processor {
         let n_frames = ps.n_frames() as usize;
         let input = self.in_port.as_slice(ps);
 
-        if let Some(ref mut tuner) = self.tuner {
-            for &sample in input.iter() {
-                tuner.process_sample(sample);
-            }
+        self.input_buffer[0].clear();
+        self.input_buffer[0].extend_from_slice(input);
 
-            self.tuner_update_counter += n_frames;
-            if self.tuner_update_counter >= 2048 {
-                self.tuner_update_counter = 0;
-                if let Some(ref tx) = self.tx_tuner {
-                    let info = tuner.get_tuner_info();
-                    let _ = tx.try_send(info);
-                }
-            }
-
-            let out_left = self.out_port_left.as_mut_slice(ps);
-            let out_right = self.out_port_right.as_mut_slice(ps);
-            out_left[..n_frames].fill(0.0);
-            out_right[..n_frames].fill(0.0);
+        if self.tuner.is_some() {
+            self.handle_tuner();
+            self.silence_output(ps, n_frames);
 
             return Control::Continue;
         }
 
-        self.input_buffer[0].clear();
-
-        debug_assert!(
-            self.input_buffer[0].capacity() >= n_frames,
-            "input_buffer too small; buffer_size callback missing an allocation"
-        );
-
-        self.input_buffer[0].extend_from_slice(input);
-
-        let (_, upsampled_frames) = match self.upsampler.process_into_buffer(
-            &self.input_buffer,
-            &mut self.upsampled_buffer,
-            None,
-        ) {
-            Ok(data) => data,
-            Err(e) => {
-                error!("Upsampler error: {e}");
-                return Control::Continue;
-            }
+        if let Err(e) =
+            self.upsampler
+                .process_into_buffer(&self.input_buffer, &mut self.upsampled_buffer, None)
+        {
+            error!("Upsampler error: {e}");
+            return Control::Continue;
         };
 
         let chain = self.chain.as_mut();
-        for s in &mut self.upsampled_buffer[0][..upsampled_frames] {
+        for s in &mut self.upsampled_buffer[0] {
             *s = chain.process(*s);
         }
 
-        let (_, downsampled_frames) = match self.downsampler.process_into_buffer(
+        if let Err(e) = self.downsampler.process_into_buffer(
             &self.upsampled_buffer,
             &mut self.downsampled_buffer,
             None,
         ) {
-            Ok(data) => data,
-            Err(e) => {
-                error!("Downsampler error: {e}");
-                return Control::Continue;
-            }
-        };
-
-        let final_samples = &mut self.downsampled_buffer[0][..downsampled_frames];
+            error!("Downsampler error: {e}");
+            return Control::Continue;
+        }
 
         if let Some(ref mut cab) = self.ir_cabinet {
-            cab.process_block(final_samples);
+            cab.process_block(self.downsampled_buffer[0].as_mut());
         }
 
-        let frames_to_copy = final_samples.len().min(n_frames);
-
-        let out_buffer_left = self.out_port_left.as_mut_slice(ps);
-        let out_buffer_right = self.out_port_right.as_mut_slice(ps);
-
-        out_buffer_left[..frames_to_copy].copy_from_slice(&final_samples[..frames_to_copy]);
-        out_buffer_right[..frames_to_copy].copy_from_slice(&final_samples[..frames_to_copy]);
-        for i in frames_to_copy..n_frames {
-            out_buffer_left[i] = 0.0;
-            out_buffer_right[i] = 0.0;
-        }
-
-        self.handle_recording(&self.downsampled_buffer[0][..downsampled_frames]);
+        self.output(ps, n_frames);
+        self.handle_recording();
 
         Control::Continue
     }
@@ -313,8 +315,8 @@ impl ProcessHandler for Processor {
         debug_stats(client);
 
         let buffer = &mut self.input_buffer[0];
-        if buffer.capacity() < new_size {
-            buffer.reserve_exact(new_size - buffer.len());
+        if buffer.len() != new_size {
+            buffer.resize(new_size, 0.0);
             info!("Input buffer resized to {new_size}");
         }
 
