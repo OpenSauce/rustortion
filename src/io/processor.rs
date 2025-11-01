@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::io::recorder::{AudioBlock, BLOCK_FRAMES};
+use crate::io::recorder::AudioBlock;
 use crate::ir::cabinet::IrCabinet;
 use crate::sim::chain::AmplifierChain;
 use crate::sim::tuner::{Tuner, TunerInfo};
@@ -150,10 +150,8 @@ impl Processor {
             tuner_update_counter: 0,
         })
     }
-}
 
-impl ProcessHandler for Processor {
-    fn process(&mut self, _c: &Client, ps: &ProcessScope) -> Control {
+    pub fn handle_messages(&mut self) {
         if let Ok(message) = self.rx_updates.try_recv() {
             match message {
                 ProcessorMessage::SetAmpChain(chain) => {
@@ -200,6 +198,28 @@ impl ProcessHandler for Processor {
                 }
             }
         }
+    }
+
+    fn handle_recording(&self, buffer: &[f32]) {
+        if let Some(ref tx) = self.tx_audio {
+            let mut block = AudioBlock::with_capacity(buffer.len() * 2);
+            for &s in buffer.iter() {
+                let v = (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                block.push(v);
+                block.push(v);
+            }
+
+            if let Err(e) = tx.try_send(block) {
+                error!("Error sending audio block: {e}");
+            }
+        }
+    }
+}
+
+impl ProcessHandler for Processor {
+    fn process(&mut self, _c: &Client, ps: &ProcessScope) -> Control {
+        // Handle messages received from the main thread.
+        self.handle_messages();
 
         let n_frames = ps.n_frames() as usize;
         let input = self.in_port.as_slice(ps);
@@ -282,18 +302,7 @@ impl ProcessHandler for Processor {
             out_buffer_right[i] = 0.0;
         }
 
-        // If the recording channel is available, handle sending audio blocks to the recorder.
-        if let Some(ref tx) = self.tx_audio {
-            let mut block = AudioBlock::with_capacity(BLOCK_FRAMES * 2);
-            for &s in final_samples.iter().take(BLOCK_FRAMES) {
-                let v = (s * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
-                block.extend_from_slice(&[v, v]);
-            }
-
-            if let Err(e) = tx.try_send(block) {
-                error!("Error sending audio block: {e}");
-            }
-        }
+        self.handle_recording(&self.downsampled_buffer[0][..downsampled_frames]);
 
         Control::Continue
     }
