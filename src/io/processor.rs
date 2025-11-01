@@ -42,8 +42,10 @@ pub struct Processor {
     input_buffer: Vec<Vec<f32>>,
     /// Reusable buffer for upsampled frames.
     upsampled_buffer: Vec<Vec<f32>>,
+    upsampled_frames: usize,
     /// Reusable buffer for downsampled frames.
     downsampled_buffer: Vec<Vec<f32>>,
+    downsampled_frames: usize,
     oversample_factor: f64,
     tuner: Option<Tuner>,
     tx_tuner: Option<Sender<TunerInfo>>,
@@ -110,7 +112,9 @@ impl Processor {
             .set_chunk_size(buffer_size * oversample_factor as usize)
             .context("failed to set downsampler chunk size")?;
 
-        let input_buffer = vec![Vec::with_capacity(buffer_size)];
+        let mut input_vec = Vec::with_capacity(buffer_size);
+        input_vec.resize(buffer_size, 0.0);
+        let input_buffer = vec![input_vec];
         let upsampled_buffer = upsampler.output_buffer_allocate(true);
         let downsampled_buffer = downsampler.output_buffer_allocate(true);
 
@@ -142,7 +146,9 @@ impl Processor {
             downsampler,
             input_buffer,
             upsampled_buffer,
+            upsampled_frames: 0,
             downsampled_buffer,
+            downsampled_frames: 0,
             oversample_factor,
             tuner: None,
             tx_tuner,
@@ -200,8 +206,35 @@ impl Processor {
         }
     }
 
+    fn process(&mut self) -> Result<()> {
+        let (_, upsampled_frames) = self
+            .upsampler
+            .process_into_buffer(&self.input_buffer, &mut self.upsampled_buffer, None)
+            .context("Upsampler failed")?;
+
+        self.upsampled_frames = upsampled_frames;
+
+        let chain = self.chain.as_mut();
+        for s in &mut self.upsampled_buffer[0][..upsampled_frames] {
+            *s = chain.process(*s);
+        }
+
+        let (_, downsampled_frames) = self
+            .downsampler
+            .process_into_buffer(&self.upsampled_buffer, &mut self.downsampled_buffer, None)
+            .context("Downsampler failed")?;
+
+        self.downsampled_frames = downsampled_frames;
+
+        if let Some(ref mut cab) = self.ir_cabinet {
+            cab.process_block(&mut self.downsampled_buffer[0][..downsampled_frames]);
+        }
+
+        Ok(())
+    }
+
     fn handle_recording(&self) {
-        let samples = &self.downsampled_buffer[0];
+        let samples = &self.downsampled_buffer[0][..self.downsampled_frames];
         if let Some(ref tx) = self.tx_audio {
             let mut block = AudioBlock::with_capacity(samples.len() * 2);
             for &sample in samples.iter() {
@@ -243,7 +276,7 @@ impl Processor {
     }
 
     fn output(&mut self, ps: &ProcessScope, n_frames: usize) {
-        let samples = &self.downsampled_buffer[0];
+        let samples = &self.downsampled_buffer[0][..self.downsampled_frames];
         let frame_count = samples.len().min(ps.n_frames() as usize);
 
         let out_left = self.out_port_left.as_mut_slice(ps);
@@ -261,14 +294,12 @@ impl Processor {
 
 impl ProcessHandler for Processor {
     fn process(&mut self, _c: &Client, ps: &ProcessScope) -> Control {
-        // Handle messages received from the main thread.
         self.handle_messages();
 
         let n_frames = ps.n_frames() as usize;
         let input = self.in_port.as_slice(ps);
 
-        self.input_buffer[0].clear();
-        self.input_buffer[0].extend_from_slice(input);
+        self.input_buffer[0].copy_from_slice(input);
 
         if self.tuner.is_some() {
             self.handle_tuner();
@@ -277,30 +308,9 @@ impl ProcessHandler for Processor {
             return Control::Continue;
         }
 
-        if let Err(e) =
-            self.upsampler
-                .process_into_buffer(&self.input_buffer, &mut self.upsampled_buffer, None)
-        {
-            error!("Upsampler error: {e}");
+        if let Err(e) = self.process() {
+            error!("Error during processing: {}", e);
             return Control::Continue;
-        };
-
-        let chain = self.chain.as_mut();
-        for s in &mut self.upsampled_buffer[0] {
-            *s = chain.process(*s);
-        }
-
-        if let Err(e) = self.downsampler.process_into_buffer(
-            &self.upsampled_buffer,
-            &mut self.downsampled_buffer,
-            None,
-        ) {
-            error!("Downsampler error: {e}");
-            return Control::Continue;
-        }
-
-        if let Some(ref mut cab) = self.ir_cabinet {
-            cab.process_block(self.downsampled_buffer[0].as_mut());
         }
 
         self.output(ps, n_frames);
