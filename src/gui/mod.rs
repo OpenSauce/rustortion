@@ -9,7 +9,7 @@ pub use app::AmplifierApp;
 use iced::{Font, window};
 pub use messages::Message;
 
-use crate::{gui::settings::Settings, io::manager::ProcessorManager};
+use crate::{audio::manager::ProcessorManager, gui::settings::Settings};
 
 pub const DEFAULT_FONT: Font = Font::MONOSPACE;
 
