@@ -1,12 +1,13 @@
 use std::path::Path;
 
+use crate::io::audio_ports::AudioPorts;
 use crate::io::recorder::AudioBlock;
 use crate::ir::cabinet::IrCabinet;
 use crate::sim::chain::AmplifierChain;
 use crate::sim::tuner::{Tuner, TunerInfo};
 use anyhow::{Context, Result};
 use crossbeam::channel::{Receiver, Sender};
-use jack::{AudioIn, AudioOut, Client, Control, Frames, Port, ProcessHandler, ProcessScope};
+use jack::{Client, Control, Frames, ProcessHandler, ProcessScope};
 use log::{debug, error, info, warn};
 use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
@@ -21,9 +22,6 @@ pub enum ProcessorMessage {
     SetTunerEnabled(bool),
 }
 
-const CHANNELS: usize = 1;
-const MAX_BLOCK_SIZE: usize = 8192;
-
 pub struct Processor {
     /// Amplifier chain, used for processing amp simulations on the input.
     chain: Box<AmplifierChain>,
@@ -33,9 +31,7 @@ pub struct Processor {
     rx_updates: Receiver<ProcessorMessage>,
     /// Optional recorder channel.
     tx_audio: Option<Sender<AudioBlock>>,
-    in_port: Port<AudioIn>,
-    out_port_left: Port<AudioOut>,
-    out_port_right: Port<AudioOut>,
+    audio_ports: AudioPorts,
     upsampler: SincFixedIn<f32>,
     downsampler: SincFixedIn<f32>,
     /// Reusable buffer for input frames.
@@ -61,15 +57,11 @@ impl Processor {
         oversample_factor: f64,
         tx_tuner: Option<Sender<TunerInfo>>,
     ) -> Result<Self> {
-        let in_port = client
-            .register_port("in_port", AudioIn::default())
-            .context("failed to register in port")?;
-        let out_port_left = client
-            .register_port("out_port_left", AudioOut::default())
-            .context("failed to register out port left")?;
-        let out_port_right = client
-            .register_port("out_port_right", AudioOut::default())
-            .context("failed to register out port right")?;
+        const CHANNELS: usize = 1;
+        const MAX_BLOCK_SIZE: usize = 8192;
+
+        let audio_ports =
+            AudioPorts::new(client).context("failed to create audio ports manager")?;
 
         let interp_params = SincInterpolationParameters {
             sinc_len: 128,
@@ -139,9 +131,7 @@ impl Processor {
             ir_cabinet,
             rx_updates,
             tx_audio,
-            in_port,
-            out_port_left,
-            out_port_right,
+            audio_ports,
             upsampler,
             downsampler,
             input_buffer,
@@ -267,29 +257,6 @@ impl Processor {
             }
         }
     }
-
-    fn silence_output(&mut self, ps: &ProcessScope, frame_count: usize) {
-        let out_left = self.out_port_left.as_mut_slice(ps);
-        let out_right = self.out_port_right.as_mut_slice(ps);
-        out_left[..frame_count].fill(0.0);
-        out_right[..frame_count].fill(0.0);
-    }
-
-    fn output(&mut self, ps: &ProcessScope, n_frames: usize) {
-        let samples = &self.downsampled_buffer[0][..self.downsampled_frames];
-        let frame_count = samples.len().min(ps.n_frames() as usize);
-
-        let out_left = self.out_port_left.as_mut_slice(ps);
-        let out_right = self.out_port_right.as_mut_slice(ps);
-        out_left[..frame_count].copy_from_slice(&samples[..frame_count]);
-        out_right[..frame_count].copy_from_slice(&samples[..frame_count]);
-
-        // If the number of samples is less than the required frame count, zero the rest.
-        for i in frame_count..n_frames {
-            out_left[i] = 0.0;
-            out_right[i] = 0.0;
-        }
-    }
 }
 
 impl ProcessHandler for Processor {
@@ -297,13 +264,13 @@ impl ProcessHandler for Processor {
         self.handle_messages();
 
         let n_frames = ps.n_frames() as usize;
-        let input = self.in_port.as_slice(ps);
+        let input = self.audio_ports.read_input(ps);
 
         self.input_buffer[0].copy_from_slice(input);
 
         if self.tuner.is_some() {
             self.handle_tuner();
-            self.silence_output(ps, n_frames);
+            self.audio_ports.silence_output(ps, n_frames);
 
             return Control::Continue;
         }
@@ -313,7 +280,11 @@ impl ProcessHandler for Processor {
             return Control::Continue;
         }
 
-        self.output(ps, n_frames);
+        self.audio_ports.write_output(
+            ps,
+            &self.downsampled_buffer[0][..self.downsampled_frames],
+            n_frames,
+        );
         self.handle_recording();
 
         Control::Continue
