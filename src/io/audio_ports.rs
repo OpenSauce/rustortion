@@ -26,7 +26,8 @@ impl AudioPorts {
         self.input.as_slice(ps)
     }
 
-    pub fn write_output(&mut self, ps: &ProcessScope, samples: &[f32], output_size: usize) {
+    pub fn write_output(&mut self, ps: &ProcessScope, samples: &[f32]) {
+        let output_size = ps.n_frames() as usize;
         let frame_count = samples.len().min(output_size);
         let out_left = self.output_left.as_mut_slice(ps);
         let out_right = self.output_right.as_mut_slice(ps);
@@ -40,7 +41,8 @@ impl AudioPorts {
         }
     }
 
-    pub fn silence_output(&mut self, ps: &ProcessScope, output_size: usize) {
+    pub fn silence_output(&mut self, ps: &ProcessScope) {
+        let output_size = ps.n_frames() as usize;
         let out_left = self.output_left.as_mut_slice(ps);
         let out_right = self.output_right.as_mut_slice(ps);
         out_left[..output_size].fill(0.0);

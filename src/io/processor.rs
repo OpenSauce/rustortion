@@ -262,15 +262,13 @@ impl Processor {
 impl ProcessHandler for Processor {
     fn process(&mut self, _c: &Client, ps: &ProcessScope) -> Control {
         self.handle_messages();
-
-        let n_frames = ps.n_frames() as usize;
         let input = self.audio_ports.read_input(ps);
 
         self.input_buffer[0].copy_from_slice(input);
 
         if self.tuner.is_some() {
             self.handle_tuner();
-            self.audio_ports.silence_output(ps, n_frames);
+            self.audio_ports.silence_output(ps);
 
             return Control::Continue;
         }
@@ -280,11 +278,8 @@ impl ProcessHandler for Processor {
             return Control::Continue;
         }
 
-        self.audio_ports.write_output(
-            ps,
-            &self.downsampled_buffer[0][..self.downsampled_frames],
-            n_frames,
-        );
+        self.audio_ports
+            .write_output(ps, &self.downsampled_buffer[0][..self.downsampled_frames]);
         self.handle_recording();
 
         Control::Continue
