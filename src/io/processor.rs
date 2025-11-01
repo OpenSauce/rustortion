@@ -284,7 +284,7 @@ impl Processor {
         out_left[..frame_count].copy_from_slice(&samples[..frame_count]);
         out_right[..frame_count].copy_from_slice(&samples[..frame_count]);
 
-        // If the sample is less than the required frame count, zero the rest.
+        // If the number of samples is less than the required frame count, zero the rest.
         for i in frame_count..n_frames {
             out_left[i] = 0.0;
             out_right[i] = 0.0;
