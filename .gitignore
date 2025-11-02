@@ -1,5 +1,6 @@
 /target
 /recordings/*.wav
+*.reapeaks
 
 impulse_responses/*
 !/impulse_responses/Misc
