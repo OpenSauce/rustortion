@@ -4,7 +4,7 @@ use hound::WavWriter;
 use log::{error, info};
 use std::{fs, thread};
 
-pub type AudioBlock = Vec<i16>;
+type AudioBlock = Vec<i16>;
 const BLOCK_CHANNEL_CAPACITY: usize = 32;
 
 pub struct Recorder {
@@ -108,21 +108,17 @@ mod tests {
         let mut generated_samples = 0;
 
         while generated_samples < total_samples {
-            let mut block = Vec::new();
-
             let samples_to_generate = (total_samples - generated_samples).min(block_size);
+            let mut block = Vec::with_capacity(samples_to_generate);
 
             for i in 0..samples_to_generate {
                 let sample_idx = generated_samples + i;
                 let t = sample_idx as f32 / SAMPLE_RATE as f32;
                 let sample = (2.0 * PI * TEST_FREQ * t).sin() * AMPLITUDE;
-                let sample_i16 = (sample * i16::MAX as f32) as i16;
-
-                block.push(sample_i16);
-                block.push(sample_i16);
+                block.push(sample);
             }
 
-            recorder.tx.send(block)?;
+            recorder.record_block(&block)?;
             generated_samples += samples_to_generate;
         }
 
