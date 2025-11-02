@@ -12,7 +12,6 @@ use crate::sim::tuner::TunerInfo;
 /// Manages the audio processing chain and JACK client
 pub struct ProcessorManager {
     active_client: AsyncClient<Notifications, Processor>,
-    recorder: Option<Recorder>,
     /// GUI → audio thread: push a completely new preset
     tx_updates: Sender<ProcessorMessage>,
     sample_rate: f32,
@@ -38,7 +37,6 @@ impl ProcessorManager {
         let processor = Processor::new(
             &client,
             rx_amp,
-            None,
             settings.oversampling_factor.into(),
             Some(tx_tuner.clone()),
         )
@@ -50,7 +48,6 @@ impl ProcessorManager {
 
         let mut manager = Self {
             active_client,
-            recorder: None,
             tx_updates: tx_amp,
             sample_rate,
             current_settings: settings.clone(),
@@ -184,40 +181,24 @@ impl ProcessorManager {
         });
     }
 
-    /// Starts recording if enabled
+    /// Enables recording.
     pub fn enable_recording(&mut self) -> Result<()> {
-        if self.recorder.is_some() {
-            return Ok(());
-        }
-
         let recorder = Recorder::new(self.sample_rate as u32, "./recordings")?;
-        let audio_tx = recorder.sender();
 
-        let update = ProcessorMessage::SetRecording(Some(audio_tx));
+        let update = ProcessorMessage::StartRecording(recorder);
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send recording update: {e}");
         });
 
-        self.recorder = Some(recorder);
         Ok(())
     }
 
-    /// Stops recording if active
+    /// Disables recording.
     pub fn disable_recording(&mut self) {
-        if self.recorder.is_none() {
-            return;
-        }
-
-        let update = ProcessorMessage::SetRecording(None);
+        let update = ProcessorMessage::StopRecording();
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send recording update: {e}");
         });
-
-        if let Some(recorder) = self.recorder.take()
-            && let Err(e) = recorder.stop()
-        {
-            error!("Failed to stop recorder: {e}");
-        }
     }
 
     /// Set the active IR cabinet
@@ -258,20 +239,5 @@ impl ProcessorManager {
     /// Returns the sample rate
     pub fn sample_rate(&self) -> f32 {
         self.sample_rate
-    }
-}
-
-impl std::fmt::Debug for ProcessorManager {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ProcessorManager")
-            .field("sample_rate", &self.sample_rate)
-            .field("recorder", &self.recorder.is_some())
-            .finish()
-    }
-}
-
-impl Drop for ProcessorManager {
-    fn drop(&mut self) {
-        self.disable_recording();
     }
 }

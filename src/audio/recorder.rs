@@ -4,7 +4,7 @@ use hound::WavWriter;
 use log::{error, info};
 use std::{fs, thread};
 
-pub type AudioBlock = Vec<i16>;
+type AudioBlock = Vec<i16>;
 const BLOCK_CHANNEL_CAPACITY: usize = 32;
 
 pub struct Recorder {
@@ -29,11 +29,6 @@ impl Recorder {
         Ok(Self { tx, handle })
     }
 
-    /// Returns a clone of the sender for sending audio blocks.
-    pub fn sender(&self) -> Sender<AudioBlock> {
-        self.tx.clone()
-    }
-
     /// Stops the recording and waits for the writer thread to finish.
     /// This is needed for WAV files to be finalized properly.
     pub fn stop(self) -> Result<()> {
@@ -41,6 +36,19 @@ impl Recorder {
         self.handle
             .join()
             .map_err(|e| anyhow::anyhow!("Writer thread panicked (join failed): {:?}", e))
+    }
+
+    /// Record block takes a slice of f32 samples and sends them to the writer thread.
+    pub fn record_block(&self, samples: &[f32]) -> Result<()> {
+        let mut block = AudioBlock::with_capacity(samples.len() * 2);
+        for sample in samples.iter() {
+            let v = (sample * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+            block.push(v);
+            block.push(v);
+        }
+        self.tx
+            .send(block)
+            .map_err(|e| anyhow::anyhow!("Failed to send audio block to recorder: {}", e))
     }
 }
 
@@ -94,32 +102,26 @@ mod tests {
         let record_dir = temp_dir.path().to_str().unwrap();
 
         let recorder = Recorder::new(SAMPLE_RATE, record_dir)?;
-        let tx = recorder.sender();
 
         let total_samples = (SAMPLE_RATE as f32 * DURATION_SECS) as usize;
         let block_size = 256;
         let mut generated_samples = 0;
 
         while generated_samples < total_samples {
-            let mut block = Vec::new();
-
             let samples_to_generate = (total_samples - generated_samples).min(block_size);
+            let mut block = Vec::with_capacity(samples_to_generate);
 
             for i in 0..samples_to_generate {
                 let sample_idx = generated_samples + i;
                 let t = sample_idx as f32 / SAMPLE_RATE as f32;
                 let sample = (2.0 * PI * TEST_FREQ * t).sin() * AMPLITUDE;
-                let sample_i16 = (sample * i16::MAX as f32) as i16;
-
-                block.push(sample_i16);
-                block.push(sample_i16);
+                block.push(sample);
             }
 
-            tx.send(block)?;
+            recorder.record_block(&block)?;
             generated_samples += samples_to_generate;
         }
 
-        drop(tx);
         recorder.stop()?;
 
         let entries = std::fs::read_dir(record_dir)?;
