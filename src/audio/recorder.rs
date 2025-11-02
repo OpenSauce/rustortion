@@ -44,7 +44,7 @@ impl Recorder {
     }
 }
 
-/// Runs the writer thread, that writes audio blocks recieved over its channel to a WAV file.
+/// Runs the writer thread, that writes audio blocks received over its channel to a WAV file.
 fn run_writer_thread(sample_rate: u32, filename: String, rx: Receiver<AudioBlock>) {
     let spec = hound::WavSpec {
         channels: 2,
