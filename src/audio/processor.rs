@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::audio::ports::Ports;
-use crate::audio::recorder::AudioBlock;
+use crate::audio::recorder::Recorder;
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
 use crate::sim::chain::AmplifierChain;
@@ -13,7 +13,8 @@ use log::{debug, error, warn};
 
 pub enum ProcessorMessage {
     SetAmpChain(Box<AmplifierChain>),
-    SetRecording(Option<Sender<AudioBlock>>),
+    StartRecording(Recorder),
+    StopRecording(),
     SetIrCabinet(Option<String>),
     SetIrBypass(bool),
     SetIrGain(f32),
@@ -27,11 +28,10 @@ pub struct Processor {
     ir_cabinet: Option<IrCabinet>,
     /// Channel for updating the amplifier chain.
     rx_updates: Receiver<ProcessorMessage>,
-    /// Optional recorder channel.
-    tx_audio: Option<Sender<AudioBlock>>,
     audio_ports: Ports,
     samplers: Samplers,
     tuner: Option<Tuner>,
+    recorder: Option<Recorder>,
     tx_tuner: Option<Sender<TunerInfo>>,
     sample_rate: f32,
     tuner_update_counter: usize,
@@ -41,7 +41,6 @@ impl Processor {
     pub fn new(
         client: &Client,
         rx_updates: Receiver<ProcessorMessage>,
-        tx_audio: Option<Sender<AudioBlock>>,
         oversample_factor: f64,
         tx_tuner: Option<Sender<TunerInfo>>,
     ) -> Result<Self> {
@@ -69,10 +68,10 @@ impl Processor {
             chain: Box::new(AmplifierChain::new()),
             ir_cabinet,
             rx_updates,
-            tx_audio,
             audio_ports,
             samplers,
             tuner: None,
+            recorder: None,
             tx_tuner,
             sample_rate: client.sample_rate() as f32,
             tuner_update_counter: 0,
@@ -85,10 +84,6 @@ impl Processor {
                 ProcessorMessage::SetAmpChain(chain) => {
                     self.chain = chain;
                     debug!("Received new amplifier chain");
-                }
-                ProcessorMessage::SetRecording(tx) => {
-                    self.tx_audio = tx;
-                    debug!("Recording channel updated");
                 }
                 ProcessorMessage::SetIrCabinet(ir_name) => {
                     if let Some(ref mut cab) = self.ir_cabinet
@@ -123,6 +118,30 @@ impl Processor {
                         self.tuner = None;
                         debug!("Tuner disabled");
                     }
+                }
+                ProcessorMessage::StartRecording(recorder) => {
+                    if self.recorder.is_some() {
+                        debug!("Recorder already active, ignoring start request");
+                        return;
+                    }
+
+                    debug!("Recorder updated");
+                    self.recorder = Some(recorder);
+                }
+                ProcessorMessage::StopRecording() => {
+                    if self.recorder.is_none() {
+                        debug!("No active recorder to stop");
+                        return;
+                    }
+
+                    debug!("Stopping recorder");
+                    if let Some(recorder) = self.recorder.take()
+                        && let Err(e) = recorder.stop()
+                    {
+                        error!("Failed to stop recorder: {e}");
+                    }
+
+                    self.recorder = None;
                 }
             }
         }
@@ -182,17 +201,10 @@ impl ProcessHandler for Processor {
 
         self.audio_ports.write_output(ps, downsampled);
 
-        if let Some(ref tx) = self.tx_audio {
-            let mut block = AudioBlock::with_capacity(downsampled.len() * 2);
-            for &sample in downsampled.iter() {
-                // Quantize to i16 and duplicate for WAV.
-                let v = (sample * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
-                block.push(v);
-                block.push(v);
-            }
-
-            if let Err(e) = tx.try_send(block) {
-                error!("Error sending audio block: {e}");
+        #[allow(clippy::collapsible_if)]
+        if let Some(recorder) = self.recorder.as_mut() {
+            if let Err(e) = recorder.record_block(downsampled) {
+                error!("Error recording audio block: {e}");
             }
         }
 
@@ -219,4 +231,15 @@ fn debug_stats(client: &Client) {
         "Sample rate: {sample_rate}, Buffer frames: {buffer_frames}, Calls p/s: {}",
         sample_rate / buffer_frames
     );
+}
+
+impl Drop for Processor {
+    fn drop(&mut self) {
+        if let Some(recorder) = self.recorder.take() {
+            debug!("Finalizing recorder on processor drop");
+            if let Err(e) = recorder.stop() {
+                error!("Failed to stop recorder: {e}");
+            }
+        }
+    }
 }

@@ -29,11 +29,6 @@ impl Recorder {
         Ok(Self { tx, handle })
     }
 
-    /// Returns a clone of the sender for sending audio blocks.
-    pub fn sender(&self) -> Sender<AudioBlock> {
-        self.tx.clone()
-    }
-
     /// Stops the recording and waits for the writer thread to finish.
     /// This is needed for WAV files to be finalized properly.
     pub fn stop(self) -> Result<()> {
@@ -41,6 +36,19 @@ impl Recorder {
         self.handle
             .join()
             .map_err(|e| anyhow::anyhow!("Writer thread panicked (join failed): {:?}", e))
+    }
+
+    /// Record block takes a slice of f32 samples and sends them to the writer thread.
+    pub fn record_block(&self, samples: &[f32]) -> Result<()> {
+        let mut block = AudioBlock::with_capacity(samples.len() * 2);
+        for sample in samples.iter() {
+            let v = (sample * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+            block.push(v);
+            block.push(v);
+        }
+        self.tx
+            .send(block)
+            .map_err(|e| anyhow::anyhow!("Failed to send audio block to recorder: {}", e))
     }
 }
 
@@ -94,7 +102,6 @@ mod tests {
         let record_dir = temp_dir.path().to_str().unwrap();
 
         let recorder = Recorder::new(SAMPLE_RATE, record_dir)?;
-        let tx = recorder.sender();
 
         let total_samples = (SAMPLE_RATE as f32 * DURATION_SECS) as usize;
         let block_size = 256;
@@ -115,11 +122,10 @@ mod tests {
                 block.push(sample_i16);
             }
 
-            tx.send(block)?;
+            recorder.tx.send(block)?;
             generated_samples += samples_to_generate;
         }
 
-        drop(tx);
         recorder.stop()?;
 
         let entries = std::fs::read_dir(record_dir)?;
