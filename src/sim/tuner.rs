@@ -2,10 +2,11 @@ use arc_swap::ArcSwap;
 use std::sync::Arc;
 
 const BUFFER_SIZE: usize = 4096;
+const A1_HZ: f32 = 50.1;
+const E6_HZ: f32 = 1245.0;
 
 pub struct Tuner {
     buffer: Vec<f32>,
-    write_pos: usize,
     sample_rate: f32,
     info: Arc<ArcSwap<TunerInfo>>,
     enabled: bool,
@@ -29,8 +30,7 @@ impl Tuner {
 
         (
             Self {
-                buffer: vec![0.0; BUFFER_SIZE],
-                write_pos: 0,
+                buffer: Vec::with_capacity(BUFFER_SIZE),
                 sample_rate,
                 info: Arc::clone(&info),
                 enabled: false,
@@ -44,8 +44,12 @@ impl Tuner {
             return;
         }
 
-        for &sample in samples {
-            self.process_sample(sample);
+        self.buffer.extend_from_slice(samples);
+        if self.buffer.len() >= BUFFER_SIZE {
+            let detected_frequency = self.simple_amdf();
+            self.info.store(Arc::new(detected_frequency.into()));
+
+            self.buffer.clear();
         }
     }
 
@@ -56,26 +60,15 @@ impl Tuner {
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
         if !enabled {
+            self.buffer.clear();
             self.info.store(Arc::new(TunerInfo::default()));
         }
     }
 
-    fn process_sample(&mut self, sample: f32) {
-        const UPDATE_INTERVAL: usize = 1024;
-
-        self.buffer[self.write_pos] = sample;
-        self.write_pos = (self.write_pos + 1) % BUFFER_SIZE;
-
-        // Only write the tuner info at intervals
-        if !self.write_pos.is_multiple_of(UPDATE_INTERVAL) {
-            return;
-        }
-
-        let detected_frequency = self.simple_amdf();
-        self.info.store(Arc::new(detected_frequency.into()));
-    }
-
     fn simple_amdf(&self) -> Option<f32> {
+        if self.buffer.is_empty() {
+            return None;
+        }
         let rms =
             (self.buffer.iter().map(|x| x * x).sum::<f32>() / self.buffer.len() as f32).sqrt();
 
@@ -83,15 +76,15 @@ impl Tuner {
             return None;
         }
 
-        let min_period = (self.sample_rate / 1200.0) as usize;
-        let max_period = (self.sample_rate / 60.0) as usize;
+        let min_period = (self.sample_rate / E6_HZ) as usize;
+        let max_period = (self.sample_rate / A1_HZ) as usize;
 
         let mut best_period = 0;
         let mut min_diff = f32::MAX;
 
-        for lag in min_period..max_period.min(BUFFER_SIZE / 2) {
+        for lag in min_period..max_period.min(self.buffer.len() / 2) {
             let mut diff = 0.0;
-            for i in 0..(BUFFER_SIZE - lag) {
+            for i in 0..(self.buffer.len() - lag) {
                 diff += (self.buffer[i] - self.buffer[i + lag]).abs();
             }
 
