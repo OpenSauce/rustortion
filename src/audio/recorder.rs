@@ -5,7 +5,7 @@ use log::{error, info};
 use std::{fs, thread};
 
 type AudioBlock = Vec<i16>;
-const BLOCK_CHANNEL_CAPACITY: usize = 256;
+const BLOCK_CHANNEL_CAPACITY: usize = 32;
 
 pub struct Recorder {
     tx: Sender<AudioBlock>,
@@ -46,18 +46,9 @@ impl Recorder {
             block.push(v);
             block.push(v);
         }
-        if let Err(err) = self.tx.try_send(block) {
-            match err {
-                crossbeam::channel::TrySendError::Full(_) => {
-                    error!("Recorder channel full, dropping audio block");
-                }
-                crossbeam::channel::TrySendError::Disconnected(_) => {
-                    error!("Recorder channel disconnected");
-                }
-            }
-        }
-
-        Ok(())
+        self.tx
+            .send(block)
+            .map_err(|e| anyhow::anyhow!("Failed to send audio block on channel: {}", e))
     }
 }
 

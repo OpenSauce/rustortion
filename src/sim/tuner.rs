@@ -1,29 +1,78 @@
+use arc_swap::ArcSwap;
+use std::sync::Arc;
+
 const BUFFER_SIZE: usize = 4096;
 
 pub struct Tuner {
     buffer: Vec<f32>,
     write_pos: usize,
     sample_rate: f32,
-    detected_freq: Option<f32>,
+    info: Arc<ArcSwap<TunerInfo>>,
+    enabled: bool,
+}
+
+pub struct TunerHandle {
+    info: Arc<ArcSwap<TunerInfo>>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TunerInfo {
+    pub frequency: Option<f32>,
+    pub note: Option<String>,
+    pub cents_off: Option<f32>,
+    pub in_tune: bool,
 }
 
 impl Tuner {
-    pub fn new(sample_rate: f32) -> Self {
-        Self {
-            buffer: vec![0.0; BUFFER_SIZE],
-            write_pos: 0,
-            sample_rate,
-            detected_freq: None,
+    pub fn new(sample_rate: f32) -> (Self, TunerHandle) {
+        let info = Arc::new(ArcSwap::from_pointee(TunerInfo::default()));
+
+        (
+            Self {
+                buffer: vec![0.0; BUFFER_SIZE],
+                write_pos: 0,
+                sample_rate,
+                info: Arc::clone(&info),
+                enabled: false,
+            },
+            TunerHandle { info },
+        )
+    }
+
+    pub fn process(&mut self, samples: &[f32]) {
+        if !self.enabled {
+            return;
+        }
+
+        for &sample in samples {
+            self.process_sample(sample);
         }
     }
 
-    pub fn process_sample(&mut self, sample: f32) {
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
+    pub fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+        if !enabled {
+            self.info.store(Arc::new(TunerInfo::default()));
+        }
+    }
+
+    fn process_sample(&mut self, sample: f32) {
+        const UPDATE_INTERVAL: usize = 1024;
+
         self.buffer[self.write_pos] = sample;
         self.write_pos = (self.write_pos + 1) % BUFFER_SIZE;
 
-        if self.write_pos.is_multiple_of(1024) {
-            self.detected_freq = self.simple_amdf();
+        // Only write the tuner info at intervals
+        if !self.write_pos.is_multiple_of(UPDATE_INTERVAL) {
+            return;
         }
+
+        let detected_frequency = self.simple_amdf();
+        self.info.store(Arc::new(detected_frequency.into()));
     }
 
     fn simple_amdf(&self) -> Option<f32> {
@@ -58,29 +107,29 @@ impl Tuner {
             None
         }
     }
+}
 
+impl TunerHandle {
     pub fn get_tuner_info(&self) -> TunerInfo {
-        match self.detected_freq {
-            Some(freq) => {
-                let (note, octave, cents) = freq_to_note(freq);
-                TunerInfo {
-                    frequency: Some(freq),
+        self.info.load().as_ref().clone()
+    }
+}
+
+impl From<Option<f32>> for TunerInfo {
+    fn from(freq: Option<f32>) -> Self {
+        match freq {
+            None => Self::default(),
+            Some(f) => {
+                let (note, octave, cents) = freq_to_note(f);
+                Self {
+                    frequency: Some(f),
                     note: Some(format!("{}{}", note, octave)),
                     cents_off: Some(cents),
                     in_tune: cents.abs() < 5.0,
                 }
             }
-            None => TunerInfo::default(),
         }
     }
-}
-
-#[derive(Debug, Clone, Default)]
-pub struct TunerInfo {
-    pub frequency: Option<f32>,
-    pub note: Option<String>,
-    pub cents_off: Option<f32>,
-    pub in_tune: bool,
 }
 
 fn freq_to_note(freq: f32) -> (&'static str, i32, f32) {
