@@ -5,7 +5,7 @@ use std::fs;
 use std::hint::black_box;
 use std::path::Path;
 
-const SAMPLE_RATE: u32 = 48000;
+const SAMPLE_RATE: usize = 48000;
 const FFT_BLOCK_SIZE: usize = 1024;
 
 pub fn impulse_response_benchmarks(c: &mut Criterion) {
@@ -60,7 +60,7 @@ fn create_test_cabinet(ir_length: usize) -> IrCabinet {
 
     let ir_path = ir_dir.join(format!("test_ir_{}.wav", ir_length));
     if !ir_path.exists() {
-        create_synthetic_ir(&ir_path, ir_length, SAMPLE_RATE);
+        create_synthetic_ir(&ir_path, ir_length, SAMPLE_RATE as u32);
     }
 
     let mut cabinet = IrCabinet::new(&ir_dir, SAMPLE_RATE).unwrap();

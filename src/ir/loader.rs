@@ -7,11 +7,11 @@ use std::path::{Path, PathBuf};
 pub struct IrLoader {
     available_ir_paths: Vec<(String, PathBuf)>,
     ir_directory: PathBuf,
-    target_sample_rate: u32,
+    target_sample_rate: usize,
 }
 
 impl IrLoader {
-    pub fn new(directory: &Path, target_sample_rate: u32) -> Result<IrLoader> {
+    pub fn new(directory: &Path, target_sample_rate: usize) -> Result<IrLoader> {
         let mut loader = IrLoader {
             available_ir_paths: Vec::new(),
             ir_directory: directory.to_path_buf(),
@@ -68,12 +68,12 @@ impl IrLoader {
             samples
         };
 
-        let mut resampled = if spec.sample_rate != self.target_sample_rate {
+        let mut resampled = if spec.sample_rate != self.target_sample_rate as u32 {
             debug!(
                 "Resampling IR from {} Hz to {} Hz",
                 spec.sample_rate, self.target_sample_rate
             );
-            resample_linear(&mono, spec.sample_rate, self.target_sample_rate)
+            resample_linear(&mono, spec.sample_rate, self.target_sample_rate as u32)
         } else {
             mono
         };

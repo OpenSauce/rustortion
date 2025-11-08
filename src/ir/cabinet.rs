@@ -58,7 +58,7 @@ pub struct IrCabinet {
 }
 
 impl IrCabinet {
-    pub fn new(ir_directory: &Path, sample_rate: u32) -> Result<Self> {
+    pub fn new(ir_directory: &Path, sample_rate: usize) -> Result<Self> {
         let mut planner = RealFftPlanner::<f32>::new();
         let r2c = planner.plan_fft_forward(FFT_BLOCK_SIZE);
         let c2r = planner.plan_fft_inverse(FFT_BLOCK_SIZE);

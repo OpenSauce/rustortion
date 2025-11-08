@@ -7,7 +7,7 @@ const E6_HZ: f32 = 1245.0;
 
 pub struct Tuner {
     buffer: Vec<f32>,
-    sample_rate: f32,
+    sample_rate: usize,
     info: Arc<ArcSwap<TunerInfo>>,
     enabled: bool,
 }
@@ -25,7 +25,7 @@ pub struct TunerInfo {
 }
 
 impl Tuner {
-    pub fn new(sample_rate: f32) -> (Self, TunerHandle) {
+    pub fn new(sample_rate: usize) -> (Self, TunerHandle) {
         let info = Arc::new(ArcSwap::from_pointee(TunerInfo::default()));
 
         (
@@ -76,8 +76,8 @@ impl Tuner {
             return None;
         }
 
-        let min_period = (self.sample_rate / E6_HZ) as usize;
-        let max_period = (self.sample_rate / A1_HZ) as usize;
+        let min_period = (self.sample_rate as f32 / E6_HZ) as usize;
+        let max_period = (self.sample_rate as f32 / A1_HZ) as usize;
 
         let mut best_period = 0;
         let mut min_diff = f32::MAX;
@@ -95,7 +95,7 @@ impl Tuner {
         }
 
         if best_period > 0 {
-            Some(self.sample_rate / best_period as f32)
+            Some(self.sample_rate as f32 / best_period as f32)
         } else {
             None
         }
