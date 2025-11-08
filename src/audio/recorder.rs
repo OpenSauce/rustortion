@@ -47,7 +47,7 @@ impl Recorder {
             block.push(v);
         }
         self.tx
-            .send(block)
+            .try_send(block)
             .map_err(|e| anyhow::anyhow!("Failed to send audio block to recorder: {}", e))
     }
 }
