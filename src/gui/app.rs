@@ -15,7 +15,8 @@ use crate::gui::settings::Settings;
 use crate::sim::chain::AmplifierChain;
 
 const PRESET_DIR: &str = "./presets";
-const REBUILD_INTERVAL_MS: Duration = Duration::from_millis(100);
+const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
+const TUNER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 pub struct AmplifierApp {
     processor_manager: ProcessorManager,
@@ -133,13 +134,13 @@ impl AmplifierApp {
 
     pub fn subscription(&self) -> Subscription<Message> {
         let rebuild_sub = if self.dirty_chain {
-            time::every(REBUILD_INTERVAL_MS).map(|_| Message::RebuildTick)
+            time::every(REBUILD_INTERVAL).map(|_| Message::RebuildTick)
         } else {
             Subscription::none()
         };
 
         let tuner_sub = if self.tuner_enabled {
-            time::every(Duration::from_millis(16)).map(|_| Message::TunerUpdate)
+            time::every(TUNER_POLL_INTERVAL).map(|_| Message::TunerUpdate)
         } else {
             Subscription::none()
         };
