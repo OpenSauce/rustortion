@@ -321,14 +321,8 @@ impl AmplifierApp {
             }
             Message::TunerUpdate => {
                 if self.tuner_enabled {
-                    let mut latest_info = None;
-                    while let Some(info) = self.processor_manager.poll_tuner_info() {
-                        latest_info = Some(info);
-                    }
-
-                    if let Some(info) = latest_info {
-                        self.tuner_dialog.update(info);
-                    }
+                    self.tuner_dialog
+                        .update(self.processor_manager.poll_tuner_info());
                 }
             }
         }

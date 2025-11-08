@@ -5,9 +5,9 @@ use crate::audio::recorder::Recorder;
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
 use crate::sim::chain::AmplifierChain;
-use crate::sim::tuner::{Tuner, TunerInfo};
+use crate::sim::tuner::Tuner;
 use anyhow::{Context, Result};
-use crossbeam::channel::{Receiver, Sender};
+use crossbeam::channel::Receiver;
 use jack::{Client, Control, Frames, ProcessHandler, ProcessScope};
 use log::{debug, error, warn};
 
@@ -30,11 +30,8 @@ pub struct Processor {
     rx_updates: Receiver<ProcessorMessage>,
     audio_ports: Ports,
     samplers: Samplers,
-    tuner: Option<Tuner>,
+    tuner: Tuner,
     recorder: Option<Recorder>,
-    tx_tuner: Option<Sender<TunerInfo>>,
-    sample_rate: f32,
-    tuner_update_counter: usize,
 }
 
 impl Processor {
@@ -42,7 +39,7 @@ impl Processor {
         client: &Client,
         rx_updates: Receiver<ProcessorMessage>,
         oversample_factor: f64,
-        tx_tuner: Option<Sender<TunerInfo>>,
+        tuner: Tuner,
     ) -> Result<Self> {
         let audio_ports = Ports::new(client).context("failed to create audio ports manager")?;
         let samplers = Samplers::new(client.buffer_size() as usize, oversample_factor)
@@ -70,11 +67,8 @@ impl Processor {
             rx_updates,
             audio_ports,
             samplers,
-            tuner: None,
+            tuner,
             recorder: None,
-            tx_tuner,
-            sample_rate: client.sample_rate() as f32,
-            tuner_update_counter: 0,
         })
     }
 
@@ -109,15 +103,7 @@ impl Processor {
                     }
                 }
                 ProcessorMessage::SetTunerEnabled(enabled) => {
-                    if enabled {
-                        if self.tuner.is_none() {
-                            self.tuner = Some(Tuner::new(self.sample_rate));
-                            debug!("Tuner enabled");
-                        }
-                    } else {
-                        self.tuner = None;
-                        debug!("Tuner disabled");
-                    }
+                    self.tuner.set_enabled(enabled);
                 }
                 ProcessorMessage::StartRecording(recorder) => {
                     if self.recorder.is_some() {
@@ -155,19 +141,8 @@ impl ProcessHandler for Processor {
         let input = self.audio_ports.read_input(ps);
         self.samplers.copy_input(input);
 
-        if let Some(ref mut tuner) = self.tuner {
-            for &sample in input {
-                tuner.process_sample(sample);
-            }
-
-            self.tuner_update_counter += input.len();
-            if self.tuner_update_counter >= 2048 {
-                self.tuner_update_counter = 0;
-                if let Some(ref tx) = self.tx_tuner {
-                    let info = tuner.get_tuner_info();
-                    let _ = tx.try_send(info);
-                }
-            }
+        if self.tuner.is_enabled() {
+            self.tuner.process(input);
 
             // No output
             self.audio_ports.silence_output(ps);

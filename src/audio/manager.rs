@@ -1,13 +1,13 @@
 use anyhow::{Context, Result};
-use crossbeam::channel::{Receiver, Sender, bounded};
+use crossbeam::channel::{Sender, bounded};
 use jack::{AsyncClient, Client, ClientOptions};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 
 use crate::audio::processor::{Processor, ProcessorMessage};
 use crate::audio::recorder::Recorder;
 use crate::gui::settings::AudioSettings;
 use crate::sim::chain::AmplifierChain;
-use crate::sim::tuner::TunerInfo;
+use crate::sim::tuner::{Tuner, TunerHandle, TunerInfo};
 
 /// Manages the audio processing chain and JACK client
 pub struct ProcessorManager {
@@ -16,12 +16,17 @@ pub struct ProcessorManager {
     tx_updates: Sender<ProcessorMessage>,
     sample_rate: f32,
     current_settings: AudioSettings,
-    rx_tuner: Receiver<crate::sim::tuner::TunerInfo>,
+    tuner_handle: TunerHandle,
 }
 
 /// JACK notifications handler
 struct Notifications;
-impl jack::NotificationHandler for Notifications {}
+impl jack::NotificationHandler for Notifications {
+    fn sample_rate(&mut self, _: &Client, sample_rate: jack::Frames) -> jack::Control {
+        debug!("JACK sample rate changed to {}", sample_rate);
+        jack::Control::Continue
+    }
+}
 
 impl ProcessorManager {
     /// Creates a new ProcessorManager
@@ -32,15 +37,10 @@ impl ProcessorManager {
         let sample_rate = client.sample_rate() as f32;
 
         let (tx_amp, rx_amp) = bounded::<ProcessorMessage>(10);
-        let (tx_tuner, rx_tuner) = bounded::<TunerInfo>(5); // NEW
+        let (tuner, handle) = Tuner::new(sample_rate);
 
-        let processor = Processor::new(
-            &client,
-            rx_amp,
-            settings.oversampling_factor.into(),
-            Some(tx_tuner.clone()),
-        )
-        .context("error creating processor")?;
+        let processor = Processor::new(&client, rx_amp, settings.oversampling_factor.into(), tuner)
+            .context("error creating processor")?;
 
         let active_client = client
             .activate_async(Notifications, processor)
@@ -51,7 +51,7 @@ impl ProcessorManager {
             tx_updates: tx_amp,
             sample_rate,
             current_settings: settings.clone(),
-            rx_tuner,
+            tuner_handle: handle,
         };
 
         // Auto-connect if requested
@@ -232,8 +232,8 @@ impl ProcessorManager {
         });
     }
 
-    pub fn poll_tuner_info(&self) -> Option<TunerInfo> {
-        self.rx_tuner.try_recv().ok()
+    pub fn poll_tuner_info(&self) -> TunerInfo {
+        self.tuner_handle.get_tuner_info()
     }
 
     /// Returns the sample rate
