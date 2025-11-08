@@ -60,6 +60,7 @@ impl Tuner {
     pub fn set_enabled(&mut self, enabled: bool) {
         self.enabled = enabled;
         if !enabled {
+            self.buffer.clear();
             self.info.store(Arc::new(TunerInfo::default()));
         }
     }
@@ -81,7 +82,7 @@ impl Tuner {
         let mut best_period = 0;
         let mut min_diff = f32::MAX;
 
-        for lag in min_period..max_period.min(BUFFER_SIZE / 2) {
+        for lag in min_period..max_period.min(self.buffer.len() / 2) {
             let mut diff = 0.0;
             for i in 0..(self.buffer.len() - lag) {
                 diff += (self.buffer[i] - self.buffer[i + lag]).abs();
