@@ -1,4 +1,5 @@
 use anyhow::Result;
+use anyhow::anyhow;
 use crossbeam::channel::{Receiver, Sender, bounded};
 use hound::WavWriter;
 use log::{error, info};
@@ -46,13 +47,14 @@ impl Recorder {
             block.push(v);
             block.push(v);
         }
+
         if let Err(err) = self.tx.try_send(block) {
             match err {
                 crossbeam::channel::TrySendError::Full(_) => {
                     error!("Recorder channel full, dropping audio block");
                 }
                 crossbeam::channel::TrySendError::Disconnected(_) => {
-                    error!("Recorder channel disconnected");
+                    return Err(anyhow!("Recorder channel disconnected"));
                 }
             }
         }
