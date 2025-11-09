@@ -34,6 +34,7 @@ impl Default for AudioSettings {
 pub struct Settings {
     pub audio: AudioSettings,
     pub recording_dir: String,
+    pub ir_directory: String,
 }
 
 impl Default for Settings {
@@ -41,6 +42,7 @@ impl Default for Settings {
         Self {
             audio: AudioSettings::default(),
             recording_dir: "./recordings".to_string(),
+            ir_directory: "./impulse_responses".to_string(),
         }
     }
 }
