@@ -8,14 +8,14 @@ type AudioBlock = Vec<i16>;
 const BLOCK_CHANNEL_CAPACITY: usize = 32;
 
 pub struct Recorder {
-    tx: Sender<AudioBlock>,
+    recorder_sender: Sender<AudioBlock>,
     handle: thread::JoinHandle<()>,
 }
 
 impl Recorder {
     /// Creates a new Recorder instance.
     pub fn new(sample_rate: u32, record_dir: &str) -> Result<Self> {
-        let (tx, rx) = bounded::<AudioBlock>(BLOCK_CHANNEL_CAPACITY);
+        let (recorder_sender, recorder_receiver) = bounded::<AudioBlock>(BLOCK_CHANNEL_CAPACITY);
         fs::create_dir_all(record_dir)?;
 
         let filename = format!(
@@ -24,15 +24,19 @@ impl Recorder {
         );
         info!("Recording to: {filename}");
 
-        let handle = thread::spawn(move || run_writer_thread(sample_rate, filename, rx));
+        let handle =
+            thread::spawn(move || run_writer_thread(sample_rate, filename, recorder_receiver));
 
-        Ok(Self { tx, handle })
+        Ok(Self {
+            recorder_sender,
+            handle,
+        })
     }
 
     /// Stops the recording and waits for the writer thread to finish.
     /// This is needed for WAV files to be finalized properly.
     pub fn stop(self) -> Result<()> {
-        drop(self.tx);
+        drop(self.recorder_sender);
         self.handle
             .join()
             .map_err(|e| anyhow::anyhow!("Writer thread panicked (join failed): {:?}", e))
@@ -46,14 +50,14 @@ impl Recorder {
             block.push(v);
             block.push(v);
         }
-        self.tx
+        self.recorder_sender
             .send(block)
             .map_err(|e| anyhow::anyhow!("Failed to send audio block on channel: {}", e))
     }
 }
 
 /// Runs the writer thread, that writes audio blocks received over its channel to a WAV file.
-fn run_writer_thread(sample_rate: u32, filename: String, rx: Receiver<AudioBlock>) {
+fn run_writer_thread(sample_rate: u32, filename: String, recorder_receiver: Receiver<AudioBlock>) {
     let spec = hound::WavSpec {
         channels: 2,
         sample_rate,
@@ -69,7 +73,7 @@ fn run_writer_thread(sample_rate: u32, filename: String, rx: Receiver<AudioBlock
         }
     };
 
-    for block in rx {
+    for block in recorder_receiver {
         for &sample in &block {
             if let Err(e) = writer.write_sample(sample) {
                 error!("Failed to write sample to WAV file '{filename}': {e}");

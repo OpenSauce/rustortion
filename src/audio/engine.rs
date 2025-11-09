@@ -24,14 +24,14 @@ pub struct Engine {
     /// IR Cabinet processor
     ir_cabinet: Option<IrCabinet>,
     /// Channel for updating the amplifier chain.
-    rx_updates: Receiver<EngineMessage>,
+    engine_receiver: Receiver<EngineMessage>,
     samplers: Samplers,
     tuner: Tuner,
     recorder: Option<Recorder>,
 }
 
 pub struct EngineHandle {
-    tx_engine_updates: Sender<EngineMessage>,
+    engine_sender: Sender<EngineMessage>,
 }
 
 impl Engine {
@@ -40,20 +40,18 @@ impl Engine {
         samplers: Samplers,
         ir_cabinet: Option<IrCabinet>,
     ) -> Result<(Self, EngineHandle)> {
-        let (tx_amp, rx_amp) = bounded::<EngineMessage>(10);
+        let (engine_sender, engine_receiver) = bounded::<EngineMessage>(10);
 
         Ok((
             Self {
                 chain: Box::new(AmplifierChain::new()),
                 ir_cabinet,
-                rx_updates: rx_amp,
+                engine_receiver,
                 samplers,
                 tuner,
                 recorder: None,
             },
-            EngineHandle {
-                tx_engine_updates: tx_amp,
-            },
+            EngineHandle { engine_sender },
         ))
     }
 
@@ -95,7 +93,7 @@ impl Engine {
     }
 
     pub fn handle_messages(&mut self) {
-        if let Ok(message) = self.rx_updates.try_recv() {
+        if let Ok(message) = self.engine_receiver.try_recv() {
             match message {
                 EngineMessage::SetAmpChain(chain) => {
                     self.chain = chain;
@@ -169,11 +167,9 @@ impl Drop for Engine {
 
 impl EngineHandle {
     pub fn send(&self, message: EngineMessage) {
-        self.tx_engine_updates
-            .try_send(message)
-            .unwrap_or_else(|e| {
-                error!("Failed to send new amplifier chain: {e}");
-            });
+        self.engine_sender.try_send(message).unwrap_or_else(|e| {
+            error!("Failed to send new amplifier chain: {e}");
+        });
     }
 
     pub fn set_ir_cabinet(&self, ir_name: Option<String>) {
