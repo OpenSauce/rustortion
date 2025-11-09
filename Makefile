@@ -25,3 +25,6 @@ test:
 
 bench:
 	cargo bench
+
+cover:
+	cargo tarpaulin
