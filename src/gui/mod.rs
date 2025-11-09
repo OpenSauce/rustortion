@@ -9,11 +9,11 @@ pub use app::AmplifierApp;
 use iced::{Font, window};
 pub use messages::Message;
 
-use crate::{audio::manager::ProcessorManager, gui::settings::Settings};
+use crate::{audio::manager::Manager, gui::settings::Settings};
 
 pub const DEFAULT_FONT: Font = Font::MONOSPACE;
 
-pub fn start(processor_manager: ProcessorManager, settings: Settings) -> iced::Result {
+pub fn start(audio_manager: Manager, settings: Settings) -> iced::Result {
     iced::application("Rustortion", AmplifierApp::update, AmplifierApp::view)
         .subscription(AmplifierApp::subscription)
         .window(iced::window::Settings {
@@ -24,7 +24,7 @@ pub fn start(processor_manager: ProcessorManager, settings: Settings) -> iced::R
         .default_font(DEFAULT_FONT)
         .run_with(move || {
             (
-                AmplifierApp::new(processor_manager, settings),
+                AmplifierApp::new(audio_manager, settings),
                 window::get_oldest().and_then(|id| window::maximize(id, true)),
             )
         })

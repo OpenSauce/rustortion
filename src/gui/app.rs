@@ -2,7 +2,7 @@ use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
 use log::{error, info};
 use std::path::Path;
 
-use crate::audio::manager::ProcessorManager;
+use crate::audio::manager::Manager;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::{
     control::Control, dialogs::settings::SettingsDialog, dialogs::tuner::TunerDisplay,
@@ -19,7 +19,7 @@ const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
 const TUNER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 pub struct AmplifierApp {
-    processor_manager: ProcessorManager,
+    audio_manager: Manager,
     stages: Vec<StageConfig>,
     is_recording: bool,
     preset_manager: PresetManager,
@@ -38,7 +38,7 @@ pub struct AmplifierApp {
 }
 
 impl AmplifierApp {
-    pub fn new(processor_manager: ProcessorManager, settings: Settings) -> Self {
+    pub fn new(audio_manager: Manager, settings: Settings) -> Self {
         let preset_manager = PresetManager::new(PRESET_DIR).unwrap_or_else(|e| {
             error!("Failed to create preset manager: {e}");
 
@@ -69,12 +69,12 @@ impl AmplifierApp {
 
             // Set the first IR as active if available
             if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
-                processor_manager.set_ir_cabinet(Some(first_ir));
+                audio_manager.set_ir_cabinet(Some(first_ir));
             }
         }
 
         Self {
-            processor_manager,
+            audio_manager,
             stages,
             is_recording: false,
             preset_manager,
@@ -219,7 +219,7 @@ impl AmplifierApp {
             Message::CancelOverwritePreset => {
                 self.preset_bar.hide_overwrite_confirmation();
             }
-            Message::StartRecording => match self.processor_manager.enable_recording() {
+            Message::StartRecording => match self.audio_manager.enable_recording() {
                 Ok(()) => {
                     self.is_recording = true;
                     info!("Recording started");
@@ -229,14 +229,14 @@ impl AmplifierApp {
                 }
             },
             Message::StopRecording => {
-                self.processor_manager.disable_recording();
+                self.audio_manager.disable_recording();
                 self.is_recording = false;
                 info!("Recording stopped");
             }
 
             Message::OpenSettings => {
-                let inputs = self.processor_manager.get_available_inputs();
-                let outputs = self.processor_manager.get_available_outputs();
+                let inputs = self.audio_manager.get_available_inputs();
+                let outputs = self.audio_manager.get_available_outputs();
                 self.settings_dialog
                     .show(&self.settings.audio, inputs, outputs);
             }
@@ -248,7 +248,7 @@ impl AmplifierApp {
                 self.settings.audio = new_audio_settings.clone();
 
                 // Apply to processor manager
-                if let Err(e) = self.processor_manager.apply_settings(new_audio_settings) {
+                if let Err(e) = self.audio_manager.apply_settings(new_audio_settings) {
                     error!("Failed to apply audio settings: {e}");
                 }
 
@@ -261,8 +261,8 @@ impl AmplifierApp {
                 info!("Audio settings applied successfully");
             }
             Message::RefreshPorts => {
-                let inputs = self.processor_manager.get_available_inputs();
-                let outputs = self.processor_manager.get_available_outputs();
+                let inputs = self.audio_manager.get_available_inputs();
+                let outputs = self.audio_manager.get_available_outputs();
                 self.settings_dialog
                     .show(&self.settings.audio, inputs, outputs);
             }
@@ -282,22 +282,22 @@ impl AmplifierApp {
             Message::IrSelected(ir_name) => {
                 self.ir_cabinet_control
                     .set_selected_ir(Some(ir_name.clone()));
-                self.processor_manager.set_ir_cabinet(Some(ir_name));
+                self.audio_manager.set_ir_cabinet(Some(ir_name));
             }
             Message::IrBypassed(bypassed) => {
                 self.ir_cabinet_control.set_bypassed(bypassed);
-                self.processor_manager.set_ir_bypass(bypassed);
+                self.audio_manager.set_ir_bypass(bypassed);
             }
             Message::IrGainChanged(gain) => {
                 self.ir_cabinet_control.set_gain(gain);
-                self.processor_manager.set_ir_gain(gain);
+                self.audio_manager.set_ir_gain(gain);
             }
             Message::RefreshIrs => {
                 if let Ok(irs) = Self::scan_ir_directory() {
                     self.ir_cabinet_control.set_available_irs(irs);
                     // Re-apply current selection
                     if let Some(selected) = self.ir_cabinet_control.get_selected_ir() {
-                        self.processor_manager.set_ir_cabinet(Some(selected));
+                        self.audio_manager.set_ir_cabinet(Some(selected));
                     }
                 }
             }
@@ -313,16 +313,16 @@ impl AmplifierApp {
 
                 if self.tuner_enabled {
                     self.tuner_dialog.show();
-                    self.processor_manager.set_tuner_enabled(true);
+                    self.audio_manager.set_tuner_enabled(true);
                 } else {
                     self.tuner_dialog.hide();
-                    self.processor_manager.set_tuner_enabled(false);
+                    self.audio_manager.set_tuner_enabled(false);
                 }
             }
             Message::TunerUpdate => {
                 if self.tuner_enabled {
                     self.tuner_dialog
-                        .update(self.processor_manager.poll_tuner_info());
+                        .update(self.audio_manager.poll_tuner_info());
                 }
             }
         }
@@ -448,9 +448,9 @@ impl AmplifierApp {
     }
 
     fn update_processor_chain(&self) {
-        let sample_rate = self.processor_manager.sample_rate();
+        let sample_rate = self.audio_manager.sample_rate();
         let chain = self.build_amplifier_chain(sample_rate);
-        self.processor_manager.set_amp_chain(chain);
+        self.audio_manager.set_amp_chain(chain);
     }
 
     fn with_temp_settings<F: FnOnce(&mut crate::gui::settings::AudioSettings)>(&mut self, f: F) {
@@ -459,13 +459,13 @@ impl AmplifierApp {
         self.settings_dialog.update_temp_settings(tmp);
     }
 
-    fn build_amplifier_chain(&self, sample_rate: f32) -> AmplifierChain {
+    fn build_amplifier_chain(&self, sample_rate: usize) -> AmplifierChain {
         let mut chain = AmplifierChain::new();
 
-        let effective_sample_rate = sample_rate * self.settings.audio.oversampling_factor as f32;
+        let effective_sample_rate = sample_rate * self.settings.audio.oversampling_factor as usize;
 
         for cfg in &self.stages {
-            chain.add_stage(cfg.to_runtime(effective_sample_rate));
+            chain.add_stage(cfg.to_runtime(effective_sample_rate as f32));
         }
 
         chain

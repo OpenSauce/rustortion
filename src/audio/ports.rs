@@ -22,7 +22,7 @@ impl Ports {
         })
     }
 
-    pub fn read_input<'a>(&'a self, ps: &'a ProcessScope) -> &'a [f32] {
+    pub fn get_input<'a>(&'a self, ps: &'a ProcessScope) -> &'a [f32] {
         self.input.as_slice(ps)
     }
 

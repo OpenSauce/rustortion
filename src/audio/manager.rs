@@ -1,49 +1,49 @@
 use anyhow::{Context, Result};
 use crossbeam::channel::{Sender, bounded};
 use jack::{AsyncClient, Client, ClientOptions};
-use log::{debug, error, info, warn};
+use log::{error, info, warn};
 
-use crate::audio::processor::{Processor, ProcessorMessage};
+use crate::audio::engine::{Engine, EngineMessage};
+use crate::audio::jack::{NotificationHandler, ProcessHandler};
 use crate::audio::recorder::Recorder;
 use crate::gui::settings::AudioSettings;
 use crate::sim::chain::AmplifierChain;
 use crate::sim::tuner::{Tuner, TunerHandle, TunerInfo};
 
 /// Manages the audio processing chain and JACK client
-pub struct ProcessorManager {
-    active_client: AsyncClient<Notifications, Processor>,
+pub struct Manager {
+    active_client: AsyncClient<NotificationHandler, ProcessHandler>,
     /// GUI → audio thread: push a completely new preset
-    tx_updates: Sender<ProcessorMessage>,
-    sample_rate: f32,
+    tx_updates: Sender<EngineMessage>,
+    sample_rate: usize,
     current_settings: AudioSettings,
     tuner_handle: TunerHandle,
 }
 
-/// JACK notifications handler
-struct Notifications;
-impl jack::NotificationHandler for Notifications {
-    fn sample_rate(&mut self, _: &Client, sample_rate: jack::Frames) -> jack::Control {
-        debug!("JACK sample rate changed to {}", sample_rate);
-        jack::Control::Continue
-    }
-}
-
-impl ProcessorManager {
-    /// Creates a new ProcessorManager
+impl Manager {
     pub fn new(settings: AudioSettings) -> Result<Self> {
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
             .context("failed to create JACK client")?;
 
-        let sample_rate = client.sample_rate() as f32;
+        let sample_rate = client.sample_rate();
+        let buffer_size = client.buffer_size() as usize;
 
-        let (tx_amp, rx_amp) = bounded::<ProcessorMessage>(10);
+        let (tx_amp, rx_amp) = bounded::<EngineMessage>(10);
         let (tuner, handle) = Tuner::new(sample_rate);
 
-        let processor = Processor::new(&client, rx_amp, settings.oversampling_factor.into(), tuner)
-            .context("error creating processor")?;
+        let engine = Engine::new(
+            rx_amp,
+            settings.oversampling_factor.into(),
+            tuner,
+            buffer_size,
+            sample_rate,
+        )?;
+
+        let jack_handler =
+            ProcessHandler::new(&client, engine).context("failed to create process handler")?;
 
         let active_client = client
-            .activate_async(Notifications, processor)
+            .activate_async(NotificationHandler, jack_handler)
             .context("failed to activate async client")?;
 
         let mut manager = Self {
@@ -175,7 +175,7 @@ impl ProcessorManager {
     /// Push a new amplifier chain from the GUI side.
     /// Never blocks; silently drops if the buffer is full.
     pub fn set_amp_chain(&self, new_chain: AmplifierChain) {
-        let update = ProcessorMessage::SetAmpChain(Box::new(new_chain));
+        let update = EngineMessage::SetAmpChain(Box::new(new_chain));
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send new amplifier chain: {e}");
         });
@@ -185,7 +185,7 @@ impl ProcessorManager {
     pub fn enable_recording(&mut self) -> Result<()> {
         let recorder = Recorder::new(self.sample_rate as u32, "./recordings")?;
 
-        let update = ProcessorMessage::StartRecording(recorder);
+        let update = EngineMessage::StartRecording(recorder);
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send recording update: {e}");
         });
@@ -195,7 +195,7 @@ impl ProcessorManager {
 
     /// Disables recording.
     pub fn disable_recording(&mut self) {
-        let update = ProcessorMessage::StopRecording();
+        let update = EngineMessage::StopRecording();
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send recording update: {e}");
         });
@@ -203,7 +203,7 @@ impl ProcessorManager {
 
     /// Set the active IR cabinet
     pub fn set_ir_cabinet(&self, ir_name: Option<String>) {
-        let update = ProcessorMessage::SetIrCabinet(ir_name);
+        let update = EngineMessage::SetIrCabinet(ir_name);
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send IR cabinet update: {e}");
         });
@@ -211,7 +211,7 @@ impl ProcessorManager {
 
     /// Set IR cabinet bypass state
     pub fn set_ir_bypass(&self, bypass: bool) {
-        let update = ProcessorMessage::SetIrBypass(bypass);
+        let update = EngineMessage::SetIrBypass(bypass);
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send IR bypass update: {e}");
         });
@@ -219,14 +219,14 @@ impl ProcessorManager {
 
     /// Set IR cabinet gain level
     pub fn set_ir_gain(&self, gain: f32) {
-        let update = ProcessorMessage::SetIrGain(gain);
+        let update = EngineMessage::SetIrGain(gain);
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send IR gain update: {e}");
         });
     }
 
     pub fn set_tuner_enabled(&self, enabled: bool) {
-        let update = ProcessorMessage::SetTunerEnabled(enabled);
+        let update = EngineMessage::SetTunerEnabled(enabled);
         self.tx_updates.try_send(update).unwrap_or_else(|e| {
             error!("Failed to send tuner enable update: {e}");
         });
@@ -237,7 +237,7 @@ impl ProcessorManager {
     }
 
     /// Returns the sample rate
-    pub fn sample_rate(&self) -> f32 {
+    pub fn sample_rate(&self) -> usize {
         self.sample_rate
     }
 }
