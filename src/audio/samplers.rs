@@ -74,8 +74,17 @@ impl Samplers {
         })
     }
 
-    pub fn copy_input(&mut self, input: &[f32]) {
+    pub fn copy_input(&mut self, input: &[f32]) -> Result<()> {
+        if input.len() != self.input_buffer[0].len() {
+            return Err(anyhow::anyhow!(
+                "input buffer size mismatch: expected {}, got {}",
+                self.input_buffer[0].len(),
+                input.len()
+            ));
+        }
         self.input_buffer[0].copy_from_slice(input);
+
+        Ok(())
     }
 
     pub fn upsample(&mut self) -> Result<&mut [f32]> {
