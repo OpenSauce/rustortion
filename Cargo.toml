@@ -34,3 +34,7 @@ tempfile = "3.23"
 [[bench]]
 name = "impulse_responses"
 harness = false
+
+[[bench]]
+name = "engine"
+harness = false
