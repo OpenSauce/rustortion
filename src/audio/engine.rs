@@ -64,7 +64,7 @@ impl Engine {
             return Ok(());
         }
 
-        self.samplers.copy_input(input);
+        self.samplers.copy_input(input)?;
 
         let upsampled = self.samplers.upsample()?;
 
