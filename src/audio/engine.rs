@@ -1,7 +1,6 @@
-use anyhow::{Context, Result};
-use crossbeam::channel::Receiver;
-use log::{debug, error, warn};
-use std::path::Path;
+use anyhow::Result;
+use crossbeam::channel::{Receiver, Sender, bounded};
+use log::{debug, error};
 
 use crate::audio::recorder::Recorder;
 use crate::audio::samplers::Samplers;
@@ -31,36 +30,31 @@ pub struct Engine {
     recorder: Option<Recorder>,
 }
 
+pub struct EngineHandle {
+    tx_engine_updates: Sender<EngineMessage>,
+}
+
 impl Engine {
     pub fn new(
-        rx_updates: Receiver<EngineMessage>,
-        oversample_factor: f64,
         tuner: Tuner,
-        buffer_size: usize,
-        sample_rate: usize,
-    ) -> Result<Self> {
-        let samplers =
-            Samplers::new(buffer_size, oversample_factor).context("failed to create samplers")?;
+        samplers: Samplers,
+        ir_cabinet: Option<IrCabinet>,
+    ) -> Result<(Self, EngineHandle)> {
+        let (tx_amp, rx_amp) = bounded::<EngineMessage>(10);
 
-        let ir_cabinet = match IrCabinet::new(Path::new("./impulse_responses"), sample_rate) {
-            Ok(cab) => {
-                debug!("IR Cabinet loaded successfully");
-                Some(cab)
-            }
-            Err(e) => {
-                warn!("Failed to load IR Cabinet: {}", e);
-                None
-            }
-        };
-
-        Ok(Self {
-            chain: Box::new(AmplifierChain::new()),
-            ir_cabinet,
-            rx_updates,
-            samplers,
-            tuner,
-            recorder: None,
-        })
+        Ok((
+            Self {
+                chain: Box::new(AmplifierChain::new()),
+                ir_cabinet,
+                rx_updates: rx_amp,
+                samplers,
+                tuner,
+                recorder: None,
+            },
+            EngineHandle {
+                tx_engine_updates: tx_amp,
+            },
+        ))
     }
 
     pub fn process(&mut self, input: &[f32], output: &mut [f32]) -> Result<()> {
@@ -89,7 +83,6 @@ impl Engine {
 
         output[..downsampled.len()].copy_from_slice(downsampled);
 
-        #[allow(clippy::collapsible_if)]
         if let Some(recorder) = self.recorder.as_mut() {
             recorder.record_block(downsampled)?;
         }
@@ -171,5 +164,54 @@ impl Drop for Engine {
                 error!("Failed to stop recorder: {e}");
             }
         }
+    }
+}
+
+impl EngineHandle {
+    pub fn send(&self, message: EngineMessage) {
+        self.tx_engine_updates
+            .try_send(message)
+            .unwrap_or_else(|e| {
+                error!("Failed to send new amplifier chain: {e}");
+            });
+    }
+
+    pub fn set_ir_cabinet(&self, ir_name: Option<String>) {
+        let update = EngineMessage::SetIrCabinet(ir_name);
+        self.send(update);
+    }
+
+    pub fn set_ir_bypass(&self, bypass: bool) {
+        let update = EngineMessage::SetIrBypass(bypass);
+        self.send(update);
+    }
+
+    pub fn set_ir_gain(&self, gain: f32) {
+        let update = EngineMessage::SetIrGain(gain);
+        self.send(update);
+    }
+
+    pub fn set_tuner_enabled(&self, enabled: bool) {
+        let update = EngineMessage::SetTunerEnabled(enabled);
+        self.send(update);
+    }
+
+    pub fn set_amp_chain(&self, new_chain: AmplifierChain) {
+        let update = EngineMessage::SetAmpChain(Box::new(new_chain));
+        self.send(update);
+    }
+
+    pub fn start_recording(&self, sample_rate: usize, output_dir: &str) -> Result<()> {
+        let recorder = Recorder::new(sample_rate as u32, output_dir)?;
+
+        let update = EngineMessage::StartRecording(recorder);
+        self.send(update);
+
+        Ok(())
+    }
+
+    pub fn stop_recording(&self) {
+        let update = EngineMessage::StopRecording();
+        self.send(update);
     }
 }

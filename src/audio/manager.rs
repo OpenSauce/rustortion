@@ -1,23 +1,21 @@
 use anyhow::{Context, Result};
-use crossbeam::channel::{Sender, bounded};
 use jack::{AsyncClient, Client, ClientOptions};
 use log::{error, info, warn};
+use std::path::Path;
 
-use crate::audio::engine::{Engine, EngineMessage};
+use crate::audio::engine::Engine;
+use crate::audio::engine::EngineHandle;
 use crate::audio::jack::{NotificationHandler, ProcessHandler};
-use crate::audio::recorder::Recorder;
+use crate::audio::samplers::Samplers;
 use crate::gui::settings::AudioSettings;
-use crate::sim::chain::AmplifierChain;
-use crate::sim::tuner::{Tuner, TunerHandle, TunerInfo};
+use crate::ir::cabinet::IrCabinet;
+use crate::sim::tuner::{Tuner, TunerHandle};
 
-/// Manages the audio processing chain and JACK client
 pub struct Manager {
     active_client: AsyncClient<NotificationHandler, ProcessHandler>,
-    /// GUI → audio thread: push a completely new preset
-    tx_updates: Sender<EngineMessage>,
-    sample_rate: usize,
     current_settings: AudioSettings,
     tuner_handle: TunerHandle,
+    engine_handle: EngineHandle,
 }
 
 impl Manager {
@@ -28,16 +26,21 @@ impl Manager {
         let sample_rate = client.sample_rate();
         let buffer_size = client.buffer_size() as usize;
 
-        let (tx_amp, rx_amp) = bounded::<EngineMessage>(10);
-        let (tuner, handle) = Tuner::new(sample_rate);
+        let (tuner, tuner_handle) = Tuner::new(sample_rate);
+        let samplers = Samplers::new(buffer_size, settings.oversampling_factor.into())?;
 
-        let engine = Engine::new(
-            rx_amp,
-            settings.oversampling_factor.into(),
-            tuner,
-            buffer_size,
-            sample_rate,
-        )?;
+        let ir_cabinet = match IrCabinet::new(Path::new("./impulse_responses"), sample_rate) {
+            Ok(cab) => {
+                info!("IR Cabinet loaded successfully");
+                Some(cab)
+            }
+            Err(e) => {
+                warn!("Failed to load IR Cabinet: {}", e);
+                None
+            }
+        };
+
+        let (engine, engine_handle) = Engine::new(tuner, samplers, ir_cabinet)?;
 
         let jack_handler =
             ProcessHandler::new(&client, engine).context("failed to create process handler")?;
@@ -48,10 +51,9 @@ impl Manager {
 
         let mut manager = Self {
             active_client,
-            tx_updates: tx_amp,
-            sample_rate,
             current_settings: settings.clone(),
-            tuner_handle: handle,
+            tuner_handle,
+            engine_handle,
         };
 
         // Auto-connect if requested
@@ -108,6 +110,14 @@ impl Manager {
                 settings.output_right_port
             );
         }
+    }
+
+    pub fn engine(&self) -> &EngineHandle {
+        &self.engine_handle
+    }
+
+    pub fn tuner(&self) -> &TunerHandle {
+        &self.tuner_handle
     }
 
     /// Reconnect with new settings
@@ -172,72 +182,7 @@ impl Manager {
             .collect()
     }
 
-    /// Push a new amplifier chain from the GUI side.
-    /// Never blocks; silently drops if the buffer is full.
-    pub fn set_amp_chain(&self, new_chain: AmplifierChain) {
-        let update = EngineMessage::SetAmpChain(Box::new(new_chain));
-        self.tx_updates.try_send(update).unwrap_or_else(|e| {
-            error!("Failed to send new amplifier chain: {e}");
-        });
-    }
-
-    /// Enables recording.
-    pub fn enable_recording(&mut self) -> Result<()> {
-        let recorder = Recorder::new(self.sample_rate as u32, "./recordings")?;
-
-        let update = EngineMessage::StartRecording(recorder);
-        self.tx_updates.try_send(update).unwrap_or_else(|e| {
-            error!("Failed to send recording update: {e}");
-        });
-
-        Ok(())
-    }
-
-    /// Disables recording.
-    pub fn disable_recording(&mut self) {
-        let update = EngineMessage::StopRecording();
-        self.tx_updates.try_send(update).unwrap_or_else(|e| {
-            error!("Failed to send recording update: {e}");
-        });
-    }
-
-    /// Set the active IR cabinet
-    pub fn set_ir_cabinet(&self, ir_name: Option<String>) {
-        let update = EngineMessage::SetIrCabinet(ir_name);
-        self.tx_updates.try_send(update).unwrap_or_else(|e| {
-            error!("Failed to send IR cabinet update: {e}");
-        });
-    }
-
-    /// Set IR cabinet bypass state
-    pub fn set_ir_bypass(&self, bypass: bool) {
-        let update = EngineMessage::SetIrBypass(bypass);
-        self.tx_updates.try_send(update).unwrap_or_else(|e| {
-            error!("Failed to send IR bypass update: {e}");
-        });
-    }
-
-    /// Set IR cabinet gain level
-    pub fn set_ir_gain(&self, gain: f32) {
-        let update = EngineMessage::SetIrGain(gain);
-        self.tx_updates.try_send(update).unwrap_or_else(|e| {
-            error!("Failed to send IR gain update: {e}");
-        });
-    }
-
-    pub fn set_tuner_enabled(&self, enabled: bool) {
-        let update = EngineMessage::SetTunerEnabled(enabled);
-        self.tx_updates.try_send(update).unwrap_or_else(|e| {
-            error!("Failed to send tuner enable update: {e}");
-        });
-    }
-
-    pub fn poll_tuner_info(&self) -> TunerInfo {
-        self.tuner_handle.get_tuner_info()
-    }
-
-    /// Returns the sample rate
     pub fn sample_rate(&self) -> usize {
-        self.sample_rate
+        self.active_client.as_client().sample_rate()
     }
 }
