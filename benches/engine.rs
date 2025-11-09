@@ -236,7 +236,7 @@ fn bench_engine_ir_lengths(c: &mut Criterion) {
 
     for &ir_length in &[1_000, 13_000, 34_000, 87_000] {
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}samples", ir_length)),
+            BenchmarkId::from_parameter(format!("{} samples", ir_length)),
             &ir_length,
             |b, &ir_length| {
                 let (mut engine, _) = build_engine(OVERSAMPLE, BUFFER_SIZE, Some(ir_length));
