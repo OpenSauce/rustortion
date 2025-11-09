@@ -45,7 +45,7 @@ __________                __                 __  .__
     info!("  Auto-connect: {}", settings.audio.auto_connect);
 
     let audio_manager =
-        Manager::new(settings.audio.clone()).context("failed to create ProcessorManager")?;
+        Manager::new(settings.clone()).context("failed to create ProcessorManager")?;
 
     start(audio_manager, settings).map_err(|e| anyhow::anyhow!("GUI error: {}", e))?;
 

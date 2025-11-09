@@ -8,18 +8,19 @@ use crate::audio::engine::EngineHandle;
 use crate::audio::jack::{NotificationHandler, ProcessHandler};
 use crate::audio::samplers::Samplers;
 use crate::gui::settings::AudioSettings;
+use crate::gui::settings::Settings;
 use crate::ir::cabinet::IrCabinet;
 use crate::sim::tuner::{Tuner, TunerHandle};
 
 pub struct Manager {
     active_client: AsyncClient<NotificationHandler, ProcessHandler>,
-    current_settings: AudioSettings,
+    current_settings: Settings,
     tuner_handle: TunerHandle,
     engine_handle: EngineHandle,
 }
 
 impl Manager {
-    pub fn new(settings: AudioSettings) -> Result<Self> {
+    pub fn new(settings: Settings) -> Result<Self> {
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
             .context("failed to create JACK client")?;
 
@@ -27,9 +28,9 @@ impl Manager {
         let buffer_size = client.buffer_size() as usize;
 
         let (tuner, tuner_handle) = Tuner::new(sample_rate);
-        let samplers = Samplers::new(buffer_size, settings.oversampling_factor.into())?;
+        let samplers = Samplers::new(buffer_size, settings.audio.oversampling_factor.into())?;
 
-        let ir_cabinet = match IrCabinet::new(Path::new("./impulse_responses"), sample_rate) {
+        let ir_cabinet = match IrCabinet::new(Path::new(&settings.ir_directory), sample_rate) {
             Ok(cab) => {
                 info!("IR Cabinet loaded successfully");
                 Some(cab)
@@ -57,8 +58,8 @@ impl Manager {
         };
 
         // Auto-connect if requested
-        if settings.auto_connect {
-            manager.connect_ports(&settings);
+        if settings.audio.auto_connect {
+            manager.connect_ports(&settings.audio);
         }
 
         Ok(manager)
@@ -128,7 +129,7 @@ impl Manager {
         self.disconnect_all();
 
         // Update settings
-        self.current_settings = new_settings.clone();
+        self.current_settings.audio = new_settings.clone();
 
         // Reconnect with new settings
         if new_settings.auto_connect {

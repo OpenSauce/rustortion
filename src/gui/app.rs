@@ -230,6 +230,7 @@ impl AmplifierApp {
                     error!("Failed to start recording: {}", e);
                 } else {
                     self.is_recording = true;
+                    info!("Recording started");
                 }
             }
             Message::StopRecording => {
