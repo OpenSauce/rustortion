@@ -3,7 +3,7 @@ use iced::widget::{button, column, container, pick_list, row, text, toggler};
 use iced::{Alignment, Element, Length};
 
 use crate::gui::messages::Message;
-use crate::gui::settings::AudioSettings;
+use crate::settings::AudioSettings;
 
 pub struct SettingsDialog {
     temp_settings: AudioSettings,

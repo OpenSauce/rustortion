@@ -7,9 +7,8 @@ use crate::audio::engine::Engine;
 use crate::audio::engine::EngineHandle;
 use crate::audio::jack::{NotificationHandler, ProcessHandler};
 use crate::audio::samplers::Samplers;
-use crate::gui::settings::AudioSettings;
-use crate::gui::settings::Settings;
 use crate::ir::cabinet::IrCabinet;
+use crate::settings::{AudioSettings, Settings};
 use crate::sim::tuner::{Tuner, TunerHandle};
 
 pub struct Manager {
@@ -30,7 +29,7 @@ impl Manager {
         let (tuner, tuner_handle) = Tuner::new(sample_rate);
         let samplers = Samplers::new(buffer_size, settings.audio.oversampling_factor.into())?;
 
-        let ir_cabinet = match IrCabinet::new(Path::new(&settings.ir_directory), sample_rate) {
+        let ir_cabinet = match IrCabinet::new(Path::new(&settings.ir_dir), sample_rate) {
             Ok(cab) => {
                 info!("IR Cabinet loaded successfully");
                 Some(cab)

@@ -1,59 +1,6 @@
-use crate::gui::config::StageType;
 use crate::sim::stages::{
     clipper::ClipperType, filter::FilterType, poweramp::PowerAmpType, tonestack::ToneStackModel,
 };
-
-#[derive(Debug, Clone)]
-pub enum Message {
-    // App-level messages
-    AddStage,
-    RemoveStage(usize),
-    MoveStageUp(usize),
-    MoveStageDown(usize),
-    StageTypeSelected(StageType),
-    RebuildTick,
-
-    // Preset settings
-    PresetSelected(String),
-    SavePreset,
-    CancelSavePreset,
-    ShowSavePreset,
-    PresetNameChanged(String),
-    UpdateCurrentPreset,
-    DeletePreset(String),
-    ConfirmOverwritePreset,
-    CancelOverwritePreset,
-
-    // Recording messages
-    StartRecording,
-    StopRecording,
-
-    // Settings messages
-    OpenSettings,
-    CancelSettings,
-    ApplySettings,
-    RefreshPorts,
-    InputPortChanged(String),
-    OutputLeftPortChanged(String),
-    OutputRightPortChanged(String),
-    BufferSizeChanged(u32),
-    SampleRateChanged(u32),
-    AutoConnectToggled(bool),
-    OversamplingFactorChanged(u32),
-
-    // IR Cabinet messages
-    IrSelected(String),
-    IrBypassed(bool),
-    IrGainChanged(f32),
-    RefreshIrs,
-
-    // Stage-specific messages
-    Stage(usize, StageMessage),
-
-    // Tuner messages
-    ToggleTuner,
-    TunerUpdate,
-}
 
 #[derive(Debug, Clone)]
 pub enum StageMessage {
