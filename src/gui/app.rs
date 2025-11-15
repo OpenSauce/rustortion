@@ -6,15 +6,14 @@ use crate::audio::manager::Manager;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::{
     control::Control, dialogs::settings::SettingsDialog, dialogs::tuner::TunerDisplay,
-    preset_bar::PresetBar, stage_list::StageList,
+    stage_list::StageList,
 };
 use crate::gui::config::{StageConfig, StageType};
+use crate::gui::handlers::preset::PresetHandler;
 use crate::gui::messages::Message;
-use crate::gui::preset::{Preset, PresetManager};
 use crate::gui::settings::Settings;
 use crate::sim::chain::AmplifierChain;
 
-const PRESET_DIR: &str = "./presets";
 const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
 const TUNER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
@@ -22,40 +21,25 @@ pub struct AmplifierApp {
     audio_manager: Manager,
     stages: Vec<StageConfig>,
     is_recording: bool,
-    preset_manager: PresetManager,
-    selected_preset: Option<String>,
-    preset_bar: PresetBar,
     stage_list: StageList,
     control_bar: Control,
-    new_preset_name: String,
-    show_save_input: bool,
     settings: Settings,
     settings_dialog: SettingsDialog,
     dirty_chain: bool,
     ir_cabinet_control: IrCabinetControl,
     tuner_dialog: TunerDisplay,
     tuner_enabled: bool,
+    preset_handler: PresetHandler,
 }
 
 impl AmplifierApp {
     pub fn new(audio_manager: Manager, settings: Settings) -> Self {
-        let preset_manager = PresetManager::new(PRESET_DIR).unwrap_or_else(|e| {
-            error!("Failed to create preset manager: {e}");
+        let preset_handler = PresetHandler::new().unwrap();
 
-            // Create an empty preset manager as fallback
-            PresetManager::new(std::env::temp_dir().join("rustortion_presets_fallback"))
-                .expect("Failed to create fallback preset manager")
-        });
-
-        let presets = preset_manager.get_presets();
-        let selected_preset = presets.first().map(|p| p.name.clone());
-        let preset_bar = PresetBar::new(presets, selected_preset.clone());
-
-        let stages = selected_preset
-            .as_deref()
-            .and_then(|n| preset_manager.get_preset_by_name(n))
-            .map(|p| p.stages.clone())
-            .unwrap_or_default();
+        let mut stages = Vec::new();
+        if let Some(preset) = preset_handler.get_selected_preset() {
+            stages = preset.stages.clone();
+        }
 
         let stage_list = StageList::new(stages.clone());
         let control_bar = Control::new(StageType::default());
@@ -77,13 +61,8 @@ impl AmplifierApp {
             audio_manager,
             stages,
             is_recording: false,
-            preset_manager,
-            selected_preset,
-            preset_bar,
             stage_list,
             control_bar,
-            new_preset_name: String::new(),
-            show_save_input: false,
             settings,
             settings_dialog,
             // Set dirty chain to true to trigger initial rebuild
@@ -91,6 +70,7 @@ impl AmplifierApp {
             ir_cabinet_control,
             tuner_dialog: TunerDisplay::new(),
             tuner_enabled: false,
+            preset_handler,
         }
     }
 
@@ -108,7 +88,7 @@ impl AmplifierApp {
 
         let main_content = column![
             top_bar,
-            self.preset_bar.view(),
+            self.preset_handler.view(),
             self.stage_list.view(),
             self.ir_cabinet_control.view(),
             self.control_bar.view(self.is_recording),
@@ -150,6 +130,10 @@ impl AmplifierApp {
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
+            Message::SetStages(stages) => {
+                self.stages = stages;
+                self.mark_stages_dirty();
+            }
             Message::RebuildTick => self.rebuild_if_dirty(),
             Message::AddStage => {
                 let new_stage = StageConfig::from(self.control_bar.selected());
@@ -176,48 +160,6 @@ impl AmplifierApp {
             }
             Message::StageTypeSelected(stage_type) => {
                 self.control_bar.set_selected_stage_type(stage_type);
-            }
-            Message::PresetSelected(preset_name) => {
-                if self.selected_preset.as_deref() != Some(preset_name.as_str()) {
-                    self.load_preset_by_name(&preset_name);
-                }
-            }
-            Message::ShowSavePreset => {
-                self.show_save_input = true;
-                self.preset_bar.show_save_input(true);
-            }
-            Message::CancelSavePreset => {
-                self.show_save_input = false;
-                self.new_preset_name.clear();
-                self.preset_bar.show_save_input(false);
-            }
-            Message::PresetNameChanged(name) => {
-                self.new_preset_name = name.clone();
-                self.preset_bar.set_new_preset_name(name);
-            }
-            Message::SavePreset => {
-                let name = self.new_preset_name.clone();
-                if !name.trim().is_empty() {
-                    self.save_preset_named(&name);
-                }
-            }
-            Message::UpdateCurrentPreset => {
-                if let Some(name) = self.selected_preset.clone() {
-                    self.save_preset_named(&name);
-                }
-            }
-            Message::DeletePreset(preset_name) => {
-                self.delete_preset(&preset_name);
-            }
-            Message::ConfirmOverwritePreset => {
-                let name = self.new_preset_name.clone();
-                if !name.trim().is_empty() {
-                    self.save_preset_named(&name);
-                }
-                self.preset_bar.hide_overwrite_confirmation();
-            }
-            Message::CancelOverwritePreset => {
-                self.preset_bar.hide_overwrite_confirmation();
             }
             Message::StartRecording => {
                 let sample_rate = self.audio_manager.sample_rate();
@@ -330,6 +272,7 @@ impl AmplifierApp {
                         .update(self.audio_manager.tuner().get_tuner_info());
                 }
             }
+            Message::Preset(msg) => return self.preset_handler.handle(msg, self.stages.clone()),
         }
 
         Task::none()
@@ -392,64 +335,6 @@ impl AmplifierApp {
     fn mark_stages_dirty(&mut self) {
         self.dirty_chain = true;
         self.stage_list.set_stages(&self.stages);
-    }
-
-    fn delete_preset(&mut self, preset_name: &str) {
-        if let Err(e) = self.preset_manager.delete_preset(preset_name) {
-            error!("Failed to delete preset: {e}");
-            return;
-        }
-
-        info!("Deleted preset: {preset_name}");
-
-        let presets = self.preset_manager.get_presets();
-        self.preset_bar.update_presets(presets);
-
-        if self.selected_preset.as_deref() == Some(preset_name) {
-            if let Some(first) = presets.first() {
-                self.stages = first.stages.clone();
-                self.selected_preset = Some(first.name.clone());
-                self.preset_bar
-                    .set_selected_preset(self.selected_preset.clone());
-            } else {
-                self.stages.clear();
-                self.selected_preset = None;
-                self.preset_bar.set_selected_preset(None);
-            }
-            self.mark_stages_dirty();
-        }
-    }
-
-    fn load_preset_by_name(&mut self, name: &str) {
-        if let Some(p) = self.preset_manager.get_preset_by_name(name) {
-            self.stages = p.stages.clone();
-            self.selected_preset = Some(name.to_owned());
-            self.preset_bar
-                .set_selected_preset(self.selected_preset.clone());
-            self.mark_stages_dirty();
-            info!("Loaded preset: {name}");
-        }
-    }
-
-    fn refresh_presets_and_select(&mut self, name: Option<String>) {
-        self.preset_bar
-            .update_presets(self.preset_manager.get_presets());
-        self.selected_preset = name.clone();
-        self.preset_bar.set_selected_preset(name);
-    }
-
-    fn save_preset_named(&mut self, name: &str) {
-        let preset = Preset::new(name.to_owned(), self.stages.clone());
-        match self.preset_manager.save_preset(&preset) {
-            Ok(()) => {
-                info!("Saved preset: {name}");
-                self.refresh_presets_and_select(Some(name.to_owned()));
-                self.show_save_input = false;
-                self.preset_bar.show_save_input(false);
-                self.new_preset_name.clear();
-            }
-            Err(e) => error!("Failed to save preset: {e}"),
-        }
     }
 
     fn update_processor_chain(&self) {

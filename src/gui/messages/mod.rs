@@ -1,0 +1,58 @@
+use crate::gui::config::{StageConfig, StageType};
+
+pub mod preset;
+pub mod stage;
+
+pub use preset::*;
+pub use stage::*;
+
+#[derive(Debug, Clone)]
+pub enum Message {
+    // App-level messages
+    AddStage,
+    RemoveStage(usize),
+    MoveStageUp(usize),
+    MoveStageDown(usize),
+    StageTypeSelected(StageType),
+    RebuildTick,
+    SetStages(Vec<StageConfig>),
+
+    // Preset settings
+    Preset(PresetMessage),
+
+    // Recording messages
+    StartRecording,
+    StopRecording,
+
+    // Settings messages
+    OpenSettings,
+    CancelSettings,
+    ApplySettings,
+    RefreshPorts,
+    InputPortChanged(String),
+    OutputLeftPortChanged(String),
+    OutputRightPortChanged(String),
+    BufferSizeChanged(u32),
+    SampleRateChanged(u32),
+    AutoConnectToggled(bool),
+    OversamplingFactorChanged(u32),
+
+    // IR Cabinet messages
+    IrSelected(String),
+    IrBypassed(bool),
+    IrGainChanged(f32),
+    RefreshIrs,
+
+    // Stage-specific messages
+    Stage(usize, StageMessage),
+
+    // Tuner messages
+    ToggleTuner,
+    TunerUpdate,
+}
+
+impl From<PresetMessage> for Message {
+    fn from(msg: PresetMessage) -> Self {
+        Message::Preset(msg)
+    }
+}

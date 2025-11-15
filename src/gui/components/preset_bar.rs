@@ -1,25 +1,24 @@
 use iced::widget::{button, container, pick_list, row, text, text_input};
-use iced::{Alignment, Element, Length};
+use iced::{Alignment, Element, Length, Task};
 
-use crate::gui::messages::Message;
-use crate::gui::preset::Preset;
+use crate::gui::messages::{Message, PresetGuiMessage, PresetMessage};
 
 pub struct PresetBar {
-    available_presets: Vec<String>,
-    selected_preset: Option<String>,
     new_preset_name: String,
     show_save_input: bool,
     show_overwrite_confirmation: bool,
     overwrite_target: String,
 }
 
-impl PresetBar {
-    pub fn new(presets: &[Preset], selected_preset: Option<String>) -> Self {
-        let available_presets = presets.iter().map(|p| p.name.clone()).collect();
+impl Default for PresetBar {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
+impl PresetBar {
+    pub fn new() -> Self {
         Self {
-            available_presets,
-            selected_preset,
             new_preset_name: String::new(),
             show_save_input: false,
             show_overwrite_confirmation: false,
@@ -27,12 +26,29 @@ impl PresetBar {
         }
     }
 
-    pub fn update_presets(&mut self, presets: &[Preset]) {
-        self.available_presets = presets.iter().map(|p| p.name.clone()).collect();
-    }
+    pub fn handle(&mut self, message: PresetGuiMessage) -> Task<Message> {
+        match message {
+            PresetGuiMessage::ShowSave => {
+                self.show_save_input(true);
+            }
+            PresetGuiMessage::CancelSave => {
+                self.show_save_input(false);
+            }
+            PresetGuiMessage::NameChanged(name) => {
+                self.set_new_preset_name(name);
+            }
+            PresetGuiMessage::ConfirmOverwrite => {
+                self.hide_overwrite_confirmation();
+                return Task::done(Message::Preset(PresetMessage::Save(
+                    self.new_preset_name.to_owned(),
+                )));
+            }
+            PresetGuiMessage::CancelOverwrite => {
+                self.hide_overwrite_confirmation();
+            }
+        }
 
-    pub fn set_selected_preset(&mut self, preset_name: Option<String>) {
-        self.selected_preset = preset_name;
+        Task::none()
     }
 
     pub fn set_new_preset_name(&mut self, name: String) {
@@ -58,25 +74,27 @@ impl PresetBar {
         self.overwrite_target.clear();
     }
 
-    pub fn view(&self) -> Element<'static, Message> {
+    pub fn view(
+        &self,
+        selected_preset: Option<String>,
+        available_presets: Vec<String>,
+    ) -> Element<'static, Message> {
         let preset_selector = row![
             text("Preset:").width(Length::Fixed(80.0)),
-            pick_list(
-                self.available_presets.clone(),
-                self.selected_preset.clone(),
-                Message::PresetSelected
-            )
+            pick_list(available_presets.clone(), selected_preset.clone(), |p| {
+                PresetMessage::Select(p).into()
+            })
             .width(Length::Fixed(200.0)),
         ]
         .spacing(10)
         .align_y(Alignment::Center);
 
-        // Show overwrite confirmation dialog
         if self.show_overwrite_confirmation {
             let confirmation_controls = row![
                 text(format!("Overwrite '{}'?", self.overwrite_target)),
-                button("Yes").on_press(Message::ConfirmOverwritePreset),
-                button("No").on_press(Message::CancelOverwritePreset),
+                button("Yes")
+                    .on_press(PresetMessage::Gui(PresetGuiMessage::ConfirmOverwrite).into()),
+                button("No").on_press(PresetMessage::Gui(PresetGuiMessage::CancelOverwrite).into()),
             ]
             .spacing(5)
             .align_y(Alignment::Center);
@@ -103,23 +121,26 @@ impl PresetBar {
         let save_controls = if self.show_save_input {
             row![
                 text_input("Preset name...", &self.new_preset_name)
-                    .on_input(Message::PresetNameChanged)
+                    .on_input(|p| PresetMessage::Gui(PresetGuiMessage::NameChanged(p)).into())
                     .width(Length::Fixed(150.0)),
-                button("Save").on_press(Message::SavePreset),
-                button("Cancel").on_press(Message::CancelSavePreset),
+                button("Save")
+                    .on_press(PresetMessage::Save(self.new_preset_name.to_owned()).into()),
+                button("Cancel").on_press(PresetMessage::Gui(PresetGuiMessage::CancelSave).into()),
             ]
             .spacing(5)
             .align_y(Alignment::Center)
         } else {
-            let mut controls = row![button("Save As...").on_press(Message::ShowSavePreset),];
+            let mut controls = row![
+                button("Save As...")
+                    .on_press(PresetMessage::Gui(PresetGuiMessage::ShowSave).into()),
+            ];
 
-            // Add Update and Delete buttons if a preset is selected
-            if let Some(ref preset_name) = self.selected_preset {
+            if let Some(ref preset_name) = selected_preset {
                 controls = controls
-                    .push(button("Update").on_press(Message::UpdateCurrentPreset))
+                    .push(button("Update").on_press(PresetMessage::Update.into()))
                     .push(
                         button("Delete")
-                            .on_press(Message::DeletePreset(preset_name.clone()))
+                            .on_press(PresetMessage::Delete(preset_name.clone()).into())
                             .style(iced::widget::button::danger),
                     );
             }
