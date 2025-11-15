@@ -16,8 +16,8 @@ pub struct PresetHandler {
 }
 
 impl PresetHandler {
-    pub fn new() -> Result<Self> {
-        let preset_manager = Manager::new()?;
+    pub fn new(preset_dir: &str) -> Result<Self> {
+        let preset_manager = Manager::new(preset_dir)?;
 
         let presets: Vec<String> = preset_manager
             .get_presets()

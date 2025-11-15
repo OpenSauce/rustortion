@@ -1,8 +1,8 @@
 use anyhow::{Context, Result};
 use log::info;
 use rustortion::audio::manager::Manager;
-use rustortion::gui::settings::Settings;
 use rustortion::gui::start;
+use rustortion::settings::Settings;
 
 pub fn main() -> Result<()> {
     dotenv::dotenv().ok();

@@ -4,7 +4,7 @@ use iced::{Alignment, Element, Length, Task};
 use crate::gui::messages::{Message, PresetGuiMessage, PresetMessage};
 
 pub struct PresetBar {
-    new_preset_name: String,
+    preset_name_input: String,
     show_save_input: bool,
     show_overwrite_confirmation: bool,
     overwrite_target: String,
@@ -19,7 +19,7 @@ impl Default for PresetBar {
 impl PresetBar {
     pub fn new() -> Self {
         Self {
-            new_preset_name: String::new(),
+            preset_name_input: String::new(),
             show_save_input: false,
             show_overwrite_confirmation: false,
             overwrite_target: String::new(),
@@ -40,7 +40,7 @@ impl PresetBar {
             PresetGuiMessage::ConfirmOverwrite => {
                 self.hide_overwrite_confirmation();
                 return Task::done(Message::Preset(PresetMessage::Save(
-                    self.new_preset_name.to_owned(),
+                    self.preset_name_input.to_owned(),
                 )));
             }
             PresetGuiMessage::CancelOverwrite => {
@@ -52,13 +52,13 @@ impl PresetBar {
     }
 
     pub fn set_new_preset_name(&mut self, name: String) {
-        self.new_preset_name = name;
+        self.preset_name_input = name;
     }
 
     pub fn show_save_input(&mut self, show: bool) {
         self.show_save_input = show;
         if !show {
-            self.new_preset_name.clear();
+            self.preset_name_input.clear();
             self.show_overwrite_confirmation = false;
             self.overwrite_target.clear();
         }
@@ -120,11 +120,11 @@ impl PresetBar {
 
         let save_controls = if self.show_save_input {
             row![
-                text_input("Preset name...", &self.new_preset_name)
+                text_input("Preset name...", &self.preset_name_input)
                     .on_input(|p| PresetMessage::Gui(PresetGuiMessage::NameChanged(p)).into())
                     .width(Length::Fixed(150.0)),
                 button("Save")
-                    .on_press(PresetMessage::Save(self.new_preset_name.to_owned()).into()),
+                    .on_press(PresetMessage::Save(self.preset_name_input.to_owned()).into()),
                 button("Cancel").on_press(PresetMessage::Gui(PresetGuiMessage::CancelSave).into()),
             ]
             .spacing(5)

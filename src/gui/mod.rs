@@ -3,13 +3,12 @@ pub mod components;
 pub mod config;
 pub mod handlers;
 pub mod messages;
-pub mod settings;
 
 pub use app::AmplifierApp;
 use iced::{Font, window};
 pub use messages::Message;
 
-use crate::{audio::manager::Manager, gui::settings::Settings};
+use crate::{audio::manager::Manager, settings::Settings};
 
 pub const DEFAULT_FONT: Font = Font::MONOSPACE;
 

@@ -4,16 +4,14 @@ use log::warn;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-const PRESET_DIR: &str = "./presets";
-
 pub struct Manager {
     presets_dir: PathBuf,
     presets: Vec<Preset>,
 }
 
 impl Manager {
-    pub fn new() -> Result<Self> {
-        let presets_dir = Path::new(PRESET_DIR).to_path_buf();
+    pub fn new(preset_dir: &str) -> Result<Self> {
+        let presets_dir = Path::new(preset_dir).to_path_buf();
         fs::create_dir_all(&presets_dir).context("Failed to create presets directory")?;
 
         let mut manager = Self {

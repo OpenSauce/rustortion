@@ -11,7 +11,7 @@ use crate::gui::components::{
 use crate::gui::config::{StageConfig, StageType};
 use crate::gui::handlers::preset::PresetHandler;
 use crate::gui::messages::Message;
-use crate::gui::settings::Settings;
+use crate::settings::{AudioSettings, Settings};
 use crate::sim::chain::AmplifierChain;
 
 const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
@@ -34,7 +34,7 @@ pub struct AmplifierApp {
 
 impl AmplifierApp {
     pub fn new(audio_manager: Manager, settings: Settings) -> Self {
-        let preset_handler = PresetHandler::new().unwrap();
+        let preset_handler = PresetHandler::new(&settings.preset_dir).unwrap();
 
         let mut stages = Vec::new();
         if let Some(preset) = preset_handler.get_selected_preset() {
@@ -343,7 +343,7 @@ impl AmplifierApp {
         self.audio_manager.engine().set_amp_chain(chain);
     }
 
-    fn with_temp_settings<F: FnOnce(&mut crate::gui::settings::AudioSettings)>(&mut self, f: F) {
+    fn with_temp_settings<F: FnOnce(&mut AudioSettings)>(&mut self, f: F) {
         let mut tmp = self.settings_dialog.get_settings();
         f(&mut tmp);
         self.settings_dialog.update_temp_settings(tmp);
