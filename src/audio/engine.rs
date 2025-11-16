@@ -2,6 +2,7 @@ use anyhow::Result;
 use crossbeam::channel::{Receiver, Sender, bounded};
 use log::{debug, error};
 
+use crate::audio::peak_meter::PeakMeter;
 use crate::audio::recorder::Recorder;
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
@@ -28,6 +29,7 @@ pub struct Engine {
     samplers: Samplers,
     tuner: Tuner,
     recorder: Option<Recorder>,
+    peak_meter: PeakMeter,
 }
 
 pub struct EngineHandle {
@@ -39,6 +41,7 @@ impl Engine {
         tuner: Tuner,
         samplers: Samplers,
         ir_cabinet: Option<IrCabinet>,
+        peak_meter: PeakMeter,
     ) -> Result<(Self, EngineHandle)> {
         let (engine_sender, engine_receiver) = bounded::<EngineMessage>(10);
 
@@ -50,6 +53,7 @@ impl Engine {
                 samplers,
                 tuner,
                 recorder: None,
+                peak_meter,
             },
             EngineHandle { engine_sender },
         ))
@@ -80,6 +84,8 @@ impl Engine {
         }
 
         output[..downsampled.len()].copy_from_slice(downsampled);
+
+        self.peak_meter.process(downsampled);
 
         if let Some(recorder) = self.recorder.as_mut() {
             recorder.record_block(downsampled)?;

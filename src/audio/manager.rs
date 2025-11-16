@@ -6,6 +6,7 @@ use std::path::Path;
 use crate::audio::engine::Engine;
 use crate::audio::engine::EngineHandle;
 use crate::audio::jack::{NotificationHandler, ProcessHandler};
+use crate::audio::peak_meter::{PeakMeter, PeakMeterHandle};
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
 use crate::settings::{AudioSettings, Settings};
@@ -16,6 +17,7 @@ pub struct Manager {
     current_settings: Settings,
     tuner_handle: TunerHandle,
     engine_handle: EngineHandle,
+    peak_meter_handle: PeakMeterHandle,
 }
 
 impl Manager {
@@ -27,6 +29,7 @@ impl Manager {
         let buffer_size = client.buffer_size() as usize;
 
         let (tuner, tuner_handle) = Tuner::new(sample_rate);
+        let (peak_meter, peak_meter_handle) = PeakMeter::new(sample_rate);
         let samplers = Samplers::new(buffer_size, settings.audio.oversampling_factor.into())?;
 
         let ir_cabinet = match IrCabinet::new(Path::new(&settings.ir_dir), sample_rate) {
@@ -40,7 +43,7 @@ impl Manager {
             }
         };
 
-        let (engine, engine_handle) = Engine::new(tuner, samplers, ir_cabinet)?;
+        let (engine, engine_handle) = Engine::new(tuner, samplers, ir_cabinet, peak_meter)?;
 
         let jack_handler =
             ProcessHandler::new(&client, engine).context("failed to create process handler")?;
@@ -54,6 +57,7 @@ impl Manager {
             current_settings: settings.clone(),
             tuner_handle,
             engine_handle,
+            peak_meter_handle,
         };
 
         // Auto-connect if requested
@@ -118,6 +122,10 @@ impl Manager {
 
     pub fn tuner(&self) -> &TunerHandle {
         &self.tuner_handle
+    }
+
+    pub fn peak_meter(&self) -> &PeakMeterHandle {
+        &self.peak_meter_handle
     }
 
     /// Reconnect with new settings
