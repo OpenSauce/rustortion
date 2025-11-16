@@ -3,6 +3,7 @@ name = "rustortion"
 version = "0.1.0"
 edition = "2024"
 default-run = "rustortion"
+repository = "https://github.com/OpenSauce/rustortion"
 
 [[bin]]
 name = "rustortion"
@@ -38,3 +39,9 @@ harness = false
 [[bench]]
 name = "engine"
 harness = false
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
