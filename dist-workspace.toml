@@ -22,3 +22,7 @@ include = [
     "README.md",
     "LICENSE"
 ]
+
+[dist.dependencies.apt]
+libjack-jackd2-dev = '*'
+pkg-config = '*'
