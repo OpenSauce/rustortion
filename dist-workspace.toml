@@ -15,10 +15,9 @@ targets = ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"]
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
-# Included files in release
-include = [
-    "impulse_responses",
-    "presets",
-    "README.md",
-    "LICENSE"
-]
+# Extra static files to include in each App (path relative to this Cargo.toml's dir)
+include = ["impulse_responses", "presets", "README.md", "LICENSE"]
+
+[dist.dependencies.apt]
+libjack-jackd2-dev = '*'
+pkg-config = '*'

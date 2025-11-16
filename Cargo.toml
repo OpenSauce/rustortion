@@ -1,6 +1,6 @@
 [package]
 name = "rustortion"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 default-run = "rustortion"
 repository = "https://github.com/OpenSauce/rustortion"
@@ -44,4 +44,3 @@ harness = false
 [profile.dist]
 inherits = "release"
 lto = "thin"
-
