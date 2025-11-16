@@ -3,6 +3,7 @@ members = ["cargo:."]
 
 # Config for 'dist'
 [dist]
+# Which actions to run on pull requests
 pr-run-mode = "upload"
 # The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.30.2"
@@ -11,18 +12,13 @@ ci = "github"
 # The installers to generate for each app
 installers = ["shell"]
 # Target platforms to build apps for (Rust target-triple syntax)
-targets = ["aarch64-unknown-linux-gnu", "x86_64-unknown-linux-gnu"]
+targets = ["x86_64-unknown-linux-gnu"]
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = false
-# Included files in release
-include = [
-    "impulse_responses",
-    "presets",
-    "README.md",
-    "LICENSE"
-]
+# Extra static files to include in each App (path relative to this Cargo.toml's dir)
+include = ["impulse_responses", "presets", "README.md", "LICENSE"]
 
 [dist.dependencies.apt]
 libjack-jackd2-dev = '*'
