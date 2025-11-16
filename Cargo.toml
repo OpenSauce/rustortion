@@ -45,3 +45,5 @@ harness = false
 inherits = "release"
 lto = "thin"
 
+[package.metadata.dist]
+pr-run-mode = "upload"
