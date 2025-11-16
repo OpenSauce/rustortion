@@ -1,3 +1,4 @@
+
 # Rustortion
 
 A guitar amp simulator built in Rust using JACK.
@@ -20,17 +21,23 @@ A guitar amp simulator built in Rust using JACK.
 
 - **Linux** with PipeWire (JACK support enabled)
 - **Rust** toolchain: [Install Rust](https://rustup.rs/)
-- **System dependencies:**
-  ```bash
-  sudo apt-get install libjack-jackd2-dev pkg-config
-  ```
-
+> [!NOTE]
+> It may be possible without PipeWire, but that's not been tested yet. [See this issue.](https://github.com/OpenSauce/rustortion/issues/100)
 ## Running
-
+### Prebuilt Binary
+You can download a tarball of a pre-built binary from the [releases page.](https://github.com/OpenSauce/rustortion/releases/)
 ```bash
+sudo apt-get install libjack-jackd2-0
+tar -xf rustortion-x86_64-unknown-linux-gnu.tar.xz
+cd rustortion-x86_64-unknown-linux-gnu
+./rustortion
+```
+### Running/Building from Source
+With the rust toolchain installed, you can clone the repository and run the application:
+```bash
+sudo apt-get install libjack-jackd2-dev pkg-config
 cargo run --release
 ```
-
 ## Contributing
 
 This is an experimental project. Feel free to open issues or submit pull requests.
