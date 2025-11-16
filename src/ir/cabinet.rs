@@ -93,12 +93,12 @@ impl IrCabinet {
 
             bypassed: false,
 
-            output_gain: 0.5,
+            output_gain: 0.1,
             dc_prev_x: 0.0,
             dc_prev_y: 0.0,
             dc_r: 0.995,
 
-            tail_mix: 0.35,
+            tail_mix: 0.1,
         })
     }
 

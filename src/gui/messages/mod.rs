@@ -49,6 +49,9 @@ pub enum Message {
     // Tuner messages
     ToggleTuner,
     TunerUpdate,
+
+    // Peak meter messages
+    PeakMeterUpdate,
 }
 
 impl From<PresetMessage> for Message {

@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::audio::manager::Manager;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
+use crate::gui::components::peak_meter::PeakMeterDisplay;
 use crate::gui::components::{
     control::Control, dialogs::settings::SettingsDialog, dialogs::tuner::TunerDisplay,
     stage_list::StageList,
@@ -16,6 +17,7 @@ use crate::sim::chain::AmplifierChain;
 
 const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
 const TUNER_POLL_INTERVAL: Duration = Duration::from_millis(20);
+const PEAK_METER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 pub struct AmplifierApp {
     audio_manager: Manager,
@@ -30,6 +32,7 @@ pub struct AmplifierApp {
     tuner_dialog: TunerDisplay,
     tuner_enabled: bool,
     preset_handler: PresetHandler,
+    peak_meter_display: PeakMeterDisplay,
 }
 
 impl AmplifierApp {
@@ -71,6 +74,7 @@ impl AmplifierApp {
             tuner_dialog: TunerDisplay::new(),
             tuner_enabled: false,
             preset_handler,
+            peak_meter_display: PeakMeterDisplay::new(),
         }
     }
 
@@ -78,6 +82,7 @@ impl AmplifierApp {
         use iced::widget::{Space, button, column, container, row};
 
         let top_bar = row![
+            self.peak_meter_display.view(),
             Space::with_width(Length::Fill),
             button("Tuner")
                 .on_press(Message::ToggleTuner)
@@ -125,7 +130,10 @@ impl AmplifierApp {
             Subscription::none()
         };
 
-        Subscription::batch(vec![rebuild_sub, tuner_sub])
+        let peak_meter_sub =
+            time::every(PEAK_METER_POLL_INTERVAL).map(|_| Message::PeakMeterUpdate);
+
+        Subscription::batch(vec![rebuild_sub, tuner_sub, peak_meter_sub])
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -271,6 +279,10 @@ impl AmplifierApp {
                     self.tuner_dialog
                         .update(self.audio_manager.tuner().get_tuner_info());
                 }
+            }
+            Message::PeakMeterUpdate => {
+                let info = self.audio_manager.peak_meter().get_info();
+                self.peak_meter_display.update(info);
             }
             Message::Preset(msg) => return self.preset_handler.handle(msg, self.stages.clone()),
         }

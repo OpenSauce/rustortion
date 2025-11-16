@@ -22,7 +22,7 @@ impl IrCabinetControl {
             available_irs: Vec::new(),
             selected_ir: None,
             bypassed: false,
-            gain: 0.5,
+            gain: 0.1,
         }
     }
 
