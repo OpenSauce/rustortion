@@ -26,6 +26,8 @@ pub struct FilterStage {
     filter_type: FilterType,
     cutoff: f32,
     resonance: f32,
+    g_coeff: f32,
+    state: f32,
     alpha: f32,
     prev_input: f32,
     prev_output: f32,
@@ -45,40 +47,39 @@ impl FilterStage {
                 (1.0 / sample_rate) / (rc + (1.0 / sample_rate))
             }
             FilterType::Bandpass | FilterType::Notch => {
-                // For bandpass and notch we'd need a different calculation,
-                // using a simplified version for now
                 let rc = 1.0 / (2.0 * PI * cutoff);
                 (1.0 / sample_rate) / (rc + (1.0 / sample_rate))
             }
         };
 
-        Self {
+        let mut s = Self {
             filter_type,
             cutoff,
             resonance,
+
+            g_coeff: 0.0,
+            state: 0.0,
+
             alpha,
             prev_input: 0.0,
             prev_output: 0.0,
+
             sample_rate,
-        }
+        };
+
+        s.update_coefficients();
+        s
     }
 
-    // This recalculates alpha when cutoff changes
     fn update_coefficients(&mut self) {
-        self.alpha = match self.filter_type {
-            FilterType::Highpass => {
-                let rc = 1.0 / (2.0 * PI * self.cutoff);
-                rc / (rc + (1.0 / self.sample_rate))
-            }
-            FilterType::Lowpass => {
-                let rc = 1.0 / (2.0 * PI * self.cutoff);
-                (1.0 / self.sample_rate) / (rc + (1.0 / self.sample_rate))
-            }
-            FilterType::Bandpass | FilterType::Notch => {
-                // For bandpass and notch we'd need a different calculation,
-                // using a simplified version for now
-                let rc = 1.0 / (2.0 * PI * self.cutoff);
-                (1.0 / self.sample_rate) / (rc + (1.0 / self.sample_rate))
+        let fc = self.cutoff.max(1.0);
+        self.g_coeff = (PI * fc / self.sample_rate).tan();
+
+        self.alpha = {
+            let rc = 1.0 / (2.0 * PI * self.cutoff);
+            match self.filter_type {
+                FilterType::Highpass => rc / (rc + (1.0 / self.sample_rate)),
+                _ => (1.0 / self.sample_rate) / (rc + (1.0 / self.sample_rate)),
             }
         };
     }
@@ -88,11 +89,14 @@ impl Stage for FilterStage {
     fn process(&mut self, input: f32) -> f32 {
         match self.filter_type {
             FilterType::Highpass => {
-                // First-order highpass filter
-                let output = self.alpha * (self.prev_output + input - self.prev_input);
-                self.prev_input = input;
-                self.prev_output = output;
-                output
+                let g = self.g_coeff;
+
+                let v = (input - self.state) * g / (1.0 + g);
+                let low = self.state + v;
+                let high = input - low;
+
+                self.state = low + v;
+                high
             }
             FilterType::Lowpass => {
                 // First-order lowpass filter
