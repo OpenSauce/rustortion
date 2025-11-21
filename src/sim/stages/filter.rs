@@ -99,9 +99,13 @@ impl Stage for FilterStage {
                 high
             }
             FilterType::Lowpass => {
-                // First-order lowpass filter
-                let output = self.prev_output + self.alpha * (input - self.prev_output);
-                self.prev_output = output;
+                let g = self.g_coeff;
+
+                let v = (input - self.state) * g / (1.0 + g);
+                let output = self.state + v;
+
+                self.state = output + v;
+
                 output
             }
             FilterType::Bandpass => {
