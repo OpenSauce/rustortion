@@ -11,6 +11,7 @@ use crate::gui::components::{
 use crate::gui::config::{StageConfig, StageType};
 use crate::gui::handlers::preset::PresetHandler;
 use crate::gui::messages::Message;
+use crate::midi::MidiManager;
 use crate::settings::{AudioSettings, Settings};
 use crate::sim::chain::AmplifierChain;
 
@@ -54,6 +55,8 @@ impl AmplifierApp {
         if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
             audio_manager.engine().set_ir_cabinet(Some(first_ir));
         }
+
+        let _ = MidiManager::new();
 
         Self {
             audio_manager,
