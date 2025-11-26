@@ -102,6 +102,10 @@ impl IrCabinet {
         })
     }
 
+    pub fn available_ir_names(&self) -> Vec<String> {
+        self.ir_loader.available_ir_names()
+    }
+
     pub fn select_ir(&mut self, name: &str) -> Result<()> {
         let ir_sample = self.ir_loader.load_by_name(name)?;
 

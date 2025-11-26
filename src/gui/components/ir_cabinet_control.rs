@@ -1,4 +1,4 @@
-use iced::widget::{button, checkbox, column, container, pick_list, row, slider, text};
+use iced::widget::{checkbox, column, container, pick_list, row, slider, text};
 use iced::{Alignment, Element, Length};
 
 use crate::gui::messages::Message;
@@ -74,7 +74,6 @@ impl IrCabinetControl {
                 Message::IrSelected
             )
             .width(Length::Fill),
-            button("Refresh").on_press(Message::RefreshIrs),
         ]
         .spacing(10)
         .align_y(Alignment::Center);

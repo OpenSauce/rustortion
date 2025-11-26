@@ -18,6 +18,7 @@ pub struct Manager {
     tuner_handle: TunerHandle,
     engine_handle: EngineHandle,
     peak_meter_handle: PeakMeterHandle,
+    available_irs: Vec<String>,
 }
 
 impl Manager {
@@ -43,6 +44,11 @@ impl Manager {
             }
         };
 
+        let available_irs = ir_cabinet
+            .as_ref()
+            .map(|c| c.available_ir_names())
+            .unwrap_or_default();
+
         let (engine, engine_handle) = Engine::new(tuner, samplers, ir_cabinet, peak_meter)?;
 
         let jack_handler =
@@ -58,6 +64,7 @@ impl Manager {
             tuner_handle,
             engine_handle,
             peak_meter_handle,
+            available_irs,
         };
 
         // Auto-connect if requested
@@ -188,6 +195,11 @@ impl Manager {
             .into_iter()
             .filter(|p| !p.starts_with("rustortion:"))
             .collect()
+    }
+
+    // Get available IR paths
+    pub fn get_available_irs(&self) -> Vec<String> {
+        self.available_irs.clone()
     }
 
     pub fn sample_rate(&self) -> usize {
