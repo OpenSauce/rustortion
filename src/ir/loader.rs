@@ -41,6 +41,14 @@ impl IrLoader {
         Err(anyhow!("ir name '{}' not found", name))
     }
 
+    // available ir names returns a string list of impulse response names
+    pub fn available_ir_names(&self) -> Vec<String> {
+        self.available_ir_paths
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+
     pub fn load_ir(&self, path: &Path) -> Result<Vec<f32>> {
         let reader = WavReader::open(path).context("Failed to open WAV file")?;
         let spec = reader.spec();

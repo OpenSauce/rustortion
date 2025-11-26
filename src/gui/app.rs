@@ -1,6 +1,5 @@
 use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
 use log::{error, info};
-use std::path::Path;
 
 use crate::audio::manager::Manager;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
@@ -49,15 +48,11 @@ impl AmplifierApp {
         let settings_dialog = SettingsDialog::new(&settings.audio);
 
         let mut ir_cabinet_control = IrCabinetControl::new();
+        ir_cabinet_control.set_available_irs(audio_manager.get_available_irs());
 
-        // Load available IRs from the ir/ directory
-        if let Ok(irs) = Self::scan_ir_directory() {
-            ir_cabinet_control.set_available_irs(irs);
-
-            // Set the first IR as active if available
-            if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
-                audio_manager.engine().set_ir_cabinet(Some(first_ir));
-            }
+        // Set the first IR as active if available
+        if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
+            audio_manager.engine().set_ir_cabinet(Some(first_ir));
         }
 
         Self {
@@ -117,6 +112,8 @@ impl AmplifierApp {
         Theme::TokyoNight
     }
 
+    // subscription handles all the periodic tasks that happen in the UI
+    // this is usually polling for updates from the tuner, audio engine etc
     pub fn subscription(&self) -> Subscription<Message> {
         let rebuild_sub = if self.dirty_chain {
             time::every(REBUILD_INTERVAL).map(|_| Message::RebuildTick)
@@ -247,15 +244,6 @@ impl AmplifierApp {
                 self.ir_cabinet_control.set_gain(gain);
                 self.audio_manager.engine().set_ir_gain(gain);
             }
-            Message::RefreshIrs => {
-                if let Ok(irs) = Self::scan_ir_directory() {
-                    self.ir_cabinet_control.set_available_irs(irs);
-                    // Re-apply current selection
-                    if let Some(selected) = self.ir_cabinet_control.get_selected_ir() {
-                        self.audio_manager.engine().set_ir_cabinet(Some(selected));
-                    }
-                }
-            }
             Message::Stage(idx, stage_msg) => {
                 if let Some(stage) = self.stages.get_mut(idx)
                     && stage.apply(stage_msg)
@@ -288,52 +276,6 @@ impl AmplifierApp {
         }
 
         Task::none()
-    }
-
-    fn scan_ir_directory() -> Result<Vec<String>, std::io::Error> {
-        use std::fs;
-        use std::path::Path;
-
-        let ir_path = Path::new("./impulse_responses");
-        if !ir_path.exists() {
-            fs::create_dir_all(ir_path)?;
-        }
-
-        let mut irs = Vec::new();
-        Self::scan_ir_recursive(ir_path, ir_path, &mut irs)?;
-
-        irs.sort_by(|a, b| {
-            let a_sep_count = a.matches('/').count();
-            let b_sep_count = b.matches('/').count();
-            a_sep_count.cmp(&b_sep_count).then_with(|| a.cmp(b))
-        });
-
-        Ok(irs)
-    }
-
-    fn scan_ir_recursive(
-        current_dir: &Path,
-        base_dir: &Path,
-        irs: &mut Vec<String>,
-    ) -> Result<(), std::io::Error> {
-        for entry in std::fs::read_dir(current_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path.is_dir() {
-                // Recursively scan subdirectories
-                Self::scan_ir_recursive(&path, base_dir, irs)?;
-            } else if path.extension().and_then(|s| s.to_str()) == Some("wav") {
-                // Get relative path from base_dir
-                let relative_path = path
-                    .strip_prefix(base_dir)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/"); // Normalize path separators
-                irs.push(relative_path);
-            }
-        }
-        Ok(())
     }
 
     fn rebuild_if_dirty(&mut self) {
