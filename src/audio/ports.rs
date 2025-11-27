@@ -5,6 +5,7 @@ pub struct Ports {
     input: Port<AudioIn>,
     output_left: Port<AudioOut>,
     output_right: Port<AudioOut>,
+    output_metronome: Port<AudioOut>,
 }
 
 impl Ports {
@@ -19,6 +20,9 @@ impl Ports {
             output_right: client
                 .register_port("out_port_right", AudioOut::default())
                 .context("failed to register out port right")?,
+            output_metronome: client
+                .register_port("metronome_out_port", AudioOut::default())
+                .context("failed to register metronome out port")?,
         })
     }
 
@@ -35,9 +39,23 @@ impl Ports {
         out_left[..frame_count].copy_from_slice(&samples[..frame_count]);
         out_right[..frame_count].copy_from_slice(&samples[..frame_count]);
 
+        // If the output size is larger than the samples, fill the rest with zeros
         for i in frame_count..output_size {
             out_left[i] = 0.0;
             out_right[i] = 0.0;
+        }
+    }
+
+    pub fn write_metronome_output(&mut self, ps: &ProcessScope, samples: &[f32]) {
+        let output_size = ps.n_frames() as usize;
+        let frame_count = samples.len().min(output_size);
+        let output = self.output_metronome.as_mut_slice(ps);
+
+        output[..frame_count].copy_from_slice(&samples[..frame_count]);
+
+        // If the output size is larger than the samples, fill the rest with zeros
+        for i in frame_count..output_size {
+            output[i] = 0.0;
         }
     }
 
