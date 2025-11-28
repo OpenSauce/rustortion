@@ -9,6 +9,7 @@ use crate::audio::jack::{NotificationHandler, ProcessHandler};
 use crate::audio::peak_meter::{PeakMeter, PeakMeterHandle};
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
+use crate::metronome::Metronome;
 use crate::settings::{AudioSettings, Settings};
 use crate::sim::tuner::{Tuner, TunerHandle};
 
@@ -28,6 +29,8 @@ impl Manager {
 
         let sample_rate = client.sample_rate();
         let buffer_size = client.buffer_size() as usize;
+
+        let metronome = Metronome::new(120.0, sample_rate);
 
         let (tuner, tuner_handle) = Tuner::new(sample_rate);
         let (peak_meter, peak_meter_handle) = PeakMeter::new(sample_rate);
@@ -49,7 +52,9 @@ impl Manager {
             .map(|c| c.available_ir_names())
             .unwrap_or_default();
 
-        let (engine, engine_handle) = Engine::new(tuner, samplers, ir_cabinet, peak_meter)?;
+        // new metronome
+        let (engine, engine_handle) =
+            Engine::new(tuner, samplers, ir_cabinet, peak_meter, metronome)?;
 
         let jack_handler =
             ProcessHandler::new(&client, engine).context("failed to create process handler")?;
