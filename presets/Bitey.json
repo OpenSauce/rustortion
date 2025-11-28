@@ -34,6 +34,15 @@
       }
     },
     {
+      "NoiseGate": {
+        "threshold_db": -20.0,
+        "ratio": 10.0,
+        "attack_ms": 1.4,
+        "hold_ms": 10.0,
+        "release_ms": 100.0
+      }
+    },
+    {
       "Compressor": {
         "attack_ms": 1.0,
         "release_ms": 80.0,
@@ -52,15 +61,6 @@
     {
       "Level": {
         "gain": 1.0
-      }
-    },
-    {
-      "NoiseGate": {
-        "threshold_db": -10.0,
-        "ratio": 10.0,
-        "attack_ms": 1.4,
-        "hold_ms": 10.0,
-        "release_ms": 100.0
       }
     },
     {
