@@ -5,7 +5,9 @@ use crate::audio::manager::Manager;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::peak_meter::PeakMeterDisplay;
 use crate::gui::components::{
-    control::Control, dialogs::settings::SettingsDialog, dialogs::tuner::TunerDisplay,
+    control::Control,
+    dialogs::settings::{JackStatus, SettingsDialog},
+    dialogs::tuner::TunerDisplay,
     stage_list::StageList,
 };
 use crate::gui::config::{StageConfig, StageType};
@@ -189,8 +191,9 @@ impl AmplifierApp {
             Message::OpenSettings => {
                 let inputs = self.audio_manager.get_available_inputs();
                 let outputs = self.audio_manager.get_available_outputs();
+                let jack_status = self.get_jack_status();
                 self.settings_dialog
-                    .show(&self.settings.audio, inputs, outputs);
+                    .show(&self.settings.audio, inputs, outputs, jack_status);
             }
             Message::CancelSettings => {
                 self.settings_dialog.hide();
@@ -215,8 +218,9 @@ impl AmplifierApp {
             Message::RefreshPorts => {
                 let inputs = self.audio_manager.get_available_inputs();
                 let outputs = self.audio_manager.get_available_outputs();
+                let jack_status = self.get_jack_status();
                 self.settings_dialog
-                    .show(&self.settings.audio, inputs, outputs);
+                    .show(&self.settings.audio, inputs, outputs, jack_status);
             }
             Message::InputPortChanged(p) => self.with_temp_settings(|s| s.input_port = p),
             Message::OutputLeftPortChanged(p) => {
@@ -276,6 +280,13 @@ impl AmplifierApp {
         }
 
         Task::none()
+    }
+
+    fn get_jack_status(&self) -> JackStatus {
+        JackStatus {
+            sample_rate: self.audio_manager.sample_rate(),
+            buffer_size: self.audio_manager.buffer_size(),
+        }
     }
 
     fn rebuild_if_dirty(&mut self) {

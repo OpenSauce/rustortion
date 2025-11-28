@@ -205,4 +205,8 @@ impl Manager {
     pub fn sample_rate(&self) -> usize {
         self.active_client.as_client().sample_rate()
     }
+
+    pub fn buffer_size(&self) -> usize {
+        self.active_client.as_client().buffer_size() as usize
+    }
 }
