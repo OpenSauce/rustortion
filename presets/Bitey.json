@@ -64,11 +64,6 @@
       }
     },
     {
-      "Level": {
-        "gain": 1.0
-      }
-    },
-    {
       "Filter": {
         "filter_type": "Highpass",
         "cutoff_hz": 129.0,
