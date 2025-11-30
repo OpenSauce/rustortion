@@ -34,7 +34,7 @@ pub fn view(idx: usize, cfg: &ToneStackConfig, total_stages: usize) -> Element<'
         model_picker,
         labeled_slider(
             "Bass",
-            0.0..=1.0,
+            0.0..=2.0,
             cfg.bass,
             move |v| Message::Stage(
                 idx,
@@ -45,7 +45,7 @@ pub fn view(idx: usize, cfg: &ToneStackConfig, total_stages: usize) -> Element<'
         ),
         labeled_slider(
             "Mid",
-            0.0..=1.0,
+            0.0..=2.0,
             cfg.mid,
             move |v| Message::Stage(
                 idx,
@@ -56,7 +56,7 @@ pub fn view(idx: usize, cfg: &ToneStackConfig, total_stages: usize) -> Element<'
         ),
         labeled_slider(
             "Treble",
-            0.0..=1.0,
+            0.0..=2.0,
             cfg.treble,
             move |v| Message::Stage(
                 idx,
@@ -67,7 +67,7 @@ pub fn view(idx: usize, cfg: &ToneStackConfig, total_stages: usize) -> Element<'
         ),
         labeled_slider(
             "Presence",
-            0.0..=1.0,
+            0.0..=2.0,
             cfg.presence,
             move |v| Message::Stage(
                 idx,

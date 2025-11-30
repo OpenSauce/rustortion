@@ -172,7 +172,7 @@ impl Stage for ToneStackStage {
     // Parameter management
     // -------------------------------------------------------------
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
-        let v = value.clamp(0.0, 1.0);
+        let v = value.clamp(0.0, 2.0);
         match name {
             "bass" => self.bass = v,
             "mid" => self.mid = v,
