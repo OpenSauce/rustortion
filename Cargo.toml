@@ -29,7 +29,7 @@ realfft = "3.5"
 arc-swap = "1.7"
 
 [dev-dependencies]
-criterion = {version = "0.7", features = ["html_reports"] }
+criterion = {version = "0.8", features = ["html_reports"] }
 tempfile = "3.23"
 
 [[bench]]
