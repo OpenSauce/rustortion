@@ -27,10 +27,10 @@
     {
       "ToneStack": {
         "model": "American",
-        "bass": 0.75,
-        "mid": 0.95,
-        "treble": 0.85,
-        "presence": 0.85
+        "bass": 1.0,
+        "mid": 1.25,
+        "treble": 1.35,
+        "presence": 1.2
       }
     },
     {
@@ -53,7 +53,7 @@
     },
     {
       "Preamp": {
-        "gain": 5.5,
+        "gain": 5.0,
         "bias": 1.4901161e-8,
         "clipper_type": "ClassA"
       }
@@ -75,6 +75,11 @@
         "filter_type": "Lowpass",
         "cutoff_hz": 7835.0,
         "resonance": 0.0
+      }
+    },
+    {
+      "Level": {
+        "gain": 0.85
       }
     }
   ]
