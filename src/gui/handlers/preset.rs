@@ -39,6 +39,7 @@ impl PresetHandler {
         &mut self,
         message: crate::gui::messages::PresetMessage,
         stages: Vec<StageConfig>,
+        ir_name: &str,
     ) -> Task<Message> {
         use crate::gui::messages::PresetMessage;
 
@@ -49,25 +50,37 @@ impl PresetHandler {
                     self.load_preset_by_name(&preset_name);
 
                     if let Some(preset) = self.get_selected_preset() {
-                        return Task::done(Message::SetStages(preset.stages.clone()));
+                        let set_stage_task = Task::done(Message::SetStages(preset.stages.clone()));
+
+                        let set_ir_task = match preset.ir_name {
+                            Some(ir_name) => Task::done(Message::IrSelected(ir_name)),
+                            None => Task::none(),
+                        };
+                        return Task::batch(vec![set_stage_task, set_ir_task]);
                     }
                 }
             }
             PresetMessage::Save(name) => {
                 debug!("Saving preset... {name}");
                 if !name.trim().is_empty() {
-                    self.save_preset_named(&name, stages);
+                    self.save_preset_named(&name, stages, ir_name);
                 }
             }
             PresetMessage::Update => {
                 if let Some(name) = self.selected_preset.clone() {
-                    self.save_preset_named(&name, stages);
+                    self.save_preset_named(&name, stages, ir_name);
                 }
             }
             PresetMessage::Delete(preset_name) => {
                 self.delete_preset(&preset_name);
                 if let Some(preset) = self.get_selected_preset() {
-                    return Task::done(Message::SetStages(preset.stages.clone()));
+                    let set_stage_task = Task::done(Message::SetStages(preset.stages.clone()));
+
+                    let set_ir_task = match preset.ir_name {
+                        Some(ir_name) => Task::done(Message::IrSelected(ir_name)),
+                        None => Task::none(),
+                    };
+                    return Task::batch(vec![set_stage_task, set_ir_task]);
                 }
 
                 return Task::done(Message::SetStages(Vec::new()));
@@ -120,8 +133,8 @@ impl PresetHandler {
         }
     }
 
-    fn save_preset_named(&mut self, name: &str, stages: Vec<StageConfig>) {
-        let preset = Preset::new(name.to_owned(), stages.clone());
+    fn save_preset_named(&mut self, name: &str, stages: Vec<StageConfig>, ir_name: &str) {
+        let preset = Preset::new(name.to_owned(), stages.clone(), ir_name.to_owned());
         match self.preset_manager.save_preset(&preset) {
             Ok(()) => {
                 debug!("Saved preset: {name}");
