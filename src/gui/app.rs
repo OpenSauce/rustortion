@@ -41,8 +41,10 @@ impl AmplifierApp {
         let preset_handler = PresetHandler::new(&settings.preset_dir).unwrap();
 
         let mut stages = Vec::new();
+        let mut preset_ir: Option<String> = None;
         if let Some(preset) = preset_handler.get_selected_preset() {
             stages = preset.stages.clone();
+            preset_ir = preset.ir_name.clone();
         }
 
         let stage_list = StageList::new(stages.clone());
@@ -52,8 +54,11 @@ impl AmplifierApp {
         let mut ir_cabinet_control = IrCabinetControl::new();
         ir_cabinet_control.set_available_irs(audio_manager.get_available_irs());
 
-        // Set the first IR as active if available
-        if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
+        if let Some(ir_name) = preset_ir {
+            ir_cabinet_control.set_selected_ir(Some(ir_name.clone()));
+            audio_manager.engine().set_ir_cabinet(Some(ir_name));
+        } else if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
+            ir_cabinet_control.set_selected_ir(Some(first_ir.clone()));
             audio_manager.engine().set_ir_cabinet(Some(first_ir));
         }
 
@@ -276,7 +281,13 @@ impl AmplifierApp {
                 let info = self.audio_manager.peak_meter().get_info();
                 self.peak_meter_display.update(info);
             }
-            Message::Preset(msg) => return self.preset_handler.handle(msg, self.stages.clone()),
+            Message::Preset(msg) => {
+                return self.preset_handler.handle(
+                    msg,
+                    self.stages.clone(),
+                    self.ir_cabinet_control.get_selected_ir(),
+                );
+            }
         }
 
         Task::none()
