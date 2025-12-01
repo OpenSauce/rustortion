@@ -121,6 +121,22 @@ impl Manager {
                 settings.output_right_port
             );
         }
+
+        // Connect metronome
+        if let Err(e) = client.connect_ports_by_name(
+            "rustortion:metronome_out_port",
+            &settings.metronome_out_port,
+        ) {
+            warn!(
+                "Failed to connect metronome output port '{}': {}",
+                settings.output_right_port, e
+            );
+        } else {
+            info!(
+                "Connected metrnome output: rustortion:out_port_right -> {}",
+                settings.output_right_port
+            );
+        }
     }
 
     pub fn engine(&self) -> &EngineHandle {
@@ -175,6 +191,8 @@ impl Manager {
                 error!("Failed to disconnect out_port_right: {e}");
             });
         }
+
+        // Disconnect
     }
 
     /// Get available input ports
