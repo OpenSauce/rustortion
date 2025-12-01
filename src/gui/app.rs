@@ -285,10 +285,7 @@ impl AmplifierApp {
                 return self.preset_handler.handle(
                     msg,
                     self.stages.clone(),
-                    self.ir_cabinet_control
-                        .get_selected_ir()
-                        .unwrap_or_default()
-                        .as_str(),
+                    self.ir_cabinet_control.get_selected_ir(),
                 );
             }
         }

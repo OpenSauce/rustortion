@@ -39,7 +39,7 @@ impl PresetHandler {
         &mut self,
         message: crate::gui::messages::PresetMessage,
         stages: Vec<StageConfig>,
-        ir_name: &str,
+        ir_name: Option<String>,
     ) -> Task<Message> {
         use crate::gui::messages::PresetMessage;
 
@@ -133,8 +133,8 @@ impl PresetHandler {
         }
     }
 
-    fn save_preset_named(&mut self, name: &str, stages: Vec<StageConfig>, ir_name: &str) {
-        let preset = Preset::new(name.to_owned(), stages.clone(), ir_name.to_owned());
+    fn save_preset_named(&mut self, name: &str, stages: Vec<StageConfig>, ir_name: Option<String>) {
+        let preset = Preset::new(name.to_owned(), stages.clone(), ir_name);
         match self.preset_manager.save_preset(&preset) {
             Ok(()) => {
                 debug!("Saved preset: {name}");

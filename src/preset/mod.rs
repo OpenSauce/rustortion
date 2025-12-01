@@ -28,13 +28,13 @@ impl Default for Preset {
 }
 
 impl Preset {
-    pub fn new(name: String, stages: Vec<StageConfig>, ir_name: String) -> Self {
+    pub fn new(name: String, stages: Vec<StageConfig>, ir_name: Option<String>) -> Self {
         Self {
             name,
             description: None,
             author: None,
             stages,
-            ir_name: Some(ir_name),
+            ir_name: None,
         }
     }
 
