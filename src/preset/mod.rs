@@ -34,7 +34,7 @@ impl Preset {
             description: None,
             author: None,
             stages,
-            ir_name: None,
+            ir_name,
         }
     }
 
