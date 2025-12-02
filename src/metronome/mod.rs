@@ -55,24 +55,22 @@ impl Metronome {
     }
 
     pub fn is_enabled(&mut self) -> bool {
-        return self.enabled;
+        self.enabled
     }
 
     pub fn process_block(&mut self, output: &mut [f32]) {
         //handle metronome logic
-        for i in output {
-            if self.samples_processed >= 0 && self.samples_processed < self.tick_buffer.len() {
+        for i in output.iter_mut() {
+            if self.buffer_index < self.tick_buffer.len() {
                 *i = self.tick_buffer[self.buffer_index];
-                self.samples_processed = if self.samples_processed == self.interval {
-                    0
-                } else {
-                    self.samples_processed + 1
-                };
-                self.buffer_index = if self.buffer_index < self.tick_buffer.len() {
-                    self.buffer_index + 1
-                } else {
-                    0
-                };
+                self.buffer_index += 1;
+            } else {
+                *i = 0.0;
+            }
+            self.samples_processed += 1;
+            if self.samples_processed >= self.interval {
+                self.samples_processed = 0;
+                self.buffer_index = 0;
             }
         }
     }
