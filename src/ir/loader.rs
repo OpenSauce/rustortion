@@ -152,7 +152,7 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
         return Ok(samples.to_vec());
     }
 
-    // large fft size for better quality
+    // Large fft size for better quality
     let fft_len = 8196;
 
     let mut resampler =
