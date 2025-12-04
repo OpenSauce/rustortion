@@ -200,13 +200,22 @@ mod tests {
     }
 
     #[test]
-    fn test_resample_changes_sample_rate() -> anyhow::Result<()> {
-        let input_samples: Vec<f32> = (0..48000).map(|x| (x as f32).sin()).collect();
+    fn test_resample_halves_length() -> anyhow::Result<()> {
+        let input: Vec<f32> = (0..48000).map(|x| (x as f32).sin()).collect();
+        let output = resample(&input, 48000, 24000)?;
 
-        let resampled = resample(&input_samples, 48000, 44000)?;
+        // It's not guarenteed to be exactly half but it should be approximately
+        assert!(output.len() > 23000 && output.len() < 25000);
+        Ok(())
+    }
 
-        assert_eq!(resampled.len(), 24000);
+    #[test]
+    fn test_resample_same_rate_unchanged() -> anyhow::Result<()> {
+        let input: Vec<f32> = (0..1000).map(|x| (x as f32).sin()).collect();
+        let output = resample(&input, 48000, 48000)?;
 
+        assert_eq!(output.len(), input.len());
+        assert_eq!(output, input);
         Ok(())
     }
 }
