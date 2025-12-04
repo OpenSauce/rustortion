@@ -151,7 +151,8 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
         return Ok(samples.to_vec());
     }
 
-    let fft_len = 1024; // Smaller is fine for IR resampling
+    // large fft size for better quality
+    let fft_len = 8196;
 
     let mut resampler =
         FftFixedInOut::<f32>::new(from_rate as usize, to_rate as usize, fft_len, 1)?;
@@ -159,7 +160,7 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
     let delay = resampler.output_delay();
     let chunk_size = resampler.input_frames_next();
 
-    // Pad input to be a multiple of chunk size
+    // If the resample chunks size does not does not evenly divide the input, pad with zeros
     let mut padded_input = samples.to_vec();
     let remainder = padded_input.len() % chunk_size;
     if remainder != 0 {
@@ -168,19 +169,19 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
 
     let mut output = Vec::new();
 
-    // Process in chunks
+    // process
     for chunk in padded_input.chunks(chunk_size) {
         let input_chunk = vec![chunk.to_vec()];
         let out_chunk = resampler.process(&input_chunk, None)?;
         output.extend_from_slice(&out_chunk[0]);
     }
 
-    // Trim the delay from the beginning
+    // if there is a delay from the resampler, remove it
     if delay < output.len() {
         output = output[delay..].to_vec();
     }
 
-    // Trim to expected length (remove padding artifacts)
+    // remove any extra samples added due to padding
     let expected_len = (samples.len() as f64 * to_rate as f64 / from_rate as f64) as usize;
     output.truncate(expected_len);
 
