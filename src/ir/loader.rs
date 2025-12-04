@@ -146,6 +146,7 @@ impl IrLoader {
     }
 }
 
+/// resample takes input samples at a given sample_rate and returns them in the target sample_rate
 fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
     if from_rate == to_rate {
         return Ok(samples.to_vec());
@@ -169,19 +170,19 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
 
     let mut output = Vec::new();
 
-    // process
+    // Process chunk
     for chunk in padded_input.chunks(chunk_size) {
         let input_chunk = vec![chunk.to_vec()];
         let out_chunk = resampler.process(&input_chunk, None)?;
         output.extend_from_slice(&out_chunk[0]);
     }
 
-    // if there is a delay from the resampler, remove it
+    // If there is a delay from the resampler, remove it
     if delay < output.len() {
         output = output[delay..].to_vec();
     }
 
-    // remove any extra samples added due to padding
+    // Remove any extra samples added due to padding
     let expected_len = (samples.len() as f64 * to_rate as f64 / from_rate as f64) as usize;
     output.truncate(expected_len);
 
