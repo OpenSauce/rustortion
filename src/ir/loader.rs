@@ -170,7 +170,7 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
 
     let mut output = Vec::new();
 
-    // Process chunk
+    // Process chunks
     for chunk in padded_input.chunks(chunk_size) {
         let input_chunk = vec![chunk.to_vec()];
         let out_chunk = resampler.process(&input_chunk, None)?;
