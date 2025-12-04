@@ -4,6 +4,8 @@ use log::{debug, info, warn};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use rubato::{FftFixedInOut, Resampler};
+
 pub struct IrLoader {
     available_ir_paths: Vec<(String, PathBuf)>,
     ir_directory: PathBuf,
@@ -81,7 +83,7 @@ impl IrLoader {
                 "Resampling IR from {} Hz to {} Hz",
                 spec.sample_rate, self.target_sample_rate
             );
-            resample_linear(&mono, spec.sample_rate, self.target_sample_rate as u32)
+            resample(&mono, spec.sample_rate, self.target_sample_rate as u32)?
         } else {
             mono
         };
@@ -144,26 +146,22 @@ impl IrLoader {
     }
 }
 
-fn resample_linear(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
-    let ratio = from_rate as f64 / to_rate as f64;
-    let new_len = (samples.len() as f64 / ratio) as usize;
-    let mut out = Vec::with_capacity(new_len);
-
-    for i in 0..new_len {
-        let src_pos = i as f64 * ratio;
-        let src_idx = src_pos as usize;
-        let frac = src_pos - src_idx as f64;
-
-        let s = if src_idx + 1 < samples.len() {
-            samples[src_idx] * (1.0 - frac as f32) + samples[src_idx + 1] * frac as f32
-        } else if src_idx < samples.len() {
-            samples[src_idx]
-        } else {
-            0.0
-        };
-        out.push(s);
+fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
+    if from_rate == to_rate {
+        return Ok(samples.to_vec());
     }
-    out
+
+    let input_out = vec![samples.to_vec()];
+
+    // large fft len for better quality
+    let fft_len = 8196;
+
+    let mut resampler =
+        FftFixedInOut::<f32>::new(from_rate as usize, to_rate as usize, fft_len, 1)?;
+
+    let out = resampler.process(&input_out, None)?;
+
+    Ok(out[0].clone())
 }
 
 #[cfg(test)]
