@@ -92,6 +92,14 @@ impl Engine {
     }
 
     fn process_without_upsampling(&mut self, input: &[f32], output: &mut [f32]) -> Result<()> {
+        if input.len() != output.len() {
+            return Err(anyhow::anyhow!(
+                "input and output buffer size mismatch: input {}, output {}",
+                input.len(),
+                output.len()
+            ));
+        }
+
         let chain = self.chain.as_mut();
         for (i, &sample) in input.iter().enumerate() {
             output[i] = chain.process(sample);
