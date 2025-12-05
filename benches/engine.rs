@@ -4,6 +4,7 @@ use std::hint::black_box;
 use rustortion::audio::engine::{Engine, EngineHandle};
 use rustortion::audio::peak_meter::PeakMeter;
 use rustortion::audio::samplers::Samplers;
+use rustortion::metronome::Metronome;
 use rustortion::sim::chain::AmplifierChain;
 use rustortion::sim::stages::level::LevelStage;
 use rustortion::sim::tuner::Tuner;
@@ -24,7 +25,8 @@ fn build_engine(
     let (tuner, _) = Tuner::new(SAMPLE_RATE);
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let samplers = Samplers::new(buffer_size, oversample).unwrap();
-    let (engine, handle) = Engine::new(tuner, samplers, ir_cabinet, peak_meter).unwrap();
+    let metronome = Metronome::new(120.0, SAMPLE_RATE);
+    let (engine, handle) = Engine::new(tuner, samplers, ir_cabinet, peak_meter, metronome).unwrap();
     (engine, handle)
 }
 
@@ -217,7 +219,9 @@ fn bench_engine_with_ir_cabinet(c: &mut Criterion) {
                 let samplers = Samplers::new(BUFFER_SIZE, oversample).unwrap();
                 let ir_cabinet = Some(create_test_cabinet(20000, SAMPLE_RATE));
                 let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
-                let (mut engine, _) = Engine::new(tuner, samplers, ir_cabinet, peak_meter).unwrap();
+                let metronome = Metronome::new(120.0, SAMPLE_RATE);
+                let (mut engine, _) =
+                    Engine::new(tuner, samplers, ir_cabinet, peak_meter, metronome).unwrap();
 
                 let input = vec![0.5f32; BUFFER_SIZE];
                 let mut output = vec![0.0f32; BUFFER_SIZE];

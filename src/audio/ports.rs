@@ -5,6 +5,8 @@ pub struct Ports {
     input: Port<AudioIn>,
     output_left: Port<AudioOut>,
     output_right: Port<AudioOut>,
+    //need seperate ports for guitar output and metronome output
+    metronome_output: Port<AudioOut>,
 }
 
 impl Ports {
@@ -19,6 +21,9 @@ impl Ports {
             output_right: client
                 .register_port("out_port_right", AudioOut::default())
                 .context("failed to register out port right")?,
+            metronome_output: client
+                .register_port("metronome_out_port", AudioOut::default())
+                .context("failed to register metronome out port")?,
         })
     }
 
@@ -38,6 +43,19 @@ impl Ports {
         for i in frame_count..output_size {
             out_left[i] = 0.0;
             out_right[i] = 0.0;
+        }
+    }
+
+    pub fn write_metronome_output(&mut self, ps: &ProcessScope, samples: &[f32]) {
+        //currently using only 1 audio port for the metronome output
+        let output_size = ps.n_frames() as usize;
+        let frame_count = samples.len().min(output_size);
+        let metronome_out = self.metronome_output.as_mut_slice(ps);
+
+        metronome_out[..frame_count].copy_from_slice(&samples[..frame_count]);
+
+        for item in metronome_out.iter_mut().take(output_size).skip(frame_count) {
+            *item = 0.0;
         }
     }
 
