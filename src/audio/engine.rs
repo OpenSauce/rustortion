@@ -68,27 +68,21 @@ impl Engine {
             return Ok(());
         }
 
-        self.samplers.copy_input(input)?;
-
-        let upsampled = self.samplers.upsample()?;
-
+        // Process through amp chain directly
         let chain = self.chain.as_mut();
-        for s in upsampled.iter_mut() {
-            *s = chain.process(*s);
+        for (i, &sample) in input.iter().enumerate() {
+            output[i] = chain.process(sample);
         }
 
-        let downsampled = self.samplers.downsample()?;
-
+        // Apply IR cabinet
         if let Some(ref mut cab) = self.ir_cabinet {
-            cab.process_block(downsampled);
+            cab.process_block(output);
         }
 
-        output[..downsampled.len()].copy_from_slice(downsampled);
-
-        self.peak_meter.process(downsampled);
+        self.peak_meter.process(output);
 
         if let Some(recorder) = self.recorder.as_mut() {
-            recorder.record_block(downsampled)?;
+            recorder.record_block(output)?;
         }
 
         Ok(())
