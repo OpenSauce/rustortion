@@ -10,6 +10,7 @@ pub struct ProcessHandler {
     ports: Ports,
     audio_engine: Engine,
     buffer: Vec<f32>,
+    phase: f32,
 }
 
 impl jack::NotificationHandler for NotificationHandler {
@@ -29,6 +30,7 @@ impl ProcessHandler {
             ports,
             audio_engine,
             buffer: vec![0.0; buffer_size],
+            phase: 0.0,
         })
     }
 }
@@ -42,6 +44,18 @@ impl jack::ProcessHandler for ProcessHandler {
             self.ports.silence_output(ps);
             return jack::Control::Continue;
         };
+
+        let frequency = 440.0; // A4
+        let sample_rate = 48000.0;
+        let phase_increment = frequency * 2.0 * std::f32::consts::PI / sample_rate;
+
+        for v in self.buffer.iter_mut() {
+            *v = self.phase.sin() * 0.5; // 0.5 amplitude to avoid clipping
+            self.phase += phase_increment;
+            if self.phase > 2.0 * std::f32::consts::PI {
+                self.phase -= 2.0 * std::f32::consts::PI;
+            }
+        }
 
         self.ports.write_output(ps, &self.buffer);
         jack::Control::Continue
