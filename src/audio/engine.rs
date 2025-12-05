@@ -72,6 +72,43 @@ impl Engine {
             return Ok(());
         }
 
+        if self.samplers.get_oversample_factor() == 1.0 {
+            self.process_without_upsampling(input, output)?;
+        } else {
+            self.process_with_upsampling(input, output)?;
+        }
+
+        if let Some(ref mut cab) = self.ir_cabinet {
+            cab.process_block(output);
+        }
+
+        self.peak_meter.process(output);
+
+        if let Some(recorder) = self.recorder.as_mut() {
+            recorder.record_block(output)?;
+        }
+
+        Ok(())
+    }
+
+    fn process_without_upsampling(&mut self, input: &[f32], output: &mut [f32]) -> Result<()> {
+        if input.len() != output.len() {
+            return Err(anyhow::anyhow!(
+                "input and output buffer size mismatch: input {}, output {}",
+                input.len(),
+                output.len()
+            ));
+        }
+
+        let chain = self.chain.as_mut();
+        for (i, &sample) in input.iter().enumerate() {
+            output[i] = chain.process(sample);
+        }
+
+        Ok(())
+    }
+
+    fn process_with_upsampling(&mut self, input: &[f32], output: &mut [f32]) -> Result<()> {
         self.samplers.copy_input(input)?;
 
         let upsampled = self.samplers.upsample()?;
@@ -83,17 +120,7 @@ impl Engine {
 
         let downsampled = self.samplers.downsample()?;
 
-        if let Some(ref mut cab) = self.ir_cabinet {
-            cab.process_block(downsampled);
-        }
-
         output[..downsampled.len()].copy_from_slice(downsampled);
-
-        self.peak_meter.process(downsampled);
-
-        if let Some(recorder) = self.recorder.as_mut() {
-            recorder.record_block(downsampled)?;
-        }
 
         Ok(())
     }

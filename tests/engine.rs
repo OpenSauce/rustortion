@@ -77,7 +77,7 @@ fn engine_handles_buffer_size_change() -> Result<()> {
 fn engine_rejects_mismatched_buffer_sizes() -> Result<()> {
     const SAMPLE_RATE: usize = 48000;
     const BUFFER_SIZE: usize = 128;
-    const OVERSAMPLE_FACTOR: f64 = 1.0;
+    const OVERSAMPLE_FACTOR: f64 = 2.0;
 
     let (tuner, _) = Tuner::new(SAMPLE_RATE);
     let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR)?;

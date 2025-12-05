@@ -74,6 +74,10 @@ impl Samplers {
         })
     }
 
+    pub fn get_oversample_factor(&self) -> f64 {
+        self.oversample_factor
+    }
+
     pub fn copy_input(&mut self, input: &[f32]) -> Result<()> {
         if input.len() != self.input_buffer[0].len() {
             return Err(anyhow::anyhow!(
