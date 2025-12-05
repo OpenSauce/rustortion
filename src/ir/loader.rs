@@ -4,6 +4,10 @@ use log::{debug, info, warn};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use rubato::{
+    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+};
+
 pub struct IrLoader {
     available_ir_paths: Vec<(String, PathBuf)>,
     ir_directory: PathBuf,
@@ -41,6 +45,14 @@ impl IrLoader {
         Err(anyhow!("ir name '{}' not found", name))
     }
 
+    // available ir names returns a string list of impulse response names
+    pub fn available_ir_names(&self) -> Vec<String> {
+        self.available_ir_paths
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+
     pub fn load_ir(&self, path: &Path) -> Result<Vec<f32>> {
         let reader = WavReader::open(path).context("Failed to open WAV file")?;
         let spec = reader.spec();
@@ -73,7 +85,7 @@ impl IrLoader {
                 "Resampling IR from {} Hz to {} Hz",
                 spec.sample_rate, self.target_sample_rate
             );
-            resample_linear(&mono, spec.sample_rate, self.target_sample_rate as u32)
+            resample(&mono, spec.sample_rate, self.target_sample_rate as u32)?
         } else {
             mono
         };
@@ -136,26 +148,28 @@ impl IrLoader {
     }
 }
 
-fn resample_linear(samples: &[f32], from_rate: u32, to_rate: u32) -> Vec<f32> {
-    let ratio = from_rate as f64 / to_rate as f64;
-    let new_len = (samples.len() as f64 / ratio) as usize;
-    let mut out = Vec::with_capacity(new_len);
-
-    for i in 0..new_len {
-        let src_pos = i as f64 * ratio;
-        let src_idx = src_pos as usize;
-        let frac = src_pos - src_idx as f64;
-
-        let s = if src_idx + 1 < samples.len() {
-            samples[src_idx] * (1.0 - frac as f32) + samples[src_idx + 1] * frac as f32
-        } else if src_idx < samples.len() {
-            samples[src_idx]
-        } else {
-            0.0
-        };
-        out.push(s);
+/// resample takes input samples at a given sample_rate and returns them in the target sample_rate
+fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
+    if from_rate == to_rate {
+        return Ok(samples.to_vec());
     }
-    out
+
+    let ratio = to_rate as f64 / from_rate as f64;
+
+    let params = SincInterpolationParameters {
+        sinc_len: 256,
+        f_cutoff: 0.95,
+        interpolation: SincInterpolationType::Linear,
+        oversampling_factor: 256,
+        window: WindowFunction::BlackmanHarris2,
+    };
+
+    let mut resampler = SincFixedIn::<f32>::new(ratio, 1.0, params, samples.len(), 1)?;
+
+    let input = vec![samples.to_vec()];
+    let output = resampler.process(&input, None)?;
+
+    Ok(output.into_iter().next().unwrap())
 }
 
 #[cfg(test)]
@@ -182,6 +196,26 @@ mod tests {
             .collect::<Vec<&str>>();
         assert_eq!(names, vec!["a.wav", "nested/b.wav"]);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_resample_halves_length() -> anyhow::Result<()> {
+        let input: Vec<f32> = (0..48000).map(|x| (x as f32).sin()).collect();
+        let output = resample(&input, 48000, 24000)?;
+
+        // It's not guarenteed to be exactly half but it should be approximately
+        assert!(output.len() > 23000 && output.len() < 25000);
+        Ok(())
+    }
+
+    #[test]
+    fn test_resample_same_rate_unchanged() -> anyhow::Result<()> {
+        let input: Vec<f32> = (0..1000).map(|x| (x as f32).sin()).collect();
+        let output = resample(&input, 48000, 48000)?;
+
+        assert_eq!(output.len(), input.len());
+        assert_eq!(output, input);
         Ok(())
     }
 }

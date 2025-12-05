@@ -1,12 +1,13 @@
 use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
 use log::{error, info};
-use std::path::Path;
 
 use crate::audio::manager::Manager;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::peak_meter::PeakMeterDisplay;
 use crate::gui::components::{
-    control::Control, dialogs::settings::SettingsDialog, dialogs::tuner::TunerDisplay,
+    control::Control,
+    dialogs::settings::{JackStatus, SettingsDialog},
+    dialogs::tuner::TunerDisplay,
     stage_list::StageList,
 };
 use crate::gui::config::{StageConfig, StageType};
@@ -40,8 +41,10 @@ impl AmplifierApp {
         let preset_handler = PresetHandler::new(&settings.preset_dir).unwrap();
 
         let mut stages = Vec::new();
+        let mut preset_ir: Option<String> = None;
         if let Some(preset) = preset_handler.get_selected_preset() {
             stages = preset.stages.clone();
+            preset_ir = preset.ir_name.clone();
         }
 
         let stage_list = StageList::new(stages.clone());
@@ -49,15 +52,14 @@ impl AmplifierApp {
         let settings_dialog = SettingsDialog::new(&settings.audio);
 
         let mut ir_cabinet_control = IrCabinetControl::new();
+        ir_cabinet_control.set_available_irs(audio_manager.get_available_irs());
 
-        // Load available IRs from the ir/ directory
-        if let Ok(irs) = Self::scan_ir_directory() {
-            ir_cabinet_control.set_available_irs(irs);
-
-            // Set the first IR as active if available
-            if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
-                audio_manager.engine().set_ir_cabinet(Some(first_ir));
-            }
+        if let Some(ir_name) = preset_ir {
+            ir_cabinet_control.set_selected_ir(Some(ir_name.clone()));
+            audio_manager.engine().set_ir_cabinet(Some(ir_name));
+        } else if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
+            ir_cabinet_control.set_selected_ir(Some(first_ir.clone()));
+            audio_manager.engine().set_ir_cabinet(Some(first_ir));
         }
 
         Self {
@@ -117,6 +119,8 @@ impl AmplifierApp {
         Theme::TokyoNight
     }
 
+    // subscription handles all the periodic tasks that happen in the UI
+    // this is usually polling for updates from the tuner, audio engine etc
     pub fn subscription(&self) -> Subscription<Message> {
         let rebuild_sub = if self.dirty_chain {
             time::every(REBUILD_INTERVAL).map(|_| Message::RebuildTick)
@@ -192,8 +196,9 @@ impl AmplifierApp {
             Message::OpenSettings => {
                 let inputs = self.audio_manager.get_available_inputs();
                 let outputs = self.audio_manager.get_available_outputs();
+                let jack_status = self.get_jack_status();
                 self.settings_dialog
-                    .show(&self.settings.audio, inputs, outputs);
+                    .show(&self.settings.audio, inputs, outputs, jack_status);
             }
             Message::CancelSettings => {
                 self.settings_dialog.hide();
@@ -218,8 +223,9 @@ impl AmplifierApp {
             Message::RefreshPorts => {
                 let inputs = self.audio_manager.get_available_inputs();
                 let outputs = self.audio_manager.get_available_outputs();
+                let jack_status = self.get_jack_status();
                 self.settings_dialog
-                    .show(&self.settings.audio, inputs, outputs);
+                    .show(&self.settings.audio, inputs, outputs, jack_status);
             }
             Message::InputPortChanged(p) => self.with_temp_settings(|s| s.input_port = p),
             Message::OutputLeftPortChanged(p) => {
@@ -246,15 +252,6 @@ impl AmplifierApp {
             Message::IrGainChanged(gain) => {
                 self.ir_cabinet_control.set_gain(gain);
                 self.audio_manager.engine().set_ir_gain(gain);
-            }
-            Message::RefreshIrs => {
-                if let Ok(irs) = Self::scan_ir_directory() {
-                    self.ir_cabinet_control.set_available_irs(irs);
-                    // Re-apply current selection
-                    if let Some(selected) = self.ir_cabinet_control.get_selected_ir() {
-                        self.audio_manager.engine().set_ir_cabinet(Some(selected));
-                    }
-                }
             }
             Message::Stage(idx, stage_msg) => {
                 if let Some(stage) = self.stages.get_mut(idx)
@@ -284,56 +281,23 @@ impl AmplifierApp {
                 let info = self.audio_manager.peak_meter().get_info();
                 self.peak_meter_display.update(info);
             }
-            Message::Preset(msg) => return self.preset_handler.handle(msg, self.stages.clone()),
+            Message::Preset(msg) => {
+                return self.preset_handler.handle(
+                    msg,
+                    self.stages.clone(),
+                    self.ir_cabinet_control.get_selected_ir(),
+                );
+            }
         }
 
         Task::none()
     }
 
-    fn scan_ir_directory() -> Result<Vec<String>, std::io::Error> {
-        use std::fs;
-        use std::path::Path;
-
-        let ir_path = Path::new("./impulse_responses");
-        if !ir_path.exists() {
-            fs::create_dir_all(ir_path)?;
+    fn get_jack_status(&self) -> JackStatus {
+        JackStatus {
+            sample_rate: self.audio_manager.sample_rate(),
+            buffer_size: self.audio_manager.buffer_size(),
         }
-
-        let mut irs = Vec::new();
-        Self::scan_ir_recursive(ir_path, ir_path, &mut irs)?;
-
-        irs.sort_by(|a, b| {
-            let a_sep_count = a.matches('/').count();
-            let b_sep_count = b.matches('/').count();
-            a_sep_count.cmp(&b_sep_count).then_with(|| a.cmp(b))
-        });
-
-        Ok(irs)
-    }
-
-    fn scan_ir_recursive(
-        current_dir: &Path,
-        base_dir: &Path,
-        irs: &mut Vec<String>,
-    ) -> Result<(), std::io::Error> {
-        for entry in std::fs::read_dir(current_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            if path.is_dir() {
-                // Recursively scan subdirectories
-                Self::scan_ir_recursive(&path, base_dir, irs)?;
-            } else if path.extension().and_then(|s| s.to_str()) == Some("wav") {
-                // Get relative path from base_dir
-                let relative_path = path
-                    .strip_prefix(base_dir)
-                    .unwrap_or(&path)
-                    .to_string_lossy()
-                    .replace('\\', "/"); // Normalize path separators
-                irs.push(relative_path);
-            }
-        }
-        Ok(())
     }
 
     fn rebuild_if_dirty(&mut self) {

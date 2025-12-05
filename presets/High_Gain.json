@@ -27,9 +27,9 @@
     {
       "ToneStack": {
         "model": "British",
-        "bass": 0.55,
+        "bass": 0.75,
         "mid": 1.0,
-        "treble": 0.85,
+        "treble": 0.95,
         "presence": 0.65000004
       }
     },
@@ -51,7 +51,7 @@
     },
     {
       "Level": {
-        "gain": 0.3
+        "gain": 0.5
       }
     },
     {
@@ -71,7 +71,7 @@
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 181.0,
+        "cutoff_hz": 310.0,
         "resonance": 0.0
       }
     },
@@ -82,5 +82,6 @@
         "resonance": 0.0
       }
     }
-  ]
+  ],
+  "ir_name": "Jesterdyne/Engl/sc450-left-01.wav"
 }

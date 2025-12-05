@@ -41,7 +41,6 @@ pub enum Message {
     IrSelected(String),
     IrBypassed(bool),
     IrGainChanged(f32),
-    RefreshIrs,
 
     // Stage-specific messages
     Stage(usize, StageMessage),

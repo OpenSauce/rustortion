@@ -1,19 +1,19 @@
 {
-  "name": "Clean",
+  "name": "Clean Overdrive",
   "description": null,
   "author": null,
   "stages": [
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 117.0,
+        "cutoff_hz": 197.0,
         "resonance": 0.0
       }
     },
     {
       "Filter": {
         "filter_type": "Lowpass",
-        "cutoff_hz": 7174.0,
+        "cutoff_hz": 7625.0,
         "resonance": 0.0
       }
     },
@@ -28,7 +28,7 @@
     },
     {
       "Preamp": {
-        "gain": 1.2,
+        "gain": 1.1,
         "bias": 0.0,
         "clipper_type": "ClassA"
       }
@@ -37,14 +37,28 @@
       "ToneStack": {
         "model": "British",
         "bass": 1.0500001,
-        "mid": 1.15,
-        "treble": 1.1,
-        "presence": 0.4
+        "mid": 1.35,
+        "treble": 1.2,
+        "presence": 1.5500001
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 1.2,
+        "bias": 0.0,
+        "clipper_type": "Soft"
+      }
+    },
+    {
+      "PowerAmp": {
+        "drive": 0.95,
+        "amp_type": "ClassAB",
+        "sag": 0.3
       }
     },
     {
       "Level": {
-        "gain": 1.6
+        "gain": 1.0
       }
     }
   ],

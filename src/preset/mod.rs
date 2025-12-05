@@ -12,6 +12,7 @@ pub struct Preset {
     pub description: Option<String>,
     pub author: Option<String>,
     pub stages: Vec<StageConfig>,
+    pub ir_name: Option<String>,
 }
 
 impl Default for Preset {
@@ -21,17 +22,19 @@ impl Default for Preset {
             author: None,
             description: None,
             stages: Vec::new(),
+            ir_name: None,
         }
     }
 }
 
 impl Preset {
-    pub fn new(name: String, stages: Vec<StageConfig>) -> Self {
+    pub fn new(name: String, stages: Vec<StageConfig>, ir_name: Option<String>) -> Self {
         Self {
             name,
             description: None,
             author: None,
             stages,
+            ir_name,
         }
     }
 

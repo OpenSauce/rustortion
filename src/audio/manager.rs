@@ -19,6 +19,7 @@ pub struct Manager {
     tuner_handle: TunerHandle,
     engine_handle: EngineHandle,
     peak_meter_handle: PeakMeterHandle,
+    available_irs: Vec<String>,
 }
 
 impl Manager {
@@ -46,9 +47,13 @@ impl Manager {
             }
         };
 
+        let available_irs = ir_cabinet
+            .as_ref()
+            .map(|c| c.available_ir_names())
+            .unwrap_or_default();
+
         let (engine, engine_handle) =
             Engine::new(tuner, samplers, ir_cabinet, peak_meter, metronome)?;
-
         let jack_handler =
             ProcessHandler::new(&client, engine).context("failed to create process handler")?;
 
@@ -62,6 +67,7 @@ impl Manager {
             tuner_handle,
             engine_handle,
             peak_meter_handle,
+            available_irs,
         };
 
         // Auto-connect if requested
@@ -214,7 +220,16 @@ impl Manager {
             .collect()
     }
 
+    // Get available IR paths
+    pub fn get_available_irs(&self) -> Vec<String> {
+        self.available_irs.clone()
+    }
+
     pub fn sample_rate(&self) -> usize {
         self.active_client.as_client().sample_rate()
+    }
+
+    pub fn buffer_size(&self) -> usize {
+        self.active_client.as_client().buffer_size() as usize
     }
 }
