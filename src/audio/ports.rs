@@ -54,8 +54,8 @@ impl Ports {
 
         metronome_out[..frame_count].copy_from_slice(&samples[..frame_count]);
 
-        for i in frame_count..output_size {
-            metronome_out[i] = 0.0;
+        for item in metronome_out.iter_mut().take(output_size).skip(frame_count) {
+            *item = 0.0;
         }
     }
 

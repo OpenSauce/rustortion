@@ -27,6 +27,10 @@ impl Metronome {
         }
     }
 
+    pub fn return_bpm(&mut self) -> f32 {
+        self.bpm
+    }
+
     pub fn load_wav_file(&mut self, file_path: &str) {
         let file = match File::open(file_path) {
             Ok(f) => f,
