@@ -9,6 +9,7 @@ use crate::audio::jack::{NotificationHandler, ProcessHandler};
 use crate::audio::peak_meter::{PeakMeter, PeakMeterHandle};
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
+use crate::metronome::Metronome;
 use crate::settings::{AudioSettings, Settings};
 use crate::sim::tuner::{Tuner, TunerHandle};
 
@@ -32,6 +33,8 @@ impl Manager {
         let (tuner, tuner_handle) = Tuner::new(sample_rate);
         let (peak_meter, peak_meter_handle) = PeakMeter::new(sample_rate);
         let samplers = Samplers::new(buffer_size, settings.audio.oversampling_factor.into())?;
+        let mut metronome = Metronome::new(120.0, sample_rate);
+        metronome.load_wav_file("click.wav");
 
         let ir_cabinet = match IrCabinet::new(Path::new(&settings.ir_dir), sample_rate) {
             Ok(cab) => {
@@ -49,8 +52,8 @@ impl Manager {
             .map(|c| c.available_ir_names())
             .unwrap_or_default();
 
-        let (engine, engine_handle) = Engine::new(tuner, samplers, ir_cabinet, peak_meter)?;
-
+        let (engine, engine_handle) =
+            Engine::new(tuner, samplers, ir_cabinet, peak_meter, metronome)?;
         let jack_handler =
             ProcessHandler::new(&client, engine).context("failed to create process handler")?;
 
@@ -121,6 +124,21 @@ impl Manager {
                 settings.output_right_port
             );
         }
+        // Connect metronome output port
+        if let Err(e) = client.connect_ports_by_name(
+            "rustortion:metronome_out_port",
+            &settings.metronome_out_port,
+        ) {
+            warn!(
+                "Failed to connect metronome output port '{}': {}",
+                settings.metronome_out_port, e
+            );
+        } else {
+            info!(
+                "Connected metronome output: rustortion:metronome_out_port -> {}",
+                settings.metronome_out_port
+            );
+        }
     }
 
     pub fn engine(&self) -> &EngineHandle {
@@ -173,6 +191,11 @@ impl Manager {
         if let Some(port) = client.port_by_name("rustortion:out_port_right") {
             client.disconnect(&port).unwrap_or_else(|e| {
                 error!("Failed to disconnect out_port_right: {e}");
+            });
+        }
+        if let Some(port) = client.port_by_name("rustortion:metronome_out_port") {
+            client.disconnect(&port).unwrap_or_else(|e| {
+                error!("Failed to disconnect metronome_out_port: {e}");
             });
         }
     }

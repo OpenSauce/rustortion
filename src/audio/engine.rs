@@ -6,6 +6,7 @@ use crate::audio::peak_meter::PeakMeter;
 use crate::audio::recorder::Recorder;
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
+use crate::metronome::Metronome;
 use crate::sim::chain::AmplifierChain;
 use crate::sim::tuner::Tuner;
 
@@ -30,6 +31,7 @@ pub struct Engine {
     tuner: Tuner,
     recorder: Option<Recorder>,
     peak_meter: PeakMeter,
+    metronome: Metronome,
 }
 
 pub struct EngineHandle {
@@ -42,6 +44,7 @@ impl Engine {
         samplers: Samplers,
         ir_cabinet: Option<IrCabinet>,
         peak_meter: PeakMeter,
+        metronome: Metronome,
     ) -> Result<(Self, EngineHandle)> {
         let (engine_sender, engine_receiver) = bounded::<EngineMessage>(10);
 
@@ -54,6 +57,7 @@ impl Engine {
                 tuner,
                 recorder: None,
                 peak_meter,
+                metronome,
             },
             EngineHandle { engine_sender },
         ))
@@ -113,6 +117,12 @@ impl Engine {
         Ok(())
     }
 
+    //need to process metronome seperately
+    pub fn process_metronome(&mut self, output: &mut [f32]) {
+        if self.metronome.is_enabled() {
+            self.metronome.process_block(output);
+        }
+    }
     pub fn update_buffer_size(&mut self, new_size: usize) -> Result<()> {
         self.samplers.resize_buffers(new_size)
     }

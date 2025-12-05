@@ -10,6 +10,7 @@ pub struct ProcessHandler {
     ports: Ports,
     audio_engine: Engine,
     buffer: Vec<f32>,
+    metronome_buffer: Vec<f32>,
 }
 
 impl jack::NotificationHandler for NotificationHandler {
@@ -29,6 +30,7 @@ impl ProcessHandler {
             ports,
             audio_engine,
             buffer: vec![0.0; buffer_size],
+            metronome_buffer: vec![0.0; buffer_size],
         })
     }
 }
@@ -42,7 +44,11 @@ impl jack::ProcessHandler for ProcessHandler {
             self.ports.silence_output(ps);
             return jack::Control::Continue;
         };
+        self.audio_engine
+            .process_metronome(self.metronome_buffer.as_mut_slice());
 
+        self.ports
+            .write_metronome_output(ps, &self.metronome_buffer);
         self.ports.write_output(ps, &self.buffer);
         jack::Control::Continue
     }
