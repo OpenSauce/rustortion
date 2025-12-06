@@ -28,3 +28,6 @@ bench:
 
 cover:
 	cargo tarpaulin
+
+changelog:
+	git-cliff -o CHANGELOG.md
