@@ -21,16 +21,14 @@ impl Samplers {
             sample_rate * oversample_factor as usize,
             buffer_size,
             CHANNELS,
-        )
-        .unwrap();
+        )?;
 
         let downsampler = FftFixedInOut::new(
             sample_rate * oversample_factor as usize,
             sample_rate,
             buffer_size,
             CHANNELS,
-        )
-        .unwrap();
+        )?;
 
         let mut input_vec = Vec::with_capacity(buffer_size);
         input_vec.resize(buffer_size, 0.0);
@@ -106,8 +104,7 @@ impl Samplers {
             self.sample_rate * self.oversample_factor as usize,
             new_size,
             CHANNELS,
-        )
-        .unwrap();
+        )?;
         self.upsampled_buffer = self.upsampler.output_buffer_allocate(true);
 
         self.downsampler = FftFixedInOut::new(
@@ -115,8 +112,7 @@ impl Samplers {
             self.sample_rate,
             new_size * self.oversample_factor as usize,
             CHANNELS,
-        )
-        .unwrap();
+        )?;
         self.downsampled_buffer = self.downsampler.output_buffer_allocate(true);
 
         Ok(())

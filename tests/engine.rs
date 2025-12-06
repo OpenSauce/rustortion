@@ -141,7 +141,7 @@ fn engine_applies_amp_chain() -> Result<()> {
 #[test]
 fn samplers_preserve_tone_signal() -> Result<()> {
     const SAMPLE_RATE: usize = 48000;
-    const BUFFER_SIZE: usize = 512;
+    const BUFFER_SIZE: usize = 6000;
     const TEST_FREQ: f32 = 440.0;
 
     for &oversample in &[1.0, 2.0, 4.0, 8.0, 16.0] {
@@ -153,6 +153,13 @@ fn samplers_preserve_tone_signal() -> Result<()> {
                 (2.0 * std::f32::consts::PI * TEST_FREQ * t).sin() * 0.5
             })
             .collect();
+
+        // FFT samplers have a delay so we need to prime them.
+        for _ in 0..10 {
+            samplers.copy_input(&input)?;
+            let _ = samplers.upsample()?;
+            let _ = samplers.downsample()?;
+        }
 
         samplers.copy_input(&input)?;
 
