@@ -27,7 +27,7 @@ impl Default for AudioSettings {
             buffer_size: 128,
             sample_rate: 48000,
             auto_connect: true,
-            oversampling_factor: 4,
+            oversampling_factor: 1,
         }
     }
 }

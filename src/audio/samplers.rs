@@ -19,18 +19,18 @@ impl Samplers {
         const MAX_BLOCK_SIZE: usize = 8192;
 
         let interp_params = SincInterpolationParameters {
-            sinc_len: 128,
-            f_cutoff: 0.95,
+            sinc_len: 64,
+            f_cutoff: 0.91,
             interpolation: SincInterpolationType::Linear,
-            oversampling_factor: 128,
+            oversampling_factor: 1024,
             window: WindowFunction::BlackmanHarris2,
         };
         let down_interp_params = SincInterpolationParameters {
-            sinc_len: 128,
-            f_cutoff: 0.95,
+            sinc_len: 64,
+            f_cutoff: 0.91,
             interpolation: SincInterpolationType::Linear,
-            oversampling_factor: 128,
-            window: WindowFunction::BlackmanHarris2,
+            oversampling_factor: 1024,
+            window: WindowFunction::Hann2,
         };
 
         let mut upsampler = SincFixedIn::<f32>::new(
