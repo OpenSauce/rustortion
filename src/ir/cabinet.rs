@@ -12,7 +12,7 @@ const PARTITION_SIZE: usize = 1024;
 // Zero-latency head length (time-domain)
 const HEAD_LEN: usize = 256;
 const TAIL_OFFSET_SAMPLES: usize = HEAD_LEN % FFT_BLOCK_SIZE;
-const MAX_PARTITIONS: usize = 3;
+const MAX_PARTITIONS: usize = 1;
 
 pub struct IrCabinet {
     ir_loader: IrLoader,
