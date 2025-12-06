@@ -1,9 +1,8 @@
 use anyhow::{Context, Result};
-use log::debug;
+use log::info;
 use rubato::{FftFixedInOut, Resampler};
 
 const CHANNELS: usize = 1;
-const SAMPLE_RATE: usize = 48000;
 
 pub struct Samplers {
     upsampler: FftFixedInOut<f32>,
@@ -12,21 +11,22 @@ pub struct Samplers {
     upsampled_buffer: Vec<Vec<f32>>,
     downsampled_buffer: Vec<Vec<f32>>,
     oversample_factor: f64,
+    sample_rate: usize,
 }
 
 impl Samplers {
-    pub fn new(buffer_size: usize, oversample_factor: f64) -> Result<Self> {
+    pub fn new(buffer_size: usize, oversample_factor: f64, sample_rate: usize) -> Result<Self> {
         let upsampler = FftFixedInOut::new(
-            SAMPLE_RATE,
-            SAMPLE_RATE * oversample_factor as usize,
+            sample_rate,
+            sample_rate * oversample_factor as usize,
             buffer_size,
             CHANNELS,
         )
         .unwrap();
 
         let downsampler = FftFixedInOut::new(
-            SAMPLE_RATE * oversample_factor as usize,
-            SAMPLE_RATE,
+            sample_rate * oversample_factor as usize,
+            sample_rate,
             buffer_size,
             CHANNELS,
         )
@@ -45,6 +45,7 @@ impl Samplers {
             upsampled_buffer,
             downsampled_buffer,
             oversample_factor,
+            sample_rate,
         })
     }
 
@@ -88,29 +89,35 @@ impl Samplers {
     }
 
     pub fn resize_buffers(&mut self, new_size: usize) -> Result<()> {
-        let upsampler = FftFixedInOut::new(
-            SAMPLE_RATE,
-            SAMPLE_RATE * self.oversample_factor as usize,
-            new_size,
-            CHANNELS,
-        )
-        .unwrap();
+        if self.input_buffer[0].len() == new_size {
+            return Ok(());
+        }
 
-        let downsampler = FftFixedInOut::new(
-            SAMPLE_RATE * self.oversample_factor as usize,
-            SAMPLE_RATE,
-            new_size,
-            CHANNELS,
-        )
-        .unwrap();
-
-        self.upsampler = upsampler;
-        self.downsampler = downsampler;
-
-        debug!(
-            "Upsampler and downsampler resized to { } frames",
-            self.upsampler.input_frames_max()
+        info!(
+            "Resizing buffers from {} to {}",
+            self.input_buffer[0].len(),
+            new_size
         );
+
+        self.input_buffer[0].resize(new_size, 0.0);
+
+        self.upsampler = FftFixedInOut::new(
+            self.sample_rate,
+            self.sample_rate * self.oversample_factor as usize,
+            new_size,
+            CHANNELS,
+        )
+        .unwrap();
+        self.upsampled_buffer = self.upsampler.output_buffer_allocate(true);
+
+        self.downsampler = FftFixedInOut::new(
+            self.sample_rate * self.oversample_factor as usize,
+            self.sample_rate,
+            new_size * self.oversample_factor as usize,
+            CHANNELS,
+        )
+        .unwrap();
+        self.downsampled_buffer = self.downsampler.output_buffer_allocate(true);
 
         Ok(())
     }
