@@ -14,7 +14,7 @@ fn engine_processes_non_zero_signal() -> Result<()> {
     const OVERSAMPLE_FACTOR: f64 = 1.0;
 
     let (tuner, _) = Tuner::new(SAMPLE_RATE);
-    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR)?;
+    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
     let (mut engine, _) = Engine::new(tuner, samplers, None, peak_meter, metronome)?;
@@ -39,7 +39,7 @@ fn engine_handles_buffer_size_change() -> Result<()> {
     const OVERSAMPLE_FACTOR: f64 = 1.0;
 
     let (tuner, _) = Tuner::new(SAMPLE_RATE);
-    let samplers = Samplers::new(INITIAL_BUFFER_SIZE, OVERSAMPLE_FACTOR)?;
+    let samplers = Samplers::new(INITIAL_BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
     let (mut engine, _) = Engine::new(tuner, samplers, None, peak_meter, metronome)?;
@@ -80,7 +80,7 @@ fn engine_rejects_mismatched_buffer_sizes() -> Result<()> {
     const OVERSAMPLE_FACTOR: f64 = 2.0;
 
     let (tuner, _) = Tuner::new(SAMPLE_RATE);
-    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR)?;
+    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
     let (mut engine, _) = Engine::new(tuner, samplers, None, peak_meter, metronome)?;
@@ -109,7 +109,7 @@ fn engine_applies_amp_chain() -> Result<()> {
     const OVERSAMPLE_FACTOR: f64 = 1.0;
 
     let (tuner, _) = Tuner::new(SAMPLE_RATE);
-    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR)?;
+    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
     let (mut engine, handle) = Engine::new(tuner, samplers, None, peak_meter, metronome)?;
@@ -141,11 +141,11 @@ fn engine_applies_amp_chain() -> Result<()> {
 #[test]
 fn samplers_preserve_tone_signal() -> Result<()> {
     const SAMPLE_RATE: usize = 48000;
-    const BUFFER_SIZE: usize = 512;
+    const BUFFER_SIZE: usize = 6000;
     const TEST_FREQ: f32 = 440.0;
 
     for &oversample in &[1.0, 2.0, 4.0, 8.0, 16.0] {
-        let mut samplers = Samplers::new(BUFFER_SIZE, oversample)?;
+        let mut samplers = Samplers::new(BUFFER_SIZE, oversample, SAMPLE_RATE)?;
 
         let input: Vec<f32> = (0..BUFFER_SIZE)
             .map(|i| {
@@ -153,6 +153,13 @@ fn samplers_preserve_tone_signal() -> Result<()> {
                 (2.0 * std::f32::consts::PI * TEST_FREQ * t).sin() * 0.5
             })
             .collect();
+
+        // FFT samplers have a delay so we need to prime them.
+        for _ in 0..10 {
+            samplers.copy_input(&input)?;
+            let _ = samplers.upsample()?;
+            let _ = samplers.downsample()?;
+        }
 
         samplers.copy_input(&input)?;
 
@@ -194,7 +201,7 @@ fn engine_tuner_enabled_no_output() -> Result<()> {
     const OVERSAMPLE_FACTOR: f64 = 1.0;
     let (mut tuner, _) = Tuner::new(SAMPLE_RATE);
     tuner.set_enabled(true);
-    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR)?;
+    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
     let (mut engine, _) = Engine::new(tuner, samplers, None, peak_meter, metronome)?;

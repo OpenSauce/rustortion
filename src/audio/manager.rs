@@ -32,7 +32,11 @@ impl Manager {
 
         let (tuner, tuner_handle) = Tuner::new(sample_rate);
         let (peak_meter, peak_meter_handle) = PeakMeter::new(sample_rate);
-        let samplers = Samplers::new(buffer_size, settings.audio.oversampling_factor.into())?;
+        let samplers = Samplers::new(
+            buffer_size,
+            settings.audio.oversampling_factor.into(),
+            sample_rate,
+        )?;
         let mut metronome = Metronome::new(120.0, sample_rate);
         metronome.load_wav_file("click.wav");
 

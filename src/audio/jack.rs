@@ -44,11 +44,14 @@ impl jack::ProcessHandler for ProcessHandler {
             self.ports.silence_output(ps);
             return jack::Control::Continue;
         };
-        self.audio_engine
-            .process_metronome(self.metronome_buffer.as_mut_slice());
+        if self
+            .audio_engine
+            .process_metronome(self.metronome_buffer.as_mut_slice())
+        {
+            self.ports
+                .write_metronome_output(ps, &self.metronome_buffer);
+        }
 
-        self.ports
-            .write_metronome_output(ps, &self.metronome_buffer);
         self.ports.write_output(ps, &self.buffer);
         jack::Control::Continue
     }

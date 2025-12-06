@@ -126,10 +126,13 @@ impl Engine {
     }
 
     //need to process metronome seperately
-    pub fn process_metronome(&mut self, output: &mut [f32]) {
+    pub fn process_metronome(&mut self, output: &mut [f32]) -> bool {
         if self.metronome.is_enabled() {
             self.metronome.process_block(output);
+            return true;
         }
+
+        false
     }
     pub fn update_buffer_size(&mut self, new_size: usize) -> Result<()> {
         self.samplers.resize_buffers(new_size)

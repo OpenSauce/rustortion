@@ -1,62 +1,36 @@
 use anyhow::{Context, Result};
 use log::info;
-use rubato::{
-    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
-};
+use rubato::{FftFixedInOut, Resampler};
+
+const CHANNELS: usize = 1;
 
 pub struct Samplers {
-    upsampler: SincFixedIn<f32>,
-    downsampler: SincFixedIn<f32>,
+    upsampler: FftFixedInOut<f32>,
+    downsampler: FftFixedInOut<f32>,
     input_buffer: Vec<Vec<f32>>,
     upsampled_buffer: Vec<Vec<f32>>,
     downsampled_buffer: Vec<Vec<f32>>,
     oversample_factor: f64,
+    sample_rate: usize,
 }
 
 impl Samplers {
-    pub fn new(buffer_size: usize, oversample_factor: f64) -> Result<Self> {
-        const CHANNELS: usize = 1;
-        const MAX_BLOCK_SIZE: usize = 8192;
-
-        let interp_params = SincInterpolationParameters {
-            sinc_len: 64,
-            f_cutoff: 0.91,
-            interpolation: SincInterpolationType::Linear,
-            oversampling_factor: 1024,
-            window: WindowFunction::BlackmanHarris2,
-        };
-        let down_interp_params = SincInterpolationParameters {
-            sinc_len: 64,
-            f_cutoff: 0.91,
-            interpolation: SincInterpolationType::Linear,
-            oversampling_factor: 1024,
-            window: WindowFunction::Hann2,
-        };
-
-        let mut upsampler = SincFixedIn::<f32>::new(
-            oversample_factor,
-            1.0,
-            interp_params,
-            MAX_BLOCK_SIZE,
+    pub fn new(buffer_size: usize, oversample_factor: f64, sample_rate: usize) -> Result<Self> {
+        let upsampler = FftFixedInOut::new(
+            sample_rate,
+            sample_rate * oversample_factor as usize,
+            buffer_size,
             CHANNELS,
         )
         .context("failed to create upsampler")?;
 
-        let mut downsampler = SincFixedIn::<f32>::new(
-            1.0 / oversample_factor,
-            1.0,
-            down_interp_params,
-            MAX_BLOCK_SIZE * oversample_factor as usize,
+        let downsampler = FftFixedInOut::new(
+            sample_rate * oversample_factor as usize,
+            sample_rate,
+            buffer_size * oversample_factor as usize,
             CHANNELS,
         )
         .context("failed to create downsampler")?;
-
-        upsampler
-            .set_chunk_size(buffer_size)
-            .context("failed to set upsampler chunk size")?;
-        downsampler
-            .set_chunk_size(buffer_size * oversample_factor as usize)
-            .context("failed to set downsampler chunk size")?;
 
         let mut input_vec = Vec::with_capacity(buffer_size);
         input_vec.resize(buffer_size, 0.0);
@@ -71,6 +45,7 @@ impl Samplers {
             upsampled_buffer,
             downsampled_buffer,
             oversample_factor,
+            sample_rate,
         })
     }
 
@@ -114,21 +89,34 @@ impl Samplers {
     }
 
     pub fn resize_buffers(&mut self, new_size: usize) -> Result<()> {
-        let buffer = &mut self.input_buffer[0];
-        if buffer.len() != new_size {
-            buffer.resize(new_size, 0.0);
-            info!("Input buffer resized to {new_size}");
+        if self.input_buffer[0].len() == new_size {
+            return Ok(());
         }
 
-        self.upsampler
-            .set_chunk_size(new_size)
-            .context("failed to resize upsampler")?;
+        info!(
+            "Resizing buffers from {} to {}",
+            self.input_buffer[0].len(),
+            new_size
+        );
+
+        self.input_buffer[0].resize(new_size, 0.0);
+
+        self.upsampler = FftFixedInOut::new(
+            self.sample_rate,
+            self.sample_rate * self.oversample_factor as usize,
+            new_size,
+            CHANNELS,
+        )
+        .context("failed to recreate upsampler")?;
         self.upsampled_buffer = self.upsampler.output_buffer_allocate(true);
 
-        let downsampler_size = new_size * self.oversample_factor as usize;
-        self.downsampler
-            .set_chunk_size(downsampler_size)
-            .context("failed to resize downsampler")?;
+        self.downsampler = FftFixedInOut::new(
+            self.sample_rate * self.oversample_factor as usize,
+            self.sample_rate,
+            new_size * self.oversample_factor as usize,
+            CHANNELS,
+        )
+        .context("failed to recreate downsampler")?;
         self.downsampled_buffer = self.downsampler.output_buffer_allocate(true);
 
         Ok(())

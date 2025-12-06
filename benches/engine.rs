@@ -24,7 +24,7 @@ fn build_engine(
     let ir_cabinet = ir_length.map(|len| create_test_cabinet(len, SAMPLE_RATE));
     let (tuner, _) = Tuner::new(SAMPLE_RATE);
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
-    let samplers = Samplers::new(buffer_size, oversample).unwrap();
+    let samplers = Samplers::new(buffer_size, oversample, SAMPLE_RATE).unwrap();
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
     let (engine, handle) = Engine::new(tuner, samplers, ir_cabinet, peak_meter, metronome).unwrap();
     (engine, handle)
@@ -216,7 +216,7 @@ fn bench_engine_with_ir_cabinet(c: &mut Criterion) {
             &oversample,
             |b, &oversample| {
                 let (tuner, _) = Tuner::new(SAMPLE_RATE);
-                let samplers = Samplers::new(BUFFER_SIZE, oversample).unwrap();
+                let samplers = Samplers::new(BUFFER_SIZE, oversample, SAMPLE_RATE).unwrap();
                 let ir_cabinet = Some(create_test_cabinet(20000, SAMPLE_RATE));
                 let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
                 let metronome = Metronome::new(120.0, SAMPLE_RATE);
