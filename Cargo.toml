@@ -40,6 +40,10 @@ harness = false
 name = "engine"
 harness = false
 
+[[bench]]
+name = "samplers"
+harness = false
+
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"
