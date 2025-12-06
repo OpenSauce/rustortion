@@ -48,7 +48,6 @@ impl jack::ProcessHandler for ProcessHandler {
             .audio_engine
             .process_metronome(self.metronome_buffer.as_mut_slice())
         {
-            print!("hello");
             self.ports
                 .write_metronome_output(ps, &self.metronome_buffer);
         }
