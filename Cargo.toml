@@ -15,7 +15,7 @@ hound = "3.5"
 ctrlc = { version = "3.5", features = ["termination"] }
 chrono = "0.4"
 clap = {version = "4.5", features = ["derive", "env"] }
-rubato = "0.16"
+rubato = { git = "https://github.com/OpenSauce/rubato", branch = "master" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 crossbeam = "0.8"

@@ -1,12 +1,13 @@
 use anyhow::{Context, Result};
-use log::info;
-use rubato::{
-    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
-};
+use log::debug;
+use rubato::{FftFixedInOut, Resampler};
+
+const CHANNELS: usize = 1;
+const SAMPLE_RATE: usize = 48000;
 
 pub struct Samplers {
-    upsampler: SincFixedIn<f32>,
-    downsampler: SincFixedIn<f32>,
+    upsampler: FftFixedInOut<f32>,
+    downsampler: FftFixedInOut<f32>,
     input_buffer: Vec<Vec<f32>>,
     upsampled_buffer: Vec<Vec<f32>>,
     downsampled_buffer: Vec<Vec<f32>>,
@@ -15,48 +16,21 @@ pub struct Samplers {
 
 impl Samplers {
     pub fn new(buffer_size: usize, oversample_factor: f64) -> Result<Self> {
-        const CHANNELS: usize = 1;
-        const MAX_BLOCK_SIZE: usize = 8192;
-
-        let interp_params = SincInterpolationParameters {
-            sinc_len: 128,
-            f_cutoff: 0.95,
-            interpolation: SincInterpolationType::Linear,
-            oversampling_factor: 128,
-            window: WindowFunction::BlackmanHarris2,
-        };
-        let down_interp_params = SincInterpolationParameters {
-            sinc_len: 128,
-            f_cutoff: 0.95,
-            interpolation: SincInterpolationType::Linear,
-            oversampling_factor: 128,
-            window: WindowFunction::BlackmanHarris2,
-        };
-
-        let mut upsampler = SincFixedIn::<f32>::new(
-            oversample_factor,
-            1.0,
-            interp_params,
-            MAX_BLOCK_SIZE,
+        let upsampler = FftFixedInOut::new(
+            SAMPLE_RATE,
+            SAMPLE_RATE * oversample_factor as usize,
+            buffer_size,
             CHANNELS,
         )
-        .context("failed to create upsampler")?;
+        .unwrap();
 
-        let mut downsampler = SincFixedIn::<f32>::new(
-            1.0 / oversample_factor,
-            1.0,
-            down_interp_params,
-            MAX_BLOCK_SIZE * oversample_factor as usize,
+        let downsampler = FftFixedInOut::new(
+            SAMPLE_RATE * oversample_factor as usize,
+            SAMPLE_RATE,
+            buffer_size,
             CHANNELS,
         )
-        .context("failed to create downsampler")?;
-
-        upsampler
-            .set_chunk_size(buffer_size)
-            .context("failed to set upsampler chunk size")?;
-        downsampler
-            .set_chunk_size(buffer_size * oversample_factor as usize)
-            .context("failed to set downsampler chunk size")?;
+        .unwrap();
 
         let mut input_vec = Vec::with_capacity(buffer_size);
         input_vec.resize(buffer_size, 0.0);
@@ -114,22 +88,29 @@ impl Samplers {
     }
 
     pub fn resize_buffers(&mut self, new_size: usize) -> Result<()> {
-        let buffer = &mut self.input_buffer[0];
-        if buffer.len() != new_size {
-            buffer.resize(new_size, 0.0);
-            info!("Input buffer resized to {new_size}");
-        }
+        let upsampler = FftFixedInOut::new(
+            SAMPLE_RATE,
+            SAMPLE_RATE * self.oversample_factor as usize,
+            new_size,
+            CHANNELS,
+        )
+        .unwrap();
 
-        self.upsampler
-            .set_chunk_size(new_size)
-            .context("failed to resize upsampler")?;
-        self.upsampled_buffer = self.upsampler.output_buffer_allocate(true);
+        let downsampler = FftFixedInOut::new(
+            SAMPLE_RATE * self.oversample_factor as usize,
+            SAMPLE_RATE,
+            new_size,
+            CHANNELS,
+        )
+        .unwrap();
 
-        let downsampler_size = new_size * self.oversample_factor as usize;
-        self.downsampler
-            .set_chunk_size(downsampler_size)
-            .context("failed to resize downsampler")?;
-        self.downsampled_buffer = self.downsampler.output_buffer_allocate(true);
+        self.upsampler = upsampler;
+        self.downsampler = downsampler;
+
+        debug!(
+            "Upsampler and downsampler resized to { } frames",
+            self.upsampler.input_frames_max()
+        );
 
         Ok(())
     }
