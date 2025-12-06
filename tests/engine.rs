@@ -141,7 +141,7 @@ fn engine_applies_amp_chain() -> Result<()> {
 #[test]
 fn samplers_preserve_tone_signal() -> Result<()> {
     const SAMPLE_RATE: usize = 48000;
-    const BUFFER_SIZE: usize = 6000;
+    const BUFFER_SIZE: usize = 512;
     const TEST_FREQ: f32 = 440.0;
 
     for &oversample in &[1.0, 2.0, 4.0, 8.0, 16.0] {
