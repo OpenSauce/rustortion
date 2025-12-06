@@ -9,12 +9,24 @@ use crate::ir::{loader::IrLoader, model::ImpulseResponse};
 
 const FFT_BLOCK_SIZE: usize = 1024;
 const PARTITION_SIZE: usize = 1024;
-// Zero-latency head length (time-domain)
 const HEAD_LEN: usize = 256;
 const TAIL_OFFSET_SAMPLES: usize = HEAD_LEN % FFT_BLOCK_SIZE;
 const MAX_PARTITIONS: usize = 1;
 
+enum ConvolutionMode {
+    FirOnly,
+    Hybrid,
+}
+
 pub struct IrCabinet {
+    // --- FIR FAST PATH ---
+    fir_mode: bool,
+    fir_coeffs: Vec<f32>,
+    fir_ring: Vec<f32>,
+    fir_pos: usize,
+
+    mode: ConvolutionMode,
+
     ir_loader: IrLoader,
     current_ir: Option<ImpulseResponse>,
 
@@ -68,6 +80,15 @@ impl IrCabinet {
         Ok(Self {
             ir_loader: IrLoader::new(ir_directory, sample_rate)?,
             current_ir: None,
+
+            // FORCE FIR MODE HERE (for Pi)
+            fir_mode: true,
+            fir_coeffs: Vec::new(),
+            fir_ring: Vec::new(),
+            fir_pos: 0,
+
+            mode: ConvolutionMode::FirOnly,
+
             r2c,
             c2r,
 
@@ -109,9 +130,24 @@ impl IrCabinet {
     pub fn select_ir(&mut self, name: &str) -> Result<()> {
         let ir_sample = self.ir_loader.load_by_name(name)?;
 
-        let ir = self.create_response(ir_sample)?;
-
+        // FULL FFT RESPONSE IS STILL BUILT (unchanged)
+        let ir = self.create_response(ir_sample.clone())?;
         self.current_ir = Some(ir);
+
+        // -------------------------
+        // FIR FAST PATH INIT
+        // -------------------------
+        const MAX_FIR_LEN: usize = 2048;
+        let mut truncated = ir_sample;
+        truncated.truncate(MAX_FIR_LEN);
+
+        self.fir_coeffs = truncated.clone();
+        self.fir_ring = vec![0.0; truncated.len()];
+        self.fir_pos = 0;
+
+        self.mode = ConvolutionMode::FirOnly;
+        // -------------------------
+
         self.reset_buffers();
         Ok(())
     }
@@ -189,6 +225,15 @@ impl IrCabinet {
     }
 
     fn reset_buffers(&mut self) {
+        // FIR reset
+        if self.fir_mode {
+            if !self.fir_ring.is_empty() {
+                self.fir_ring.fill(0.0);
+            }
+            self.fir_pos = 0;
+        }
+
+        // FFT reset (kept)
         self.input_buffer.fill(0.0);
         self.in_base = 0;
         self.in_pos = 0;
@@ -234,6 +279,16 @@ impl IrCabinet {
 
     #[inline]
     fn process_sample(&mut self, input: f32) -> f32 {
+        // -------------------------------------
+        // FIR ONLY MODE (Pi)
+        // -------------------------------------
+        if self.fir_mode {
+            return self.process_sample_fir(input);
+        }
+
+        // -------------------------------------
+        // ORIGINAL FULL FFT PATH (PC)
+        // -------------------------------------
         let ir = match self.current_ir.as_ref() {
             Some(ir) => ir,
             None => return 0.0,
@@ -278,6 +333,36 @@ impl IrCabinet {
         y
     }
 
+    // ---------------------------------------
+    // PURE FIR IMPLEMENTATION
+    // ---------------------------------------
+    #[inline]
+    fn process_sample_fir(&mut self, x: f32) -> f32 {
+        if self.fir_coeffs.is_empty() {
+            return x;
+        }
+
+        let len = self.fir_coeffs.len();
+        self.fir_ring[self.fir_pos] = x;
+
+        let mut y = 0.0;
+        let mut idx = self.fir_pos;
+
+        for &h in &self.fir_coeffs {
+            y += h * self.fir_ring[idx];
+            idx = if idx == 0 { len - 1 } else { idx - 1 };
+        }
+
+        self.fir_pos = (self.fir_pos + 1) % len;
+
+        // DC blocker (keep your original behaviour)
+        let dc = y - self.dc_prev_x + self.dc_r * self.dc_prev_y;
+        self.dc_prev_x = y;
+        self.dc_prev_y = dc;
+
+        dc * self.output_gain
+    }
+
     fn process_tail_partition(&mut self) {
         let ir = match self.current_ir.as_ref() {
             Some(ir) => ir,
@@ -310,7 +395,6 @@ impl IrCabinet {
 
         let num_partitions = ir.tail_partitions.len();
         for j in 0..num_partitions {
-            // Read from history in reverse time order
             let history_idx = (self.hist_head + self.history.len() - 1 - j) % self.history.len();
 
             let x = &self.history[history_idx];
