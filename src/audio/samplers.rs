@@ -21,14 +21,16 @@ impl Samplers {
             sample_rate * oversample_factor as usize,
             buffer_size,
             CHANNELS,
-        )?;
+        )
+        .context("failed to create upsampler")?;
 
         let downsampler = FftFixedInOut::new(
             sample_rate * oversample_factor as usize,
             sample_rate,
-            buffer_size,
+            buffer_size * oversample_factor as usize,
             CHANNELS,
-        )?;
+        )
+        .context("failed to create downsampler")?;
 
         let mut input_vec = Vec::with_capacity(buffer_size);
         input_vec.resize(buffer_size, 0.0);
@@ -104,7 +106,8 @@ impl Samplers {
             self.sample_rate * self.oversample_factor as usize,
             new_size,
             CHANNELS,
-        )?;
+        )
+        .context("failed to recreate upsampler")?;
         self.upsampled_buffer = self.upsampler.output_buffer_allocate(true);
 
         self.downsampler = FftFixedInOut::new(
@@ -112,7 +115,8 @@ impl Samplers {
             self.sample_rate,
             new_size * self.oversample_factor as usize,
             CHANNELS,
-        )?;
+        )
+        .context("failed to recreate downsampler")?;
         self.downsampled_buffer = self.downsampler.output_buffer_allocate(true);
 
         Ok(())
