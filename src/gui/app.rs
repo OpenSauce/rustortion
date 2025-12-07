@@ -239,7 +239,6 @@ impl AmplifierApp {
             Message::OversamplingFactorChanged(x) => {
                 self.with_temp_settings(|s| s.oversampling_factor = x)
             }
-            Message::AutoConnectToggled(b) => self.with_temp_settings(|s| s.auto_connect = b),
             Message::IrSelected(ir_name) => {
                 self.ir_cabinet_control
                     .set_selected_ir(Some(ir_name.clone()));

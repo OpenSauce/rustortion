@@ -34,7 +34,6 @@ pub enum Message {
     OutputRightPortChanged(String),
     BufferSizeChanged(u32),
     SampleRateChanged(u32),
-    AutoConnectToggled(bool),
     OversamplingFactorChanged(u32),
 
     // IR Cabinet messages

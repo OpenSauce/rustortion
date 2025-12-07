@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, pick_list, row, text, toggler};
+use iced::widget::{button, column, container, pick_list, row, text};
 use iced::{Alignment, Color, Element, Length};
 
 use crate::gui::messages::Message;
@@ -140,7 +140,7 @@ impl SettingsDialog {
         // Buffer size selection
         let buffer_sizes = vec![64u32, 128, 256, 512, 1024, 2048, 4096];
         let buffer_section = column![
-            text("Buffer Size (requested):").size(16),
+            text("Buffer Size* (requested):").size(16),
             pick_list(
                 buffer_sizes,
                 Some(self.temp_settings.buffer_size),
@@ -153,7 +153,7 @@ impl SettingsDialog {
         // Sample rate selection
         let sample_rates = vec![44100u32, 48000, 88200, 96000, 176400, 192000];
         let sample_rate_section = column![
-            text("Sample Rate (requested):").size(16),
+            text("Sample Rate* (requested):").size(16),
             pick_list(
                 sample_rates,
                 Some(self.temp_settings.sample_rate),
@@ -165,7 +165,7 @@ impl SettingsDialog {
 
         let oversampling_factors = vec![1u32, 2, 4, 8, 16];
         let oversampling_section = column![
-            text("Oversampling Factor:").size(16),
+            text("Oversampling Factor*:").size(16),
             pick_list(
                 oversampling_factors,
                 Some(self.temp_settings.oversampling_factor),
@@ -174,14 +174,6 @@ impl SettingsDialog {
             .width(Length::Fill),
         ]
         .spacing(5);
-
-        // Auto-connect toggle
-        let auto_connect_section = row![
-            text("Auto-connect on startup:").size(16),
-            toggler(self.temp_settings.auto_connect).on_toggle(Message::AutoConnectToggled)
-        ]
-        .spacing(10)
-        .align_y(Alignment::Center);
 
         // Latency display (based on actual JACK values)
         let latency =
@@ -217,8 +209,12 @@ impl SettingsDialog {
                     buffer_section,
                     sample_rate_section,
                     oversampling_section,
-                    auto_connect_section,
                     latency_text,
+                    text("* Changes require restart")
+                        .size(12)
+                        .style(|_: &iced::Theme| iced::widget::text::Style {
+                            color: Some(Color::from_rgb(1.0, 0.7, 0.3)),
+                        }),
                 ]
                 .spacing(15)
                 .padding(10),

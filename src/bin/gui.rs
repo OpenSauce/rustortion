@@ -34,7 +34,6 @@ __________                __                 __  .__
     info!("  Output R: {}", settings.audio.output_right_port);
     info!("  Buffer Size: {}", settings.audio.buffer_size);
     info!("  Sample Rate: {}", settings.audio.sample_rate);
-    info!("  Auto-connect: {}", settings.audio.auto_connect);
 
     let audio_manager =
         Manager::new(settings.clone()).context("failed to create ProcessorManager")?;
