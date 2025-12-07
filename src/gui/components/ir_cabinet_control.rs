@@ -118,8 +118,7 @@ impl IrCabinetControl {
             bypass_control,
             status,
         ]
-        .spacing(10)
-        .padding(10);
+        .spacing(10);
 
         container(content)
             .width(Length::Fill)
