@@ -51,8 +51,12 @@ impl AmplifierApp {
         let control_bar = Control::new(StageType::default());
         let settings_dialog = SettingsDialog::new(&settings.audio);
 
-        let mut ir_cabinet_control = IrCabinetControl::new();
+        let mut ir_cabinet_control = IrCabinetControl::new(settings.ir_bypassed);
         ir_cabinet_control.set_available_irs(audio_manager.get_available_irs());
+
+        if settings.ir_bypassed {
+            audio_manager.engine().set_ir_bypass(true);
+        }
 
         if let Some(ir_name) = preset_ir {
             ir_cabinet_control.set_selected_ir(Some(ir_name.clone()));
@@ -247,6 +251,10 @@ impl AmplifierApp {
             Message::IrBypassed(bypassed) => {
                 self.ir_cabinet_control.set_bypassed(bypassed);
                 self.audio_manager.engine().set_ir_bypass(bypassed);
+                self.settings.ir_bypassed = bypassed;
+                if let Err(e) = self.settings.save() {
+                    error!("Failed to save settings: {e}");
+                }
             }
             Message::IrGainChanged(gain) => {
                 self.ir_cabinet_control.set_gain(gain);
