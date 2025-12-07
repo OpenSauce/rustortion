@@ -209,20 +209,29 @@ impl SettingsDialog {
             iced::widget::rule::Rule::horizontal(1),
             jack_status_section,
             iced::widget::rule::Rule::horizontal(1),
-            input_section,
-            output_left_section,
-            output_right_section,
-            buffer_section,
-            sample_rate_section,
-            oversampling_section,
-            auto_connect_section,
-            latency_text,
+            row![
+                column![input_section, output_left_section, output_right_section,]
+                    .spacing(15)
+                    .padding(10),
+                column![
+                    buffer_section,
+                    sample_rate_section,
+                    oversampling_section,
+                    auto_connect_section,
+                    latency_text,
+                ]
+                .spacing(15)
+                .padding(10),
+            ]
+            .spacing(15)
+            .padding(10),
             iced::widget::Space::new(Length::Fill, Length::Fixed(10.0)),
             controls,
         ]
         .spacing(15)
         .padding(20)
-        .width(Length::Fixed(800.0));
+        .width(Length::Fill)
+        .height(Length::Fill);
 
         // Create a modal overlay
         let dialog = container(dialog_content).style(|theme: &iced::Theme| {
