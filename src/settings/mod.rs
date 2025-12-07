@@ -36,6 +36,7 @@ pub struct Settings {
     pub recording_dir: String,
     pub ir_dir: String,
     pub preset_dir: String,
+    pub ir_bypassed: bool,
 }
 
 impl Default for Settings {
@@ -45,6 +46,7 @@ impl Default for Settings {
             recording_dir: "./recordings".to_string(),
             ir_dir: "./impulse_responses".to_string(),
             preset_dir: "./presets".to_string(),
+            ir_bypassed: false,
         }
     }
 }
@@ -104,19 +106,17 @@ impl Settings {
         }
     }
 
-    pub fn get_pipewire_latency(&self) -> String {
-        format!("{}/{}", self.audio.buffer_size, self.audio.sample_rate)
-    }
-
     pub fn apply_to_environment(&self) {
         unsafe {
+            // Try and configure PipeWire JACK settings
             std::env::set_var("PIPEWIRE_LATENCY", self.get_pipewire_latency());
             if std::env::var("JACK_PROMISCUOUS_SERVER").is_err() {
                 std::env::set_var("JACK_PROMISCUOUS_SERVER", "pipewire");
             }
-            if std::env::var("RECORDING_DIR").is_err() {
-                std::env::set_var("RECORDING_DIR", &self.recording_dir);
-            }
         }
+    }
+
+    fn get_pipewire_latency(&self) -> String {
+        format!("{}/{}", self.audio.buffer_size, self.audio.sample_rate)
     }
 }
