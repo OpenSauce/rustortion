@@ -74,7 +74,7 @@ impl Control {
             iced::widget::horizontal_space(),
             recording_controls
         ]
-        .spacing(20)
+        .spacing(10)
         .align_y(Alignment::Center)
         .width(Length::Fill)
         .into()

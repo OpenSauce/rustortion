@@ -203,8 +203,8 @@ impl SettingsDialog {
             iced::widget::rule::Rule::horizontal(1),
             row![
                 column![input_section, output_left_section, output_right_section,]
-                    .spacing(15)
-                    .padding(10),
+                    .spacing(10)
+                    .padding(5),
                 column![
                     buffer_section,
                     sample_rate_section,
@@ -216,11 +216,11 @@ impl SettingsDialog {
                             color: Some(Color::from_rgb(1.0, 0.7, 0.3)),
                         }),
                 ]
-                .spacing(15)
-                .padding(10),
+                .spacing(10)
+                .padding(5),
             ]
-            .spacing(15)
-            .padding(10),
+            .spacing(10)
+            .padding(5),
             iced::widget::Space::new(Length::Fill, Length::Fixed(10.0)),
             controls,
         ]

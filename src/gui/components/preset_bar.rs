@@ -105,7 +105,7 @@ impl PresetBar {
                     iced::widget::horizontal_space(),
                     confirmation_controls,
                 ]
-                .spacing(20)
+                .spacing(10)
                 .align_y(Alignment::Center)
                 .width(Length::Fill),
             )
@@ -154,11 +154,10 @@ impl PresetBar {
                 iced::widget::horizontal_space(),
                 save_controls,
             ]
-            .spacing(20)
+            .spacing(10)
             .align_y(Alignment::Center)
             .width(Length::Fill),
         )
-        .padding(10)
         .style(|theme: &iced::Theme| {
             container::Style::default()
                 .background(theme.palette().background)

@@ -19,7 +19,7 @@ impl StageList {
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        let mut col = column![].spacing(10).width(Length::Fill);
+        let mut col = column![].width(Length::Fill).padding(10);
 
         for (idx, stage) in self.stages.iter().enumerate() {
             let widget = match stage {

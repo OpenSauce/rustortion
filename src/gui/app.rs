@@ -104,7 +104,7 @@ impl AmplifierApp {
             self.ir_cabinet_control.view(),
             self.control_bar.view(self.is_recording),
         ]
-        .spacing(20)
+        .spacing(10)
         .padding(20);
 
         if let Some(dialog) = self.settings_dialog.view() {
