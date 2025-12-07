@@ -13,7 +13,6 @@ pub struct AudioSettings {
     pub metronome_out_port: String,
     pub buffer_size: u32,
     pub sample_rate: u32,
-    pub auto_connect: bool,
     pub oversampling_factor: u32,
 }
 
@@ -26,7 +25,6 @@ impl Default for AudioSettings {
             metronome_out_port: "system:playback_1".to_string(),
             buffer_size: 128,
             sample_rate: 48000,
-            auto_connect: true,
             oversampling_factor: 1,
         }
     }

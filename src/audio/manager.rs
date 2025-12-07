@@ -74,10 +74,7 @@ impl Manager {
             available_irs,
         };
 
-        // Auto-connect if requested
-        if settings.audio.auto_connect {
-            manager.connect_ports(&settings.audio);
-        }
+        manager.connect_ports(&settings.audio);
 
         Ok(manager)
     }
@@ -167,10 +164,7 @@ impl Manager {
         // Update settings
         self.current_settings.audio = new_settings.clone();
 
-        // Reconnect with new settings
-        if new_settings.auto_connect {
-            self.connect_ports(&new_settings);
-        }
+        self.connect_ports(&new_settings);
 
         Ok(())
     }
