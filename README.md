@@ -43,6 +43,9 @@ With the rust toolchain installed, you can clone the repository and run the appl
 ```bash
 sudo apt-get install libjack-jackd2-dev pkg-config
 cargo run --release
+// on some linux machines with pipewire you have to run jack explicitly
+// dont forget to install pipewire jack emulator: sudo apt-get install pipewire-jack
+pw-jack cargo run --release
 ```
 
 ## Contributing
