@@ -8,6 +8,8 @@ use rubato::{
     Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
 
+const MAX_IR_LENGTH_SECONDS: u64 = 5;
+
 pub struct IrLoader {
     available_ir_paths: Vec<(String, PathBuf)>,
     ir_directory: PathBuf,
@@ -56,6 +58,14 @@ impl IrLoader {
     pub fn load_ir(&self, path: &Path) -> Result<Vec<f32>> {
         let reader = WavReader::open(path).context("Failed to open WAV file")?;
         let spec = reader.spec();
+
+        if reader.duration() as u64 > spec.sample_rate as u64 * MAX_IR_LENGTH_SECONDS {
+            return Err(anyhow::anyhow!(
+                "Failed to load IR as the IR is too long: {} seconds (max {}).",
+                reader.duration() as f64 / spec.sample_rate as f64,
+                MAX_IR_LENGTH_SECONDS
+            ));
+        }
 
         let samples: Vec<f32> = if spec.sample_format == hound::SampleFormat::Float {
             reader
@@ -169,7 +179,10 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
     let input = vec![samples.to_vec()];
     let output = resampler.process(&input, None)?;
 
-    Ok(output.into_iter().next().unwrap())
+    output
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow!("Resampling failed"))
 }
 
 #[cfg(test)]
