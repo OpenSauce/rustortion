@@ -62,6 +62,5 @@ Rustortion is under active development and should be used at your own risk.
 This project includes freely licensed impulse responses from [freesound.org](https://freesound.org/):
 
 - [Multiple Cabinets – Jesterdyne](https://freesound.org/people/jesterdyne/)
-- [Harley Benton 4x12 – Vihaleipa](https://freesound.org/people/Vihaleipa/sounds/269662/)
 - [Bristol Mix – Mansardian](https://freesound.org/people/mansardian/sounds/648392/)
 - [Brown Cab – Tosha73](https://freesound.org/people/tosha73/sounds/507167/)
