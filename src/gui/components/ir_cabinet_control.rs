@@ -12,17 +12,17 @@ pub struct IrCabinetControl {
 
 impl Default for IrCabinetControl {
     fn default() -> Self {
-        Self::new(false)
+        Self::new(false, 0.1)
     }
 }
 
 impl IrCabinetControl {
-    pub fn new(bypassed: bool) -> Self {
+    pub fn new(bypassed: bool, gain: f32) -> Self {
         Self {
             available_irs: Vec::new(),
             selected_ir: None,
             bypassed,
-            gain: 0.1,
+            gain,
         }
     }
 

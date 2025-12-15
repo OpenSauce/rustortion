@@ -13,6 +13,12 @@ pub struct Preset {
     pub author: Option<String>,
     pub stages: Vec<StageConfig>,
     pub ir_name: Option<String>,
+    #[serde(default = "default_ir_gain")]
+    pub ir_gain: f32,
+}
+
+fn default_ir_gain() -> f32 {
+    0.1
 }
 
 impl Default for Preset {
@@ -23,18 +29,25 @@ impl Default for Preset {
             description: None,
             stages: Vec::new(),
             ir_name: None,
+            ir_gain: 0.1,
         }
     }
 }
 
 impl Preset {
-    pub fn new(name: String, stages: Vec<StageConfig>, ir_name: Option<String>) -> Self {
+    pub fn new(
+        name: String,
+        stages: Vec<StageConfig>,
+        ir_name: Option<String>,
+        ir_gain: f32,
+    ) -> Self {
         Self {
             name,
             description: None,
             author: None,
             stages,
             ir_name,
+            ir_gain,
         }
     }
 
