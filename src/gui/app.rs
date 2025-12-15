@@ -289,12 +289,24 @@ impl AmplifierApp {
                 self.peak_meter_display.update(info);
             }
             Message::Preset(msg) => {
-                if let PresetMessage::Select(name) = msg.clone() {
-                    self.settings.selected_preset = Some(name.clone());
+                match msg.clone() {
+                    PresetMessage::Select(name) | PresetMessage::Save(name) => {
+                        self.settings.selected_preset = Some(name.clone());
 
-                    if let Err(e) = self.settings.save() {
-                        error!("Failed to save settings: {e}");
+                        if let Err(e) = self.settings.save() {
+                            error!("Failed to save settings: {e}");
+                        }
                     }
+                    PresetMessage::Delete(deleted_name) => {
+                        if self.settings.selected_preset == Some(deleted_name) {
+                            self.settings.selected_preset = None;
+                        }
+
+                        if let Err(e) = self.settings.save() {
+                            error!("Failed to save settings: {e}");
+                        }
+                    }
+                    _ => {}
                 }
 
                 return self.preset_handler.handle(
