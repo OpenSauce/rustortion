@@ -1,0 +1,82 @@
+{
+  "name": "Petrucci",
+  "description": null,
+  "author": null,
+  "stages": [
+    {
+      "Filter": {
+        "filter_type": "Highpass",
+        "cutoff_hz": 187.0,
+        "resonance": 0.2
+      }
+    },
+    {
+      "Filter": {
+        "filter_type": "Lowpass",
+        "cutoff_hz": 7469.0,
+        "resonance": 0.15
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 2.3,
+        "bias": 0.0,
+        "clipper_type": "ClassA"
+      }
+    },
+    {
+      "ToneStack": {
+        "model": "American",
+        "bass": 1.0,
+        "mid": 1.25,
+        "treble": 1.35,
+        "presence": 0.95
+      }
+    },
+    {
+      "NoiseGate": {
+        "threshold_db": -20.0,
+        "ratio": 10.0,
+        "attack_ms": 1.4,
+        "hold_ms": 10.0,
+        "release_ms": 100.0
+      }
+    },
+    {
+      "Compressor": {
+        "attack_ms": 1.0,
+        "release_ms": 80.0,
+        "threshold_db": -14.0,
+        "ratio": 4.0,
+        "makeup_db": 18.5
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 6.0,
+        "bias": 0.70000005,
+        "clipper_type": "ClassA"
+      }
+    },
+    {
+      "Filter": {
+        "filter_type": "Highpass",
+        "cutoff_hz": 129.0,
+        "resonance": 0.0
+      }
+    },
+    {
+      "Filter": {
+        "filter_type": "Lowpass",
+        "cutoff_hz": 7835.0,
+        "resonance": 0.0
+      }
+    },
+    {
+      "Level": {
+        "gain": 0.4
+      }
+    }
+  ],
+  "ir_name": "Science Amplification/4x12/G12H-150/SM57 Brighter.wav"
+}
