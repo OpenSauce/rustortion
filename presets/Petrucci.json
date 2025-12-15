@@ -78,5 +78,6 @@
       }
     }
   ],
-  "ir_name": "Science Amplification/4x12/G12H-150/SM57 Brighter.wav"
+  "ir_name": "Science Amplification/4x12/G12H-150/SM57 Brighter.wav",
+  "ir_gain": 0.17
 }

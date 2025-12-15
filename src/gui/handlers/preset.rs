@@ -40,6 +40,7 @@ impl PresetHandler {
         message: crate::gui::messages::PresetMessage,
         stages: Vec<StageConfig>,
         ir_name: Option<String>,
+        ir_gain: f32,
     ) -> Task<Message> {
         use crate::gui::messages::PresetMessage;
 
@@ -56,19 +57,22 @@ impl PresetHandler {
                             Some(ir_name) => Task::done(Message::IrSelected(ir_name)),
                             None => Task::none(),
                         };
-                        return Task::batch(vec![set_stage_task, set_ir_task]);
+
+                        let set_ir_gain_task = Task::done(Message::IrGainChanged(preset.ir_gain));
+
+                        return Task::batch(vec![set_stage_task, set_ir_task, set_ir_gain_task]);
                     }
                 }
             }
             PresetMessage::Save(name) => {
                 debug!("Saving preset... {name}");
                 if !name.trim().is_empty() {
-                    self.save_preset_named(&name, stages, ir_name);
+                    self.save_preset_named(&name, stages, ir_name, ir_gain);
                 }
             }
             PresetMessage::Update => {
                 if let Some(name) = self.selected_preset.clone() {
-                    self.save_preset_named(&name, stages, ir_name);
+                    self.save_preset_named(&name, stages, ir_name, ir_gain);
                 }
             }
             PresetMessage::Delete(preset_name) => {
@@ -80,7 +84,10 @@ impl PresetHandler {
                         Some(ir_name) => Task::done(Message::IrSelected(ir_name)),
                         None => Task::none(),
                     };
-                    return Task::batch(vec![set_stage_task, set_ir_task]);
+
+                    let set_ir_gain_task = Task::done(Message::IrGainChanged(preset.ir_gain));
+
+                    return Task::batch(vec![set_stage_task, set_ir_task, set_ir_gain_task]);
                 }
 
                 return Task::done(Message::SetStages(Vec::new()));
@@ -102,7 +109,7 @@ impl PresetHandler {
             .cloned()
     }
 
-    fn load_preset_by_name(&mut self, name: &str) {
+    pub fn load_preset_by_name(&mut self, name: &str) {
         if self.preset_manager.get_preset_by_name(name).is_some() {
             self.selected_preset = Some(name.to_owned());
             debug!("Loaded preset: {name}");
@@ -133,8 +140,14 @@ impl PresetHandler {
         }
     }
 
-    fn save_preset_named(&mut self, name: &str, stages: Vec<StageConfig>, ir_name: Option<String>) {
-        let preset = Preset::new(name.to_owned(), stages.clone(), ir_name);
+    fn save_preset_named(
+        &mut self,
+        name: &str,
+        stages: Vec<StageConfig>,
+        ir_name: Option<String>,
+        ir_gain: f32,
+    ) {
+        let preset = Preset::new(name.to_owned(), stages.clone(), ir_name, ir_gain);
         match self.preset_manager.save_preset(&preset) {
             Ok(()) => {
                 debug!("Saved preset: {name}");

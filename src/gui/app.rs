@@ -12,7 +12,7 @@ use crate::gui::components::{
 };
 use crate::gui::config::{StageConfig, StageType};
 use crate::gui::handlers::preset::PresetHandler;
-use crate::gui::messages::Message;
+use crate::gui::messages::{Message, PresetMessage};
 use crate::settings::{AudioSettings, Settings};
 use crate::sim::chain::AmplifierChain;
 
@@ -38,27 +38,27 @@ pub struct AmplifierApp {
 
 impl AmplifierApp {
     pub fn new(audio_manager: Manager, settings: Settings) -> Self {
-        let preset_handler = PresetHandler::new(&settings.preset_dir).unwrap();
+        let mut preset_handler = PresetHandler::new(&settings.preset_dir).unwrap();
 
-        let mut stages = Vec::new();
-        let mut preset_ir: Option<String> = None;
-        if let Some(preset) = preset_handler.get_selected_preset() {
-            stages = preset.stages.clone();
-            preset_ir = preset.ir_name.clone();
+        // Try and load the last opened preset
+        if let Some(last_opened_preset) = settings.selected_preset.as_deref() {
+            preset_handler.load_preset_by_name(last_opened_preset);
         }
 
-        let stage_list = StageList::new(stages.clone());
+        let preset = preset_handler.get_selected_preset().unwrap_or_default();
+
+        let stage_list = StageList::new(preset.stages.clone());
         let control_bar = Control::new(StageType::default());
         let settings_dialog = SettingsDialog::new(&settings.audio);
 
-        let mut ir_cabinet_control = IrCabinetControl::new(settings.ir_bypassed);
+        let mut ir_cabinet_control = IrCabinetControl::new(settings.ir_bypassed, preset.ir_gain);
         ir_cabinet_control.set_available_irs(audio_manager.get_available_irs());
 
         if settings.ir_bypassed {
             audio_manager.engine().set_ir_bypass(true);
         }
 
-        if let Some(ir_name) = preset_ir {
+        if let Some(ir_name) = preset.ir_name {
             ir_cabinet_control.set_selected_ir(Some(ir_name.clone()));
             audio_manager.engine().set_ir_cabinet(Some(ir_name));
         } else if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
@@ -68,7 +68,7 @@ impl AmplifierApp {
 
         Self {
             audio_manager,
-            stages,
+            stages: preset.stages,
             is_recording: false,
             stage_list,
             control_bar,
@@ -289,10 +289,19 @@ impl AmplifierApp {
                 self.peak_meter_display.update(info);
             }
             Message::Preset(msg) => {
+                if let PresetMessage::Select(name) = msg.clone() {
+                    self.settings.selected_preset = Some(name.clone());
+
+                    if let Err(e) = self.settings.save() {
+                        error!("Failed to save settings: {e}");
+                    }
+                }
+
                 return self.preset_handler.handle(
                     msg,
                     self.stages.clone(),
                     self.ir_cabinet_control.get_selected_ir(),
+                    self.ir_cabinet_control.get_gain(),
                 );
             }
         }

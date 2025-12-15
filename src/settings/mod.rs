@@ -37,6 +37,7 @@ pub struct Settings {
     pub ir_dir: String,
     pub preset_dir: String,
     pub ir_bypassed: bool,
+    pub selected_preset: Option<String>,
 }
 
 impl Default for Settings {
@@ -47,6 +48,7 @@ impl Default for Settings {
             ir_dir: "./impulse_responses".to_string(),
             preset_dir: "./presets".to_string(),
             ir_bypassed: false,
+            selected_preset: None,
         }
     }
 }

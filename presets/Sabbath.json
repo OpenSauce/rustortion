@@ -63,5 +63,7 @@
         "gain": 0.4
       }
     }
-  ]
+  ],
+  "ir_name": "Jesterdyne/Engl/sm57-right-01.wav",
+  "ir_gain": 0.16
 }
