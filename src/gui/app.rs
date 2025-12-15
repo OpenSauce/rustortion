@@ -58,6 +58,8 @@ impl AmplifierApp {
             audio_manager.engine().set_ir_bypass(true);
         }
 
+        audio_manager.engine().set_ir_gain(preset.ir_gain);
+
         if let Some(ir_name) = preset.ir_name {
             ir_cabinet_control.set_selected_ir(Some(ir_name.clone()));
             audio_manager.engine().set_ir_cabinet(Some(ir_name));
