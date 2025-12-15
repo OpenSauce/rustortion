@@ -59,8 +59,15 @@ Rustortion is under active development and should be used at your own risk.
 
 ### Impulse Responses
 
-This project includes freely licensed impulse responses from [freesound.org](https://freesound.org/):
+#### Science Amplification
+
+This project includes impulse responses used with permission from [Science Amplification](https://www.scienceamps.com/).
+
+#### Other
+
+This project also includes freely licensed impulse responses from [freesound.org](https://freesound.org/):
 
 - [Multiple Cabinets – Jesterdyne](https://freesound.org/people/jesterdyne/)
 - [Bristol Mix – Mansardian](https://freesound.org/people/mansardian/sounds/648392/)
 - [Brown Cab – Tosha73](https://freesound.org/people/tosha73/sounds/507167/)
+
