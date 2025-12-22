@@ -24,4 +24,11 @@ impl AmplifierChain {
 
         signal
     }
+
+    // process_block processes a block of samples through the entire chain.
+    pub fn process_block(&mut self, input: &mut [f32]) {
+        for stage in &mut self.stages {
+            stage.process_block(input);
+        }
+    }
 }
