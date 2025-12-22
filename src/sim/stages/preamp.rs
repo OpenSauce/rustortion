@@ -61,6 +61,12 @@ impl Stage for PreampStage {
         cleaned * 0.8 // headroom
     }
 
+    fn process_block(&mut self, input: &mut [f32]) {
+        for sample in input.iter_mut() {
+            *sample = self.process(*sample);
+        }
+    }
+
     fn set_parameter(&mut self, p: &str, v: f32) -> Result<(), &'static str> {
         match p {
             "gain" => {

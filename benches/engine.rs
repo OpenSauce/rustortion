@@ -16,7 +16,7 @@ const SAMPLE_RATE: usize = 48000;
 const BUFFER_SIZE: usize = 128;
 const OVERSAMPLE: f64 = 4.0;
 
-fn build_engine(
+pub fn build_engine(
     oversample: f64,
     buffer_size: usize,
     ir_length: Option<usize>,
@@ -28,124 +28,6 @@ fn build_engine(
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
     let (engine, handle) = Engine::new(tuner, samplers, ir_cabinet, peak_meter, metronome).unwrap();
     (engine, handle)
-}
-
-fn bench_engine_empty_chain(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Engine Empty Chain");
-
-    for &oversample in &[1.0, 2.0, 4.0, 8.0] {
-        group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}x", oversample)),
-            &oversample,
-            |b, &oversample| {
-                let (mut engine, _) = build_engine(oversample, BUFFER_SIZE, None);
-
-                let input = vec![0.5f32; BUFFER_SIZE];
-                let mut output = vec![0.0f32; BUFFER_SIZE];
-
-                b.iter(|| {
-                    engine
-                        .process(black_box(&input), black_box(&mut output))
-                        .unwrap();
-                });
-            },
-        );
-    }
-
-    group.finish();
-}
-
-fn bench_engine_single_stage(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Engine Single Level Stage");
-
-    for &oversample in &[1.0, 2.0, 4.0, 8.0] {
-        group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}x", oversample)),
-            &oversample,
-            |b, &oversample| {
-                let (mut engine, handle) = build_engine(oversample, BUFFER_SIZE, None);
-
-                let mut chain = AmplifierChain::new();
-                chain.add_stage(Box::new(LevelStage::new(0.5)));
-                handle.set_amp_chain(chain);
-
-                let input = vec![0.5f32; BUFFER_SIZE];
-                let mut output = vec![0.0f32; BUFFER_SIZE];
-
-                engine.process(&input, &mut output).unwrap();
-
-                b.iter(|| {
-                    engine
-                        .process(black_box(&input), black_box(&mut output))
-                        .unwrap();
-                });
-            },
-        );
-    }
-
-    group.finish();
-}
-
-fn bench_engine_full_chain(c: &mut Criterion) {
-    use rustortion::sim::stages::{
-        clipper::ClipperType, compressor::CompressorStage, filter::FilterStage, filter::FilterType,
-        preamp::PreampStage, tonestack::ToneStackModel, tonestack::ToneStackStage,
-    };
-
-    let mut group = c.benchmark_group("Engine Full Chain");
-
-    for &oversample in &[1.0, 4.0, 8.0] {
-        group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}x", oversample)),
-            &oversample,
-            |b, &oversample| {
-                let (mut engine, handle) = build_engine(oversample, BUFFER_SIZE, None);
-                let effective_sample_rate = (SAMPLE_RATE as f64 * oversample) as f32;
-
-                let mut chain = AmplifierChain::new();
-                chain.add_stage(Box::new(FilterStage::new(
-                    FilterType::Highpass,
-                    100.0,
-                    0.0,
-                    effective_sample_rate,
-                )));
-                chain.add_stage(Box::new(PreampStage::new(6.0, 0.0, ClipperType::Soft)));
-                chain.add_stage(Box::new(ToneStackStage::new(
-                    ToneStackModel::British,
-                    0.6,
-                    0.7,
-                    0.6,
-                    0.5,
-                    effective_sample_rate,
-                )));
-                chain.add_stage(Box::new(CompressorStage::new(
-                    2.0,
-                    100.0,
-                    -15.0,
-                    3.0,
-                    3.0,
-                    effective_sample_rate,
-                )));
-                chain.add_stage(Box::new(LevelStage::new(0.8)));
-                handle.set_amp_chain(chain);
-
-                let input = vec![0.5f32; BUFFER_SIZE];
-                let mut output = vec![0.0f32; BUFFER_SIZE];
-
-                for _ in 0..10 {
-                    engine.process(&input, &mut output).unwrap();
-                }
-
-                b.iter(|| {
-                    engine
-                        .process(black_box(&input), black_box(&mut output))
-                        .unwrap();
-                });
-            },
-        );
-    }
-
-    group.finish();
 }
 
 fn bench_engine_buffer_sizes(c: &mut Criterion) {
@@ -265,9 +147,6 @@ fn bench_engine_ir_lengths(c: &mut Criterion) {
 
 criterion_group!(
     benches,
-    bench_engine_empty_chain,
-    bench_engine_single_stage,
-    bench_engine_full_chain,
     bench_engine_buffer_sizes,
     bench_engine_throughput,
     bench_engine_with_ir_cabinet,

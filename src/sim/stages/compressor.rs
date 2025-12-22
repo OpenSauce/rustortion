@@ -94,6 +94,12 @@ impl Stage for CompressorStage {
         input * gain_reduction * self.makeup
     }
 
+    fn process_block(&mut self, samples: &mut [f32]) {
+        for sample in samples.iter_mut() {
+            *sample = self.process(*sample);
+        }
+    }
+
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "threshold" => {

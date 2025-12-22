@@ -40,6 +40,11 @@ harness = false
 name = "engine"
 harness = false
 
+
+[[bench]]
+name = "chain"
+harness = false
+
 [[bench]]
 name = "samplers"
 harness = false
