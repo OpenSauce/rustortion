@@ -168,12 +168,6 @@ impl Stage for ToneStackStage {
         y * 0.7
     }
 
-    fn process_block(&mut self, input: &mut [f32]) {
-        for sample in input.iter_mut() {
-            *sample = self.process(*sample);
-        }
-    }
-
     // -------------------------------------------------------------
     // Parameter management
     // -------------------------------------------------------------
