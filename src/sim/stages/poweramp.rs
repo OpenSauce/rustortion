@@ -95,12 +95,6 @@ impl Stage for PowerAmpStage {
         }
     }
 
-    fn process_block(&mut self, input: &mut [f32]) {
-        for sample in input.iter_mut() {
-            *sample = self.process(*sample);
-        }
-    }
-
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "drive" => {

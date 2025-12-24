@@ -13,7 +13,11 @@ pub trait Stage: Send + Sync + 'static {
     fn process(&mut self, input: f32) -> f32;
 
     // Process a block of samples through this stage
-    fn process_block(&mut self, input: &mut [f32]);
+    fn process_block(&mut self, input: &mut [f32]) {
+        for sample in input.iter_mut() {
+            *sample = self.process(*sample);
+        }
+    }
 
     // Set a parameter value by name
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str>;
