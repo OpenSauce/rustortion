@@ -54,3 +54,6 @@ harness = false
 inherits = "release"
 codegen-units = 1
 lto = true
+
+[dist]
+allow-dirty = ["ci"]

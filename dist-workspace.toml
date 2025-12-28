@@ -17,6 +17,8 @@ install-path = "CARGO_HOME"
 install-updater = false
 # Extra static files to include in each App (path relative to this Cargo.toml's dir)
 include = ["impulse_responses", "presets", "README.md", "LICENSE"]
+# Skip checking whether the specified configuration files are up to date
+allow-dirty = ["ci"]
 
 [dist.dependencies.apt]
 libjack-jackd2-dev = '*'
