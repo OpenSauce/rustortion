@@ -26,11 +26,11 @@ dotenv = "0.15"
 anyhow = "1.0"
 rustfft = "6.4"
 realfft = "3.5"
-arc-swap = "1.7"
+arc-swap = "1.8"
 
 [dev-dependencies]
 criterion = {version = "0.8", features = ["html_reports"] }
-tempfile = "3.23"
+tempfile = "3.24"
 
 [[bench]]
 name = "impulse_responses"
