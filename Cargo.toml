@@ -27,7 +27,7 @@ anyhow = "1.0"
 rustfft = "6.4"
 realfft = "3.5"
 arc-swap = "1.8"
-midir = "0.10"
+midir = { version = "0.10", features = ["jack"] }
 
 [dev-dependencies]
 criterion = {version = "0.8", features = ["html_reports"] }
