@@ -7,7 +7,7 @@ use rustortion::audio::samplers::Samplers;
 use rustortion::metronome::Metronome;
 use rustortion::sim::chain::AmplifierChain;
 use rustortion::sim::stages::level::LevelStage;
-use rustortion::sim::tuner::Tuner;
+use rustortion::tuner::Tuner;
 
 mod common;
 use common::create_test_cabinet;
