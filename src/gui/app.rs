@@ -1,11 +1,12 @@
 use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
-use log::{error, info};
+use log::{debug, error, info};
 
 use crate::audio::manager::Manager;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::peak_meter::PeakMeterDisplay;
 use crate::gui::components::{
     control::Control,
+    dialogs::midi::MidiDialog,
     dialogs::settings::{JackStatus, SettingsDialog},
     dialogs::tuner::TunerDisplay,
     stage_list::StageList,
@@ -13,11 +14,13 @@ use crate::gui::components::{
 use crate::gui::config::{StageConfig, StageType};
 use crate::gui::handlers::preset::PresetHandler;
 use crate::gui::messages::{Message, PresetMessage};
+use crate::midi::{MidiEvent, MidiHandle, start_midi_manager};
 use crate::settings::{AudioSettings, Settings};
 use crate::sim::chain::AmplifierChain;
 
 const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
 const TUNER_POLL_INTERVAL: Duration = Duration::from_millis(20);
+const MIDI_POLL_INTERVAL: Duration = Duration::from_millis(10);
 const PEAK_METER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 
 pub struct AmplifierApp {
@@ -34,6 +37,8 @@ pub struct AmplifierApp {
     tuner_enabled: bool,
     preset_handler: PresetHandler,
     peak_meter_display: PeakMeterDisplay,
+    midi_handle: MidiHandle,
+    midi_dialog: MidiDialog,
 }
 
 impl AmplifierApp {
@@ -67,6 +72,23 @@ impl AmplifierApp {
             ir_cabinet_control.set_selected_ir(Some(first_ir.clone()));
             audio_manager.engine().set_ir_cabinet(Some(first_ir));
         }
+        // Initialize MIDI
+        let midi_handle = start_midi_manager();
+        let mut midi_dialog = MidiDialog::new();
+
+        // Load MIDI mappings from settings
+        midi_dialog.set_mappings(settings.midi.mappings.clone());
+        midi_handle.set_mappings(settings.midi.mappings.clone());
+
+        // Try to connect to saved MIDI controller
+        if let Some(controller_name) = &settings.midi.controller_name {
+            midi_handle.connect(controller_name);
+            midi_dialog.set_selected_controller(Some(controller_name.clone()));
+            info!(
+                "Attempting to reconnect to MIDI controller: {}",
+                controller_name
+            );
+        }
 
         Self {
             audio_manager,
@@ -83,6 +105,8 @@ impl AmplifierApp {
             tuner_enabled: false,
             preset_handler,
             peak_meter_display: PeakMeterDisplay::new(),
+            midi_handle,
+            midi_dialog,
         }
     }
 
@@ -92,6 +116,9 @@ impl AmplifierApp {
         let top_bar = row![
             self.peak_meter_display.view(),
             Space::with_width(Length::Fill),
+            button("Midi")
+                .on_press(Message::OpenMidi)
+                .style(iced::widget::button::secondary),
             button("Tuner")
                 .on_press(Message::ToggleTuner)
                 .style(iced::widget::button::secondary),
@@ -113,6 +140,8 @@ impl AmplifierApp {
             dialog
         } else if let Some(tuner_dialog) = self.tuner_dialog.view() {
             tuner_dialog
+        } else if let Some(midi_dialog) = self.midi_dialog.view() {
+            midi_dialog
         } else {
             container(main_content)
                 .width(Length::Fill)
@@ -143,7 +172,15 @@ impl AmplifierApp {
         let peak_meter_sub =
             time::every(PEAK_METER_POLL_INTERVAL).map(|_| Message::PeakMeterUpdate);
 
-        Subscription::batch(vec![rebuild_sub, tuner_sub, peak_meter_sub])
+        let midi_sub = if self.midi_dialog.is_visible()
+            || self.midi_dialog.get_selected_controller().is_some()
+        {
+            time::every(MIDI_POLL_INTERVAL).map(|_| Message::MidiUpdate)
+        } else {
+            Subscription::none()
+        };
+
+        Subscription::batch(vec![rebuild_sub, tuner_sub, peak_meter_sub, midi_sub])
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -284,6 +321,107 @@ impl AmplifierApp {
                 if self.tuner_enabled {
                     self.tuner_dialog
                         .update(self.audio_manager.tuner().get_tuner_info());
+                }
+            }
+            Message::OpenMidi => {
+                let presets = self.preset_handler.get_available_presets();
+                let mappings = self.settings.midi.mappings.clone();
+                self.midi_dialog.show(presets, mappings);
+            }
+            Message::MidiClose => {
+                self.midi_dialog.hide();
+            }
+            Message::MidiControllerSelected(controller_name) => {
+                self.midi_dialog
+                    .set_selected_controller(Some(controller_name.clone()));
+                self.midi_handle.connect(&controller_name);
+
+                // Save to settings
+                self.settings.midi.controller_name = Some(controller_name);
+                if let Err(e) = self.settings.save() {
+                    error!("Failed to save MIDI settings: {e}");
+                }
+            }
+            Message::MidiDisconnect => {
+                self.midi_handle.disconnect();
+                self.midi_dialog.set_selected_controller(None);
+
+                // Clear from settings
+                self.settings.midi.controller_name = None;
+                if let Err(e) = self.settings.save() {
+                    error!("Failed to save MIDI settings: {e}");
+                }
+            }
+            Message::MidiRefreshControllers => {
+                self.midi_dialog.refresh_controllers();
+            }
+            Message::MidiStartLearning => {
+                self.midi_dialog.start_learning();
+            }
+            Message::MidiCancelLearning => {
+                self.midi_dialog.cancel_learning();
+            }
+            Message::MidiPresetForMappingSelected(preset) => {
+                self.midi_dialog.set_preset_for_mapping(preset);
+            }
+            Message::MidiConfirmMapping => {
+                if let Some(_mapping) = self.midi_dialog.complete_mapping() {
+                    let mappings = self.midi_dialog.get_mappings();
+                    self.midi_handle.set_mappings(mappings.clone());
+
+                    // Save to settings
+                    self.settings.midi.mappings = mappings;
+                    if let Err(e) = self.settings.save() {
+                        error!("Failed to save MIDI mappings: {e}");
+                    }
+
+                    debug!("MIDI mapping added and saved");
+                }
+            }
+            Message::MidiRemoveMapping(idx) => {
+                self.midi_dialog.remove_mapping(idx);
+                let mappings = self.midi_dialog.get_mappings();
+                self.midi_handle.set_mappings(mappings.clone());
+
+                // Save to settings
+                self.settings.midi.mappings = mappings;
+                if let Err(e) = self.settings.save() {
+                    error!("Failed to save MIDI mappings: {e}");
+                }
+
+                debug!("MIDI mapping removed and saved");
+            }
+            Message::MidiUpdate => {
+                // Poll for MIDI events
+                while let Some(event) = self.midi_handle.try_recv() {
+                    match event {
+                        MidiEvent::Input(input) => {
+                            // Update dialog if visible
+                            if self.midi_dialog.is_visible() {
+                                self.midi_dialog.on_midi_input(&input);
+                            }
+
+                            // If learning do nothing
+                            if self.midi_dialog.is_learning() {
+                                continue;
+                            }
+
+                            // Check for preset mapping
+                            if let Some(preset_name) = self.midi_handle.check_mapping(&input) {
+                                info!("MIDI triggered preset: {}", preset_name);
+                                return Task::done(Message::Preset(PresetMessage::Select(
+                                    preset_name,
+                                )));
+                            }
+                        }
+                        MidiEvent::Disconnected => {
+                            self.midi_dialog.set_selected_controller(None);
+                            info!("MIDI device disconnected");
+                        }
+                        MidiEvent::Error(e) => {
+                            error!("MIDI error: {}", e);
+                        }
+                    }
                 }
             }
             Message::PeakMeterUpdate => {

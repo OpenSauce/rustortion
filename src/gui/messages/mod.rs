@@ -48,6 +48,18 @@ pub enum Message {
     ToggleTuner,
     TunerUpdate,
 
+    OpenMidi,
+    MidiClose,
+    MidiControllerSelected(String),
+    MidiDisconnect,
+    MidiRefreshControllers,
+    MidiStartLearning,
+    MidiCancelLearning,
+    MidiPresetForMappingSelected(String),
+    MidiConfirmMapping,
+    MidiRemoveMapping(usize),
+    MidiUpdate,
+
     // Peak meter messages
     PeakMeterUpdate,
 }
