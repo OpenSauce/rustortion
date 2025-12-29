@@ -11,7 +11,7 @@ use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
 use crate::metronome::Metronome;
 use crate::settings::{AudioSettings, Settings};
-use crate::sim::tuner::{Tuner, TunerHandle};
+use crate::tuner::{Tuner, TunerHandle};
 
 pub struct Manager {
     active_client: AsyncClient<NotificationHandler, ProcessHandler>,

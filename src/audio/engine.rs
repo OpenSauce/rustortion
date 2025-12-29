@@ -8,7 +8,7 @@ use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
 use crate::metronome::Metronome;
 use crate::sim::chain::AmplifierChain;
-use crate::sim::tuner::Tuner;
+use crate::tuner::Tuner;
 
 pub enum EngineMessage {
     SetAmpChain(Box<AmplifierChain>),
