@@ -22,11 +22,16 @@ pub fn view(idx: usize, cfg: &FilterConfig, total_stages: usize) -> Element<'_, 
     .spacing(10)
     .align_y(iced::Alignment::Center);
 
+    let range = match cfg.filter_type {
+        FilterType::Highpass => 0.0..=1000.0,
+        FilterType::Lowpass => 5000.0..=15000.0,
+    };
+
     let body = column![
         type_picker,
         labeled_slider(
             "Cutoff",
-            20.0..=20_000.0,
+            range,
             cfg.cutoff_hz,
             move |v| Message::Stage(idx, StageMessage::Filter(FilterMessage::CutoffChanged(v))),
             |v| format!("{v:.0} Hz"),
