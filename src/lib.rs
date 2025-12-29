@@ -6,3 +6,4 @@ pub mod midi;
 pub mod preset;
 pub mod settings;
 pub mod sim;
+pub mod tuner;

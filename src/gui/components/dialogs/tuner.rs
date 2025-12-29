@@ -2,7 +2,7 @@ use iced::widget::{button, column, container, row, text};
 use iced::{Alignment, Color, Element, Length};
 
 use crate::gui::messages::Message;
-use crate::sim::tuner::TunerInfo;
+use crate::tuner::TunerInfo;
 
 pub struct TunerDisplay {
     info: TunerInfo,
