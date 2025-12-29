@@ -7,8 +7,6 @@ use std::f32::consts::PI;
 pub enum FilterType {
     Highpass,
     Lowpass,
-    Bandpass,
-    Notch,
 }
 
 impl std::fmt::Display for FilterType {
@@ -16,8 +14,6 @@ impl std::fmt::Display for FilterType {
         match self {
             FilterType::Highpass => write!(f, "Highpass"),
             FilterType::Lowpass => write!(f, "Lowpass"),
-            FilterType::Bandpass => write!(f, "Bandpass"),
-            FilterType::Notch => write!(f, "Notch"),
         }
     }
 }
@@ -25,7 +21,6 @@ impl std::fmt::Display for FilterType {
 pub struct FilterStage {
     filter_type: FilterType,
     cutoff: f32,
-    resonance: f32,
     alpha: f32,
     prev_input: f32,
     prev_output: f32,
@@ -33,7 +28,7 @@ pub struct FilterStage {
 }
 
 impl FilterStage {
-    pub fn new(filter_type: FilterType, cutoff: f32, resonance: f32, sample_rate: f32) -> Self {
+    pub fn new(filter_type: FilterType, cutoff: f32, sample_rate: f32) -> Self {
         // Calculate initial alpha value from cutoff
         let alpha = match filter_type {
             FilterType::Highpass => {
@@ -44,18 +39,11 @@ impl FilterStage {
                 let rc = 1.0 / (2.0 * PI * cutoff);
                 (1.0 / sample_rate) / (rc + (1.0 / sample_rate))
             }
-            FilterType::Bandpass | FilterType::Notch => {
-                // For bandpass and notch we'd need a different calculation,
-                // using a simplified version for now
-                let rc = 1.0 / (2.0 * PI * cutoff);
-                (1.0 / sample_rate) / (rc + (1.0 / sample_rate))
-            }
         };
 
         Self {
             filter_type,
             cutoff,
-            resonance,
             alpha,
             prev_input: 0.0,
             prev_output: 0.0,
@@ -71,12 +59,6 @@ impl FilterStage {
                 rc / (rc + (1.0 / self.sample_rate))
             }
             FilterType::Lowpass => {
-                let rc = 1.0 / (2.0 * PI * self.cutoff);
-                (1.0 / self.sample_rate) / (rc + (1.0 / self.sample_rate))
-            }
-            FilterType::Bandpass | FilterType::Notch => {
-                // For bandpass and notch we'd need a different calculation,
-                // using a simplified version for now
                 let rc = 1.0 / (2.0 * PI * self.cutoff);
                 (1.0 / self.sample_rate) / (rc + (1.0 / self.sample_rate))
             }
@@ -100,29 +82,6 @@ impl Stage for FilterStage {
                 self.prev_output = output;
                 output
             }
-            FilterType::Bandpass => {
-                // Simple bandpass implementation
-                // For a true bandpass, we would cascade highpass and lowpass
-                let highpass = self.alpha * (self.prev_output + input - self.prev_input);
-                let lowpass = self.prev_output + self.alpha * (highpass - self.prev_output);
-
-                self.prev_input = input;
-                self.prev_output = lowpass;
-
-                // Apply resonance (feedback)
-                lowpass * (1.0 + self.resonance * 0.9)
-            }
-            FilterType::Notch => {
-                // Simple notch implementation
-                // A true notch would require a biquad filter
-                let allpass = input;
-                let lowpass = self.prev_output + self.alpha * (input - self.prev_output);
-
-                self.prev_output = lowpass;
-
-                // Notch is all-pass minus bandpass
-                allpass - (input - lowpass) * self.resonance
-            }
         }
     }
 
@@ -137,14 +96,6 @@ impl Stage for FilterStage {
                     Err("Cutoff must be between 20Hz and 20kHz")
                 }
             }
-            "resonance" => {
-                if (0.0..=1.0).contains(&value) {
-                    self.resonance = value;
-                    Ok(())
-                } else {
-                    Err("Resonance must be between 0.0 and 1.0")
-                }
-            }
             _ => Err("Unknown parameter name"),
         }
     }
@@ -152,7 +103,6 @@ impl Stage for FilterStage {
     fn get_parameter(&self, name: &str) -> Result<f32, &'static str> {
         match name {
             "cutoff" => Ok(self.cutoff),
-            "resonance" => Ok(self.resonance),
             _ => Err("Unknown parameter name"),
         }
     }
@@ -169,7 +119,7 @@ mod tests {
         let cutoff = 1_000.0;
 
         // ---------- DC rejection ----------
-        let mut hp = FilterStage::new(FilterType::Highpass, cutoff, 0.0, sr);
+        let mut hp = FilterStage::new(FilterType::Highpass, cutoff, sr);
 
         // Warm up on DC to let the step transient decay.
         for _ in 0..512 {
@@ -190,7 +140,7 @@ mod tests {
 
         // ---------- High-frequency passthrough ----------
         // Recreate to reset state.
-        let mut hp = FilterStage::new(FilterType::Highpass, cutoff, 0.0, sr);
+        let mut hp = FilterStage::new(FilterType::Highpass, cutoff, sr);
 
         // Use a very high-frequency square (~24 kHz): alternating +1/-1.
         // Warm up a little (filters have transients even with HF).

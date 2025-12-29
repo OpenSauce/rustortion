@@ -93,7 +93,6 @@ impl StageConfig {
                 match m {
                     FilterMessage::TypeChanged(t) => cfg.filter_type = t,
                     FilterMessage::CutoffChanged(v) => cfg.cutoff_hz = v,
-                    FilterMessage::ResonanceChanged(v) => cfg.resonance = v,
                 }
                 true
             }

@@ -26,7 +26,6 @@ pub enum NoiseGateMessage {
 pub enum FilterMessage {
     TypeChanged(FilterType),
     CutoffChanged(f32),
-    ResonanceChanged(f32),
 }
 
 #[derive(Debug, Clone)]

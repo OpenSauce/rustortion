@@ -7,12 +7,7 @@ use crate::gui::messages::{FilterMessage, Message, StageMessage};
 use crate::sim::stages::filter::FilterType;
 
 const HEADER_TEXT: &str = "Filter";
-const FILTER_TYPES: [FilterType; 4] = [
-    FilterType::Highpass,
-    FilterType::Lowpass,
-    FilterType::Bandpass,
-    FilterType::Notch,
-];
+const FILTER_TYPES: [FilterType; 2] = [FilterType::Highpass, FilterType::Lowpass];
 
 pub fn view(idx: usize, cfg: &FilterConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(HEADER_TEXT, idx, total_stages);
@@ -36,17 +31,6 @@ pub fn view(idx: usize, cfg: &FilterConfig, total_stages: usize) -> Element<'_, 
             move |v| Message::Stage(idx, StageMessage::Filter(FilterMessage::CutoffChanged(v))),
             |v| format!("{v:.0} Hz"),
             1.0
-        ),
-        labeled_slider(
-            "Resonance",
-            0.0..=1.0,
-            cfg.resonance,
-            move |v| Message::Stage(
-                idx,
-                StageMessage::Filter(FilterMessage::ResonanceChanged(v))
-            ),
-            |v| format!("{v:.2}"),
-            0.05
         ),
     ]
     .spacing(5);
