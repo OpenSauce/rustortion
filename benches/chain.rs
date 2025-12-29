@@ -20,13 +20,11 @@ fn build_chain(sample_rate: f32) -> AmplifierChain {
     chain.add_stage(Box::new(FilterStage::new(
         FilterType::Highpass,
         100.0,
-        0.0,
         sample_rate,
     )));
     chain.add_stage(Box::new(FilterStage::new(
         FilterType::Lowpass,
         8000.0,
-        0.0,
         sample_rate,
     )));
     chain.add_stage(Box::new(NoiseGateStage::new(
