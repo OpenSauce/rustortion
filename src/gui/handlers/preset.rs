@@ -109,6 +109,10 @@ impl PresetHandler {
             .cloned()
     }
 
+    pub fn get_available_presets(&self) -> Vec<String> {
+        self.available_presets.clone()
+    }
+
     pub fn load_preset_by_name(&mut self, name: &str) {
         if self.preset_manager.get_preset_by_name(name).is_some() {
             self.selected_preset = Some(name.to_owned());

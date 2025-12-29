@@ -41,7 +41,7 @@ cd rustortion-x86_64-unknown-linux-gnu
 
 With the rust toolchain installed, you can clone the repository and run the application:
 ```bash
-sudo apt-get install libjack-jackd2-dev pkg-config
+sudo apt-get install libjack-jackd2-dev libasound2-dev pkg-config
 cargo run --release
 // on some linux machines with pipewire you have to run jack explicitly
 // dont forget to install pipewire jack emulator: sudo apt-get install pipewire-jack

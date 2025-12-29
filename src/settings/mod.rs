@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+use crate::midi::MidiMapping;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioSettings {
     pub input_port: String,
@@ -30,6 +32,14 @@ impl Default for AudioSettings {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct MidiSettings {
+    /// The name of the selected MIDI controller
+    pub controller_name: Option<String>,
+    /// MIDI input to preset mappings
+    pub mappings: Vec<MidiMapping>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub audio: AudioSettings,
@@ -38,6 +48,7 @@ pub struct Settings {
     pub preset_dir: String,
     pub ir_bypassed: bool,
     pub selected_preset: Option<String>,
+    pub midi: MidiSettings,
 }
 
 impl Default for Settings {
@@ -49,6 +60,7 @@ impl Default for Settings {
             preset_dir: "./presets".to_string(),
             ir_bypassed: false,
             selected_preset: None,
+            midi: MidiSettings::default(),
         }
     }
 }
