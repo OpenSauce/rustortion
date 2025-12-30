@@ -1,4 +1,4 @@
-use iced::widget::{container, row, text};
+use iced::widget::{container, row, space, text};
 use iced::{Color, Element, Length};
 
 use crate::audio::peak_meter::PeakMeterInfo;
@@ -63,11 +63,8 @@ impl PeakMeterDisplay {
         };
 
         let meter = container(
-            container(iced::widget::Space::new(
-                Length::Fixed(level_width),
-                Length::Fixed(METER_HEIGHT),
-            ))
-            .style(move |_| container::Style::default().background(color)),
+            container(space().width(level_width).height(METER_HEIGHT))
+                .style(move |_| container::Style::default().background(color)),
         )
         .width(Length::Fixed(METER_WIDTH))
         .height(Length::Fixed(METER_HEIGHT))

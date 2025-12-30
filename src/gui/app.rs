@@ -42,7 +42,8 @@ pub struct AmplifierApp {
 }
 
 impl AmplifierApp {
-    pub fn new(audio_manager: Manager, settings: Settings) -> Self {
+    pub fn boot(settings: Settings) -> (Self, Task<Message>) {
+        let audio_manager = Manager::new(settings.clone()).unwrap();
         let mut preset_handler = PresetHandler::new(&settings.preset_dir).unwrap();
 
         // Try and load the last opened preset
@@ -90,32 +91,35 @@ impl AmplifierApp {
             );
         }
 
-        Self {
-            audio_manager,
-            stages: preset.stages,
-            is_recording: false,
-            stage_list,
-            control_bar,
-            settings,
-            settings_dialog,
-            // Set dirty chain to true to trigger initial rebuild
-            dirty_chain: true,
-            ir_cabinet_control,
-            tuner_dialog: TunerDisplay::new(),
-            tuner_enabled: false,
-            preset_handler,
-            peak_meter_display: PeakMeterDisplay::new(),
-            midi_handle,
-            midi_dialog,
-        }
+        (
+            Self {
+                audio_manager,
+                stages: preset.stages,
+                is_recording: false,
+                stage_list,
+                control_bar,
+                settings,
+                settings_dialog,
+                // Set dirty chain to true to trigger initial rebuild
+                dirty_chain: true,
+                ir_cabinet_control,
+                tuner_dialog: TunerDisplay::new(),
+                tuner_enabled: false,
+                preset_handler,
+                peak_meter_display: PeakMeterDisplay::new(),
+                midi_handle,
+                midi_dialog,
+            },
+            Task::none(),
+        )
     }
 
     pub fn view(&self) -> Element<'_, Message> {
-        use iced::widget::{Space, button, column, container, row};
+        use iced::widget::{button, column, container, row, space};
 
         let top_bar = row![
             self.peak_meter_display.view(),
-            Space::with_width(Length::Fill),
+            space(),
             button("Midi")
                 .on_press(Message::OpenMidi)
                 .style(iced::widget::button::secondary),
