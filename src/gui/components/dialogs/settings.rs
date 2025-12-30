@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, pick_list, row, rule::horizontal, space, text};
+use iced::widget::{button, column, container, pick_list, row, rule, space, text};
 use iced::{Alignment, Color, Element, Length};
 
 use crate::gui::messages::Message;
@@ -187,7 +187,7 @@ impl SettingsDialog {
         // Control buttons
         let controls = row![
             button("Refresh Ports").on_press(Message::RefreshPorts),
-            space(),
+            space::horizontal(),
             button("Cancel").on_press(Message::CancelSettings),
             button("Apply")
                 .on_press(Message::ApplySettings)
@@ -198,9 +198,9 @@ impl SettingsDialog {
 
         let dialog_content = column![
             title,
-            horizontal(1),
+            rule::horizontal(1),
             jack_status_section,
-            horizontal(1),
+            rule::horizontal(1),
             row![
                 column![input_section, output_left_section, output_right_section,]
                     .spacing(10)

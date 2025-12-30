@@ -1,3 +1,4 @@
+use iced::border::width;
 use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
 use log::{debug, error, info};
 
@@ -119,7 +120,7 @@ impl AmplifierApp {
 
         let top_bar = row![
             self.peak_meter_display.view(),
-            space(),
+            space::horizontal(),
             button("Midi")
                 .on_press(Message::OpenMidi)
                 .style(iced::widget::button::secondary),
