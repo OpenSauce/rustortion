@@ -100,7 +100,7 @@ impl PresetBar {
             .align_y(Alignment::Center);
 
             return container(
-                row![preset_selector, space(), confirmation_controls,]
+                row![preset_selector, space::horizontal(), confirmation_controls,]
                     .spacing(10)
                     .align_y(Alignment::Center)
                     .width(Length::Fill),
@@ -145,7 +145,7 @@ impl PresetBar {
         };
 
         container(
-            row![preset_selector, space(), save_controls,]
+            row![preset_selector, space::horizontal(), save_controls,]
                 .spacing(10)
                 .align_y(Alignment::Center)
                 .width(Length::Fill),

@@ -1,4 +1,4 @@
-use iced::widget::{checkbox, column, container, pick_list, row, rule::horizontal, slider, text};
+use iced::widget::{checkbox, column, container, pick_list, row, rule, slider, text};
 use iced::{Alignment, Element, Length};
 
 use crate::gui::messages::Message;
@@ -78,7 +78,9 @@ impl IrCabinetControl {
         .spacing(10)
         .align_y(Alignment::Center);
 
-        let bypass_control = checkbox(self.bypassed).on_toggle(Message::IrBypassed);
+        let bypass_control = checkbox(self.bypassed)
+            .label("Bypassed")
+            .on_toggle(Message::IrBypassed);
 
         let gain_control = row![
             text("Gain:").width(Length::Fixed(80.0)),
@@ -112,7 +114,7 @@ impl IrCabinetControl {
 
         let content = column![
             header,
-            horizontal(1),
+            rule::horizontal(1),
             ir_selector,
             gain_control,
             bypass_control,

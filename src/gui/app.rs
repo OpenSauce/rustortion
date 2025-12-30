@@ -1,4 +1,3 @@
-use iced::border::width;
 use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
 use log::{debug, error, info};
 

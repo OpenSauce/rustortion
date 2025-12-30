@@ -69,7 +69,7 @@ impl Control {
         )
         .padding(5);
 
-        row![stage_controls, space(), recording_controls]
+        row![stage_controls, space::horizontal(), recording_controls]
             .spacing(10)
             .align_y(Alignment::Center)
             .width(Length::Fill)

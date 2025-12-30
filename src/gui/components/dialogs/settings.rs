@@ -221,7 +221,6 @@ impl SettingsDialog {
             ]
             .spacing(10)
             .padding(5),
-            space(),
             controls,
         ]
         .spacing(15)
