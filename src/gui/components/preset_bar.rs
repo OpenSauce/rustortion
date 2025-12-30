@@ -1,4 +1,4 @@
-use iced::widget::{button, container, pick_list, row, text, text_input};
+use iced::widget::{button, container, pick_list, row, space, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 
 use crate::gui::messages::{Message, PresetGuiMessage, PresetMessage};
@@ -100,14 +100,10 @@ impl PresetBar {
             .align_y(Alignment::Center);
 
             return container(
-                row![
-                    preset_selector,
-                    iced::widget::horizontal_space(),
-                    confirmation_controls,
-                ]
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .width(Length::Fill),
+                row![preset_selector, space::horizontal(), confirmation_controls,]
+                    .spacing(10)
+                    .align_y(Alignment::Center)
+                    .width(Length::Fill),
             )
             .padding(10)
             .style(|theme: &iced::Theme| {
@@ -149,14 +145,10 @@ impl PresetBar {
         };
 
         container(
-            row![
-                preset_selector,
-                iced::widget::horizontal_space(),
-                save_controls,
-            ]
-            .spacing(10)
-            .align_y(Alignment::Center)
-            .width(Length::Fill),
+            row![preset_selector, space::horizontal(), save_controls,]
+                .spacing(10)
+                .align_y(Alignment::Center)
+                .width(Length::Fill),
         )
         .style(|theme: &iced::Theme| {
             container::Style::default()

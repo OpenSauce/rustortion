@@ -1,4 +1,4 @@
-use iced::widget::{button, column, container, pick_list, row, scrollable, text};
+use iced::widget::{button, column, container, pick_list, row, rule, scrollable, space, text};
 use iced::{Alignment, Color, Element, Length};
 
 use crate::gui::messages::Message;
@@ -185,7 +185,7 @@ impl MidiDialog {
         // Controls
         let controls = row![
             button("Refresh Controllers").on_press(Message::MidiRefreshControllers),
-            iced::widget::horizontal_space(),
+            space::horizontal(),
             button("Close").on_press(Message::MidiClose),
         ]
         .spacing(10)
@@ -193,11 +193,11 @@ impl MidiDialog {
 
         let dialog_content = column![
             title,
-            iced::widget::rule::Rule::horizontal(1),
+            rule::horizontal(1),
             controller_section,
-            iced::widget::rule::Rule::horizontal(1),
+            rule::horizontal(1),
             mappings_section,
-            iced::widget::rule::Rule::horizontal(1),
+            rule::horizontal(1),
             debug_section,
             controls,
         ]
@@ -260,8 +260,7 @@ impl MidiDialog {
 
         container(
             column![
-                row![header, iced::widget::horizontal_space(), status_text]
-                    .align_y(Alignment::Center),
+                row![header, space::horizontal(), status_text].align_y(Alignment::Center),
                 controller_picker,
                 disconnect_button,
             ]
@@ -386,8 +385,7 @@ impl MidiDialog {
 
         container(
             column![
-                row![header, iced::widget::horizontal_space(), add_button]
-                    .align_y(Alignment::Center),
+                row![header, space::horizontal(), add_button].align_y(Alignment::Center),
                 learning_content,
                 mappings_list,
             ]

@@ -1,6 +1,5 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use log::info;
-use rustortion::audio::manager::Manager;
 use rustortion::gui::start;
 use rustortion::settings::Settings;
 
@@ -35,10 +34,7 @@ __________                __                 __  .__
     info!("  Buffer Size: {}", settings.audio.buffer_size);
     info!("  Sample Rate: {}", settings.audio.sample_rate);
 
-    let audio_manager =
-        Manager::new(settings.clone()).context("failed to create ProcessorManager")?;
-
-    start(audio_manager, settings).map_err(|e| anyhow::anyhow!("GUI error: {}", e))?;
+    start(settings).map_err(|e| anyhow::anyhow!("GUI error: {}", e))?;
 
     Ok(())
 }

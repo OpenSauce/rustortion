@@ -1,4 +1,4 @@
-use iced::widget::{button, container, pick_list, row, text};
+use iced::widget::{button, container, pick_list, row, space, text};
 use iced::{Alignment, Element, Length};
 
 use crate::gui::config::StageType;
@@ -69,15 +69,11 @@ impl Control {
         )
         .padding(5);
 
-        row![
-            stage_controls,
-            iced::widget::horizontal_space(),
-            recording_controls
-        ]
-        .spacing(10)
-        .align_y(Alignment::Center)
-        .width(Length::Fill)
-        .into()
+        row![stage_controls, space::horizontal(), recording_controls]
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .width(Length::Fill)
+            .into()
     }
 
     pub fn set_selected(&mut self, t: StageType) {
