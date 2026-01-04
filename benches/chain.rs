@@ -43,7 +43,12 @@ fn build_chain(sample_rate: f32) -> AmplifierChain {
         3.0,
         sample_rate,
     )));
-    chain.add_stage(Box::new(PreampStage::new(6.0, 0.0, ClipperType::Soft)));
+    chain.add_stage(Box::new(PreampStage::new(
+        6.0,
+        0.0,
+        ClipperType::Soft,
+        sample_rate,
+    )));
     chain.add_stage(Box::new(ToneStackStage::new(
         ToneStackModel::British,
         0.6,
