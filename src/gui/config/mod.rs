@@ -78,7 +78,7 @@ impl StageConfig {
     pub fn to_runtime(&self, sample_rate: f32) -> Box<dyn crate::sim::stages::Stage> {
         match self {
             StageConfig::Filter(cfg) => Box::new(cfg.to_stage(sample_rate)),
-            StageConfig::Preamp(cfg) => Box::new(cfg.to_stage()),
+            StageConfig::Preamp(cfg) => Box::new(cfg.to_stage(sample_rate)),
             StageConfig::Compressor(cfg) => Box::new(cfg.to_stage(sample_rate)),
             StageConfig::ToneStack(cfg) => Box::new(cfg.to_stage(sample_rate)),
             StageConfig::PowerAmp(cfg) => Box::new(cfg.to_stage(sample_rate)),

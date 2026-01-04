@@ -19,7 +19,7 @@ impl Default for PreampConfig {
 }
 
 impl PreampConfig {
-    pub fn to_stage(&self) -> PreampStage {
-        PreampStage::new(self.gain, self.bias, self.clipper_type)
+    pub fn to_stage(&self, sample_rate: f32) -> PreampStage {
+        PreampStage::new(self.gain, self.bias, self.clipper_type, sample_rate)
     }
 }
