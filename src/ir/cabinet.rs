@@ -20,7 +20,6 @@ const DEFAULT_MAX_IR_MS: usize = 50;
 pub struct IrCabinet {
     ir_loader: IrLoader,
     convolver: Convolver,
-    convolver_type: ConvolverType,
     sample_rate: usize,
     max_ir_samples: usize,
 
@@ -60,7 +59,6 @@ impl IrCabinet {
         Ok(Self {
             ir_loader,
             convolver,
-            convolver_type,
             sample_rate,
             max_ir_samples,
             bypassed: false,
@@ -166,36 +164,5 @@ impl IrCabinet {
 
     pub fn gain(&self) -> f32 {
         self.output_gain
-    }
-
-    pub fn convolver_type(&self) -> ConvolverType {
-        self.convolver_type
-    }
-
-    /// Switch to a different convolver type. Requires re-selecting the IR.
-    pub fn set_convolver_type(&mut self, convolver_type: ConvolverType) {
-        if self.convolver_type != convolver_type {
-            self.convolver_type = convolver_type;
-            self.convolver = match convolver_type {
-                ConvolverType::Fir => Convolver::new_fir(self.max_ir_samples),
-                ConvolverType::TwoStage => Convolver::new_two_stage(),
-            };
-            info!("Switched to {:?} convolver", convolver_type);
-        }
-    }
-
-    /// Set maximum IR length in milliseconds
-    pub fn set_max_ir_ms(&mut self, max_ms: usize) {
-        self.max_ir_samples = (self.sample_rate * max_ms) / 1000;
-
-        // Update FIR convolver if that's what we're using
-        if self.convolver_type == ConvolverType::Fir {
-            self.convolver = Convolver::new_fir(self.max_ir_samples);
-        }
-
-        info!(
-            "Max IR length set to {}ms ({} samples)",
-            max_ms, self.max_ir_samples
-        );
     }
 }
