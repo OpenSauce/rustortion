@@ -168,10 +168,6 @@ impl IrCabinet {
         self.output_gain
     }
 
-    pub fn latency(&self) -> usize {
-        self.convolver.latency()
-    }
-
     pub fn convolver_type(&self) -> ConvolverType {
         self.convolver_type
     }

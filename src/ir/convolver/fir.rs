@@ -1,9 +1,6 @@
 use anyhow::Result;
 
 /// Simple time-domain FIR convolver using a ring buffer.
-///
-/// Best for short IRs (< 50ms / ~2400 samples at 48kHz).
-/// Zero latency, O(buffer_size * ir_length) complexity.
 pub struct FirConvolver {
     /// IR coefficients (stored in original order)
     coefficients: Vec<f32>,
@@ -78,10 +75,6 @@ impl FirConvolver {
     pub fn reset(&mut self) {
         self.input_buffer.fill(0.0);
         self.write_pos = 0;
-    }
-
-    pub fn latency(&self) -> usize {
-        0 // FIR has zero latency
     }
 
     /// Returns the current IR length

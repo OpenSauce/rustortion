@@ -51,12 +51,4 @@ impl Convolver {
             Convolver::TwoStage(c) => c.reset(),
         }
     }
-
-    /// Returns the latency in samples introduced by this convolver
-    pub fn latency(&self) -> usize {
-        match self {
-            Convolver::Fir(c) => c.latency(),
-            Convolver::TwoStage(c) => c.latency(),
-        }
-    }
 }

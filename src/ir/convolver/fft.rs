@@ -307,14 +307,6 @@ impl TwoStageConvolver {
         self.freq_accumulator.fill(Complex::new(0.0, 0.0));
     }
 
-    pub fn latency(&self) -> usize {
-        0 // Zero latency due to time-domain head
-    }
-
-    pub fn head_length(&self) -> usize {
-        HEAD_LEN
-    }
-
     pub fn num_tail_partitions(&self) -> usize {
         self.num_tail_partitions
     }
