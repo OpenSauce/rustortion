@@ -7,7 +7,7 @@ pub use fir::FirConvolver;
 use anyhow::Result;
 
 /// Convolver implementation selector
-/// Ignore Clippy warning here so we use enum dispatch for performance
+/// Ignore Clippy warning here, we are avoiding any dynamic dispatches using a box by using an enum, at the cost of some memory.
 #[allow(clippy::large_enum_variant)]
 pub enum Convolver {
     Fir(FirConvolver),
