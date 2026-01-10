@@ -64,7 +64,7 @@ impl IrCabinet {
             sample_rate,
             max_ir_samples,
             bypassed: false,
-            output_gain: 1.0,
+            output_gain: 0.1,
         })
     }
 
