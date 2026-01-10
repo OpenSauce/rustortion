@@ -41,7 +41,6 @@ harness = false
 name = "engine"
 harness = false
 
-
 [[bench]]
 name = "chain"
 harness = false
@@ -50,7 +49,10 @@ harness = false
 name = "samplers"
 harness = false
 
-# The profile that 'dist' will build with
+# Enable optimisation level 1 for dev profile, otherwise IR cabinet code tanks in debug mode.
+[profile.dev]
+opt-level = 1
+
 [profile.dist]
 inherits = "release"
 codegen-units = 1
