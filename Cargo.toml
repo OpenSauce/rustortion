@@ -49,6 +49,7 @@ harness = false
 name = "samplers"
 harness = false
 
+# Enable optimisation level 1 for dev profile, otherwise IR cabinet code tanks in debug mode.
 [profile.dev]
 opt-level = 1
 
