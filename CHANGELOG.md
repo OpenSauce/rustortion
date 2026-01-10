@@ -1,3 +1,24 @@
+## [0.1.6] - 2026-01-10
+
+### 🚀 Features
+
+- Add midi controller (#165)
+- Dynamic filter range in GUI (#168)
+- Update to Iced 0.14 (#169)
+- Add bass guitar IR and preset (#170)
+- Default to FIR only for impulse response convolution (#173)
+
+### 🐛 Bug Fixes
+
+- Hardcoded sample rate in preamp (#172)
+
+### 🚜 Refactor
+
+- Move tuner to its own module (#166)
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove unused filter stages and field (#167)
 ## [0.1.5] - 2025-12-28
 
 ### 🚀 Features

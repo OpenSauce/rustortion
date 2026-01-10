@@ -9,24 +9,26 @@ A guitar amp simulator built in Rust using JACK.
 
 ## Features
 
-- Low-latency audio processing with oversampling
+- Low-latency audio processing with configurable oversampling
 - Multiple amp simulation stages (preamp, compressor, tone stack, power amp, etc.)
-- Impulse response (IR) cabinet simulation
-- Save and load presets
+- Impulse response cabinet simulation for both guitar and bass
+- Saving and loading presets
 - Real-time recording capability
 - Built-in tuner
+- Basic MIDI controller support
 - GUI using [Iced](https://github.com/iced-rs/iced)
 
 ## Requirements
 
 - **Linux** with PipeWire (JACK support enabled)
 - **Rust** toolchain: [Install Rust](https://rustup.rs/)
+
 > [!NOTE]
-> It may be possible without PipeWire, but that's not been tested yet. [See this issue.](https://github.com/OpenSauce/rustortion/issues/100)
+> This has been tested on a Raspberry Pi 4 and reasonably high end desktop PC. Your mileage may vary on other hardware.
 
 ## Running
 
-### Prebuilt Binary
+### Pre-built Binary
 
 You can download a tarball of a pre-built binary from the [releases page.](https://github.com/OpenSauce/rustortion/releases/)
 
