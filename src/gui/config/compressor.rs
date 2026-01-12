@@ -1,4 +1,4 @@
-use crate::sim::stages::compressor::CompressorStage;
+use crate::amp::stages::compressor::CompressorStage;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

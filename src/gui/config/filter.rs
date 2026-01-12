@@ -1,4 +1,4 @@
-use crate::sim::stages::filter::{FilterStage, FilterType};
+use crate::amp::stages::filter::{FilterStage, FilterType};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

@@ -1,10 +1,10 @@
 use iced::widget::{column, container, pick_list, row, text};
 use iced::{Element, Length};
 
+use crate::amp::stages::tonestack::ToneStackModel;
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
 use crate::gui::config::ToneStackConfig;
 use crate::gui::messages::{Message, StageMessage, ToneStackMessage};
-use crate::sim::stages::tonestack::ToneStackModel;
 
 const HEADER_TEXT: &str = "Tone Stack";
 const TONE_STACK_MODELS: [ToneStackModel; 4] = [

@@ -1,6 +1,7 @@
 use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
-use log::{debug, error, info};
+use log::{debug, error};
 
+use crate::amp::chain::AmplifierChain;
 use crate::audio::manager::Manager;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::peak_meter::PeakMeterDisplay;
@@ -16,7 +17,6 @@ use crate::gui::handlers::preset::PresetHandler;
 use crate::gui::messages::{Message, PresetMessage};
 use crate::midi::{MidiEvent, MidiHandle, start_midi_manager};
 use crate::settings::{AudioSettings, Settings};
-use crate::sim::chain::AmplifierChain;
 
 const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
 const TUNER_POLL_INTERVAL: Duration = Duration::from_millis(20);
@@ -85,7 +85,7 @@ impl AmplifierApp {
         if let Some(controller_name) = &settings.midi.controller_name {
             midi_handle.connect(controller_name);
             midi_dialog.set_selected_controller(Some(controller_name.clone()));
-            info!(
+            debug!(
                 "Attempting to reconnect to MIDI controller: {}",
                 controller_name
             );
@@ -231,13 +231,13 @@ impl AmplifierApp {
                     error!("Failed to start recording: {}", e);
                 } else {
                     self.is_recording = true;
-                    info!("Recording started");
+                    debug!("Recording started");
                 }
             }
             Message::StopRecording => {
                 self.audio_manager.engine().stop_recording();
                 self.is_recording = false;
-                info!("Recording stopped");
+                debug!("Recording stopped");
             }
 
             Message::OpenSettings => {
@@ -265,7 +265,7 @@ impl AmplifierApp {
                 }
 
                 self.settings_dialog.hide();
-                info!("Audio settings applied successfully");
+                debug!("Audio settings applied successfully");
             }
             Message::RefreshPorts => {
                 let inputs = self.audio_manager.get_available_inputs();
@@ -412,7 +412,7 @@ impl AmplifierApp {
 
                             // Check for preset mapping
                             if let Some(preset_name) = self.midi_handle.check_mapping(&input) {
-                                info!("MIDI triggered preset: {}", preset_name);
+                                debug!("MIDI triggered preset: {}", preset_name);
                                 return Task::done(Message::Preset(PresetMessage::Select(
                                     preset_name,
                                 )));
@@ -420,7 +420,7 @@ impl AmplifierApp {
                         }
                         MidiEvent::Disconnected => {
                             self.midi_dialog.set_selected_controller(None);
-                            info!("MIDI device disconnected");
+                            debug!("MIDI device disconnected");
                         }
                         MidiEvent::Error(e) => {
                             error!("MIDI error: {}", e);

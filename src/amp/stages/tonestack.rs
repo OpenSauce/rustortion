@@ -1,4 +1,4 @@
-use crate::sim::stages::Stage;
+use crate::amp::stages::Stage;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;

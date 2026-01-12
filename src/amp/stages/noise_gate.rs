@@ -1,4 +1,4 @@
-use crate::sim::stages::Stage;
+use crate::amp::stages::Stage;
 
 /// Noise gate stage for eliminating unwanted noise when not playing
 /// Features:

@@ -1,6 +1,6 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use rustortion::sim::chain::AmplifierChain;
-use rustortion::sim::stages::{
+use rustortion::amp::chain::AmplifierChain;
+use rustortion::amp::stages::{
     clipper::ClipperType,
     compressor::CompressorStage,
     filter::{FilterStage, FilterType},

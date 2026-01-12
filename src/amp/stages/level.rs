@@ -1,4 +1,4 @@
-use crate::sim::stages::Stage;
+use crate::amp::stages::Stage;
 
 pub struct LevelStage {
     gain: f32,

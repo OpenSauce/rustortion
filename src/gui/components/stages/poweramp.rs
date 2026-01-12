@@ -1,10 +1,10 @@
 use iced::widget::{column, container, pick_list, row, text};
 use iced::{Element, Length};
 
+use crate::amp::stages::poweramp::PowerAmpType;
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
 use crate::gui::config::PowerAmpConfig;
 use crate::gui::messages::{Message, PowerAmpMessage, StageMessage};
-use crate::sim::stages::poweramp::PowerAmpType;
 
 const HEADER_TEXT: &str = "Power Amp";
 const POWER_AMP_TYPES: [PowerAmpType; 3] = [

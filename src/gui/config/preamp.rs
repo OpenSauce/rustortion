@@ -1,4 +1,4 @@
-use crate::sim::stages::{clipper::ClipperType, preamp::PreampStage};
+use crate::amp::stages::{clipper::ClipperType, preamp::PreampStage};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

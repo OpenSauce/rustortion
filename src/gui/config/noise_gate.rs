@@ -1,4 +1,4 @@
-use crate::sim::stages::noise_gate::NoiseGateStage;
+use crate::amp::stages::noise_gate::NoiseGateStage;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

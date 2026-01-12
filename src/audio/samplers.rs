@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use log::info;
+use log::debug;
 use rubato::{FftFixedInOut, Resampler};
 
 const CHANNELS: usize = 1;
@@ -93,7 +93,7 @@ impl Samplers {
             return Ok(());
         }
 
-        info!(
+        debug!(
             "Resizing buffers from {} to {}",
             self.input_buffer[0].len(),
             new_size

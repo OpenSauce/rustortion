@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::info;
+use log::{debug, info};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -51,7 +51,7 @@ impl IrCabinet {
             ConvolverType::TwoStage => Convolver::new_two_stage(),
         };
 
-        info!(
+        debug!(
             "IrCabinet created: {:?} convolver, max {}ms ({} samples)",
             convolver_type, max_ir_ms, max_ir_samples
         );
@@ -89,7 +89,7 @@ impl IrCabinet {
         // Trim trailing silence
         let ir_samples = Self::trim_silence(&ir_samples);
 
-        info!(
+        debug!(
             "Loading IR '{}': {} samples ({:.1}ms)",
             name,
             ir_samples.len(),

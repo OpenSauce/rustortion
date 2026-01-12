@@ -1,10 +1,10 @@
 use iced::widget::{column, container, pick_list, row, text};
 use iced::{Element, Length};
 
+use crate::amp::stages::filter::FilterType;
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
 use crate::gui::config::FilterConfig;
 use crate::gui::messages::{FilterMessage, Message, StageMessage};
-use crate::sim::stages::filter::FilterType;
 
 const HEADER_TEXT: &str = "Filter";
 const FILTER_TYPES: [FilterType; 2] = [FilterType::Highpass, FilterType::Lowpass];

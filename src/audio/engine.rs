@@ -2,12 +2,12 @@ use anyhow::Result;
 use crossbeam::channel::{Receiver, Sender, bounded};
 use log::{debug, error};
 
+use crate::amp::chain::AmplifierChain;
 use crate::audio::peak_meter::PeakMeter;
 use crate::audio::recorder::Recorder;
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
 use crate::metronome::Metronome;
-use crate::sim::chain::AmplifierChain;
 use crate::tuner::Tuner;
 
 pub enum EngineMessage {

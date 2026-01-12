@@ -1,5 +1,5 @@
-use crate::sim::stages::Stage;
-use crate::sim::stages::clipper::ClipperType;
+use crate::amp::stages::Stage;
+use crate::amp::stages::clipper::ClipperType;
 
 pub struct PreampStage {
     gain: f32, // 0..10

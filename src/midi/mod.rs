@@ -1,6 +1,6 @@
 use arc_swap::ArcSwap;
 use crossbeam::channel::{Receiver, Sender, bounded};
-use log::{error, info, warn};
+use log::{debug, error, info, warn};
 use midir::{MidiInput, MidiInputConnection};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -200,7 +200,7 @@ impl MidiManager {
 
     /// Run the MIDI manager (blocking, should be called from a dedicated thread)
     pub fn run(mut self) {
-        info!("MIDI manager started");
+        debug!("MIDI manager started");
 
         loop {
             match self.command_receiver.recv() {
@@ -211,7 +211,7 @@ impl MidiManager {
                     self.handle_disconnect();
                 }
                 Ok(MidiCommand::Shutdown) => {
-                    info!("MIDI manager shutting down");
+                    debug!("MIDI manager shutting down");
                     self.handle_disconnect();
                     break;
                 }
@@ -278,9 +278,6 @@ impl MidiManager {
             Ok(c) => c,
             Err(e) => {
                 error!("Failed to connect to MIDI device: {}", e);
-                let _ = self
-                    .event_sender
-                    .try_send(MidiEvent::Error(format!("Failed to connect: {}", e)));
                 return;
             }
         };

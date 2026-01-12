@@ -1,4 +1,4 @@
-use crate::sim::stages::{
+use crate::amp::stages::{
     clipper::ClipperType, filter::FilterType, poweramp::PowerAmpType, tonestack::ToneStackModel,
 };
 
