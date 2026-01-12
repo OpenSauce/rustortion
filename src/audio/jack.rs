@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use jack::Client;
-use log::{debug, error};
+use log::{error, warn};
 
 use crate::audio::engine::Engine;
 use crate::audio::ports::Ports;
@@ -15,7 +15,7 @@ pub struct ProcessHandler {
 
 impl jack::NotificationHandler for NotificationHandler {
     fn sample_rate(&mut self, _: &Client, sample_rate: jack::Frames) -> jack::Control {
-        debug!(">> JACK sample_rate changed to {sample_rate}");
+        warn!("JACK sample_rate changed to {sample_rate}");
 
         jack::Control::Continue
     }
@@ -57,7 +57,7 @@ impl jack::ProcessHandler for ProcessHandler {
     }
 
     fn buffer_size(&mut self, _client: &jack::Client, frames: jack::Frames) -> jack::Control {
-        debug!(">> JACK buffer_size changed to {frames} frames");
+        warn!("JACK buffer_size changed to {frames} frames");
 
         let new_size = frames as usize;
         self.buffer.resize(new_size, 0.0);

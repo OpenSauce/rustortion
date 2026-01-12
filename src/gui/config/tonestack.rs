@@ -1,4 +1,4 @@
-use crate::sim::stages::tonestack::{ToneStackModel, ToneStackStage};
+use crate::amp::stages::tonestack::{ToneStackModel, ToneStackStage};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

@@ -15,7 +15,6 @@ pub fn main() -> Result<()> {
 
     env_logger::init();
 
-    info!("Rustortion GUI v{}", env!("CARGO_PKG_VERSION"));
     info!(
         r#"
 __________                __                 __  .__               
@@ -26,13 +25,8 @@ __________                __                 __  .__
         \/           \/                                         \/ 
     "#
     );
-
-    info!("Audio Settings:");
-    info!("  Input: {}", settings.audio.input_port);
-    info!("  Output L: {}", settings.audio.output_left_port);
-    info!("  Output R: {}", settings.audio.output_right_port);
-    info!("  Buffer Size: {}", settings.audio.buffer_size);
-    info!("  Sample Rate: {}", settings.audio.sample_rate);
+    info!("v{}", env!("CARGO_PKG_VERSION"));
+    info!("{}", settings);
 
     start(settings).map_err(|e| anyhow::anyhow!("GUI error: {}", e))?;
 

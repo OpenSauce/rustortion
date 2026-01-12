@@ -1,4 +1,4 @@
-use crate::sim::stages::Stage;
+use crate::amp::stages::Stage;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
@@ -111,7 +111,7 @@ impl Stage for FilterStage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::stages::Stage;
+    use crate::amp::stages::Stage;
 
     #[test]
     fn highpass_blocks_low_frequencies_and_passes_high() {

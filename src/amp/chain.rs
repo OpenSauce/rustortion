@@ -1,4 +1,4 @@
-use crate::sim::stages::Stage;
+use crate::amp::stages::Stage;
 
 // AmplifierChain holds a sequence of processing stages.
 #[derive(Default)]

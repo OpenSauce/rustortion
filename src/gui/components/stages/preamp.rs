@@ -1,10 +1,10 @@
 use iced::widget::{column, container, pick_list, row, text};
 use iced::{Element, Length};
 
+use crate::amp::stages::clipper::ClipperType;
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
 use crate::gui::config::PreampConfig;
 use crate::gui::messages::{Message, PreampMessage, StageMessage};
-use crate::sim::stages::clipper::ClipperType;
 
 const HEADER_TEXT: &str = "Preamp";
 const CLIPPER_TYPES: [ClipperType; 5] = [

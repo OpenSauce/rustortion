@@ -1,6 +1,6 @@
 use anyhow::{Context, Result, anyhow};
 use hound::WavReader;
-use log::{debug, info, warn};
+use log::{debug, warn};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -130,7 +130,7 @@ impl IrLoader {
             a_sep_count.cmp(&b_sep_count).then_with(|| a.0.cmp(&b.0))
         });
 
-        info!(
+        debug!(
             "Found {} impulse response files",
             self.available_ir_paths.len()
         );

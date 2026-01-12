@@ -1,4 +1,4 @@
-use crate::sim::stages::level::LevelStage;
+use crate::amp::stages::level::LevelStage;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

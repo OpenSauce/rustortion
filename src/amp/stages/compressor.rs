@@ -1,4 +1,4 @@
-use crate::sim::stages::Stage;
+use crate::amp::stages::Stage;
 
 pub struct CompressorStage {
     attack: f32,      // Attack coefficient (0-1)

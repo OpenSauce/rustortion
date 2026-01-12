@@ -1,10 +1,10 @@
 use anyhow::Result;
+use rustortion::amp::chain::AmplifierChain;
+use rustortion::amp::stages::level::LevelStage;
 use rustortion::audio::engine::Engine;
 use rustortion::audio::peak_meter::PeakMeter;
 use rustortion::audio::samplers::Samplers;
 use rustortion::metronome::Metronome;
-use rustortion::sim::chain::AmplifierChain;
-use rustortion::sim::stages::level::LevelStage;
 use rustortion::tuner::Tuner;
 
 #[test]
