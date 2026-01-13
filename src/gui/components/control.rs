@@ -6,6 +6,8 @@ use crate::gui::messages::Message;
 
 pub struct Control {
     selected_stage_type: StageType,
+    is_recording: bool,
+    is_looping: bool,
 }
 
 const STAGE_TYPES: &[StageType] = &[
@@ -22,6 +24,8 @@ impl Control {
     pub fn new(selected_stage_type: StageType) -> Self {
         Self {
             selected_stage_type,
+            is_recording: false,
+            is_looping: false,
         }
     }
 
@@ -29,7 +33,7 @@ impl Control {
         self.selected_stage_type = ty;
     }
 
-    pub fn view(&self, is_recording: bool) -> Element<'_, Message> {
+    pub fn view(&self) -> Element<'_, Message> {
         let stage_controls = row![
             pick_list(
                 STAGE_TYPES,
@@ -41,8 +45,36 @@ impl Control {
         .spacing(10)
         .align_y(Alignment::Center);
 
+        // Looping controls
+        let looping_button = if self.is_looping {
+            button(text("Stop Looping"))
+                .on_press(Message::StopLooping)
+                .style(iced::widget::button::danger)
+        } else {
+            button(text("Start Looping"))
+                .on_press(Message::StartLooping)
+                .style(iced::widget::button::success)
+        };
+
+        let looping_status = if self.is_looping {
+            text("Looping...").style(|_| iced::widget::text::Style {
+                color: Some(iced::Color::from_rgb(1.0, 0.3, 0.3)),
+            })
+        } else {
+            text("").style(|theme: &iced::Theme| iced::widget::text::Style {
+                color: Some(theme.palette().text),
+            })
+        };
+
+        let looping_controls = container(
+            row![looping_button, looping_status]
+                .spacing(10)
+                .align_y(Alignment::Center),
+        )
+        .padding(5);
+
         // Recording controls
-        let record_button = if is_recording {
+        let record_button = if self.is_recording {
             button(text("Stop Recording"))
                 .on_press(Message::StopRecording)
                 .style(iced::widget::button::danger)
@@ -52,7 +84,7 @@ impl Control {
                 .style(iced::widget::button::success)
         };
 
-        let recording_status = if is_recording {
+        let recording_status = if self.is_recording {
             text("Recording...").style(|_| iced::widget::text::Style {
                 color: Some(iced::Color::from_rgb(1.0, 0.3, 0.3)),
             })
@@ -69,11 +101,16 @@ impl Control {
         )
         .padding(5);
 
-        row![stage_controls, space::horizontal(), recording_controls]
-            .spacing(10)
-            .align_y(Alignment::Center)
-            .width(Length::Fill)
-            .into()
+        row![
+            stage_controls,
+            space::horizontal(),
+            looping_controls,
+            recording_controls
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center)
+        .width(Length::Fill)
+        .into()
     }
 
     pub fn set_selected(&mut self, t: StageType) {
@@ -81,5 +118,13 @@ impl Control {
     }
     pub fn selected(&self) -> StageType {
         self.selected_stage_type
+    }
+
+    pub fn set_recording(&mut self, recording: bool) {
+        self.is_recording = recording;
+    }
+
+    pub fn set_looping(&mut self, looping: bool) {
+        self.is_looping = looping;
     }
 }

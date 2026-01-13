@@ -24,6 +24,10 @@ pub enum Message {
     StartRecording,
     StopRecording,
 
+    // Looping messages
+    StartLooping,
+    StopLooping,
+
     // Settings messages
     OpenSettings,
     CancelSettings,

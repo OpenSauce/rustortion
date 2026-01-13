@@ -6,15 +6,13 @@
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 187.0,
-        "resonance": 0.2
+        "cutoff_hz": 187.0
       }
     },
     {
       "Filter": {
         "filter_type": "Lowpass",
-        "cutoff_hz": 7469.0,
-        "resonance": 0.15
+        "cutoff_hz": 7469.0
       }
     },
     {
@@ -61,15 +59,13 @@
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 129.0,
-        "resonance": 0.0
+        "cutoff_hz": 129.0
       }
     },
     {
       "Filter": {
         "filter_type": "Lowpass",
-        "cutoff_hz": 7835.0,
-        "resonance": 0.0
+        "cutoff_hz": 7835.0
       }
     },
     {

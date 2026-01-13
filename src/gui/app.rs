@@ -26,7 +26,6 @@ const PEAK_METER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 pub struct AmplifierApp {
     audio_manager: Manager,
     stages: Vec<StageConfig>,
-    is_recording: bool,
     stage_list: StageList,
     control_bar: Control,
     settings: Settings,
@@ -95,7 +94,6 @@ impl AmplifierApp {
             Self {
                 audio_manager,
                 stages: preset.stages,
-                is_recording: false,
                 stage_list,
                 control_bar,
                 settings,
@@ -135,7 +133,7 @@ impl AmplifierApp {
             self.preset_handler.view(),
             self.stage_list.view(),
             self.ir_cabinet_control.view(),
-            self.control_bar.view(self.is_recording),
+            self.control_bar.view(),
         ]
         .spacing(10)
         .padding(20);
@@ -230,16 +228,34 @@ impl AmplifierApp {
                 {
                     error!("Failed to start recording: {}", e);
                 } else {
-                    self.is_recording = true;
+                    self.control_bar.set_recording(true);
                     debug!("Recording started");
                 }
             }
             Message::StopRecording => {
                 self.audio_manager.engine().stop_recording();
-                self.is_recording = false;
+                self.control_bar.set_recording(false);
                 debug!("Recording stopped");
             }
-
+            Message::StartLooping => {
+                let sample_rate = self.audio_manager.sample_rate();
+                let recording_dir = &self.settings.recording_dir;
+                if let Err(e) = self
+                    .audio_manager
+                    .engine()
+                    .start_recording(sample_rate, recording_dir)
+                {
+                    error!("Failed to start recording: {}", e);
+                } else {
+                    self.control_bar.set_looping(true);
+                    debug!("Looping started");
+                }
+            }
+            Message::StopLooping => {
+                self.audio_manager.engine().stop_looping();
+                self.control_bar.set_looping(false);
+                debug!("Looping stopped");
+            }
             Message::OpenSettings => {
                 let inputs = self.audio_manager.get_available_inputs();
                 let outputs = self.audio_manager.get_available_outputs();
