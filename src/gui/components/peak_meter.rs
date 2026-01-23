@@ -3,6 +3,7 @@ use iced::{Color, Element, Length};
 
 use crate::audio::peak_meter::PeakMeterInfo;
 use crate::gui::messages::Message;
+use crate::tr;
 
 const METER_WIDTH: f32 = 200.0;
 const METER_HEIGHT: f32 = 20.0;
@@ -43,9 +44,9 @@ impl PeakMeterDisplay {
         };
 
         let db_text = if self.info.peak_db > -100.0 {
-            format!("{:+.1} dB", self.info.peak_db)
+            format!("{:+.1} {}", self.info.peak_db, tr!(db))
         } else {
-            "-∞ dB".to_string()
+            format!("-∞ {}", tr!(db))
         };
 
         let status_text = if self.info.is_clipping {
@@ -75,7 +76,7 @@ impl PeakMeterDisplay {
         });
 
         row![
-            text("Output:").width(Length::Fixed(75.0)),
+            text(tr!(output)).width(Length::Fixed(75.0)),
             meter,
             text(db_text)
                 .size(14)

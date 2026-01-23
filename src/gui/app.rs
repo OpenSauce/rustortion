@@ -15,8 +15,10 @@ use crate::gui::components::{
 use crate::gui::config::{StageConfig, StageType};
 use crate::gui::handlers::preset::PresetHandler;
 use crate::gui::messages::{Message, PresetMessage};
+use crate::i18n;
 use crate::midi::{MidiEvent, MidiHandle, start_midi_manager};
 use crate::settings::{AudioSettings, Settings};
+use crate::tr;
 
 const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
 const TUNER_POLL_INTERVAL: Duration = Duration::from_millis(20);
@@ -91,6 +93,9 @@ impl AmplifierApp {
             );
         }
 
+        // Set the global language from settings
+        i18n::set_language(settings.language);
+
         (
             Self {
                 audio_manager,
@@ -120,13 +125,13 @@ impl AmplifierApp {
         let top_bar = row![
             self.peak_meter_display.view(),
             space::horizontal(),
-            button("Midi")
+            button(tr!(midi))
                 .on_press(Message::OpenMidi)
                 .style(iced::widget::button::secondary),
-            button("Tuner")
+            button(tr!(tuner))
                 .on_press(Message::ToggleTuner)
                 .style(iced::widget::button::secondary),
-            button("Settings").on_press(Message::OpenSettings),
+            button(tr!(settings)).on_press(Message::OpenSettings),
         ]
         .spacing(5);
 
@@ -285,6 +290,13 @@ impl AmplifierApp {
             Message::SampleRateChanged(x) => self.with_temp_settings(|s| s.sample_rate = x),
             Message::OversamplingFactorChanged(x) => {
                 self.with_temp_settings(|s| s.oversampling_factor = x)
+            }
+            Message::LanguageChanged(lang) => {
+                i18n::set_language(lang);
+                self.settings.language = lang;
+                if let Err(e) = self.settings.save() {
+                    error!("Failed to save language settings: {e}");
+                }
             }
             Message::IrSelected(ir_name) => {
                 self.ir_cabinet_control

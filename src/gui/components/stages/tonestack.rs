@@ -5,8 +5,8 @@ use crate::amp::stages::tonestack::ToneStackModel;
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
 use crate::gui::config::ToneStackConfig;
 use crate::gui::messages::{Message, StageMessage, ToneStackMessage};
+use crate::tr;
 
-const HEADER_TEXT: &str = "Tone Stack";
 const TONE_STACK_MODELS: [ToneStackModel; 4] = [
     ToneStackModel::Modern,
     ToneStackModel::British,
@@ -15,10 +15,10 @@ const TONE_STACK_MODELS: [ToneStackModel; 4] = [
 ];
 
 pub fn view(idx: usize, cfg: &ToneStackConfig, total_stages: usize) -> Element<'_, Message> {
-    let header = stage_header(HEADER_TEXT, idx, total_stages);
+    let header = stage_header(tr!(stage_tone_stack), idx, total_stages);
 
     let model_picker = row![
-        text("Model:").width(Length::FillPortion(3)),
+        text(tr!(model)).width(Length::FillPortion(3)),
         pick_list(TONE_STACK_MODELS, Some(cfg.model), move |m| {
             Message::Stage(
                 idx,
@@ -33,7 +33,7 @@ pub fn view(idx: usize, cfg: &ToneStackConfig, total_stages: usize) -> Element<'
     let body = column![
         model_picker,
         labeled_slider(
-            "Bass",
+            tr!(bass),
             0.0..=2.0,
             cfg.bass,
             move |v| Message::Stage(
@@ -44,7 +44,7 @@ pub fn view(idx: usize, cfg: &ToneStackConfig, total_stages: usize) -> Element<'
             0.05
         ),
         labeled_slider(
-            "Mid",
+            tr!(mid),
             0.0..=2.0,
             cfg.mid,
             move |v| Message::Stage(
@@ -55,7 +55,7 @@ pub fn view(idx: usize, cfg: &ToneStackConfig, total_stages: usize) -> Element<'
             0.05
         ),
         labeled_slider(
-            "Treble",
+            tr!(treble),
             0.0..=2.0,
             cfg.treble,
             move |v| Message::Stage(
@@ -66,7 +66,7 @@ pub fn view(idx: usize, cfg: &ToneStackConfig, total_stages: usize) -> Element<'
             0.05
         ),
         labeled_slider(
-            "Presence",
+            tr!(presence),
             0.0..=2.0,
             cfg.presence,
             move |v| Message::Stage(

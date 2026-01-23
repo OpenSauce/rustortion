@@ -2,6 +2,7 @@ use iced::widget::{button, column, container, row, rule, space, text};
 use iced::{Alignment, Color, Element, Length};
 
 use crate::gui::messages::Message;
+use crate::tr;
 use crate::tuner::TunerInfo;
 
 pub struct TunerDisplay {
@@ -45,7 +46,7 @@ impl TunerDisplay {
             return None;
         }
 
-        let title = text("TUNER")
+        let title = text(tr!(tuner_title))
             .size(28)
             .style(|theme: &iced::Theme| iced::widget::text::Style {
                 color: Some(theme.palette().text),
@@ -70,9 +71,9 @@ impl TunerDisplay {
         };
 
         let freq_text = if let Some(freq) = self.info.frequency {
-            format!("{:.1} Hz", freq)
+            format!("{:.1} {}", freq, tr!(hz))
         } else {
-            String::from("--.- Hz")
+            format!("--.- {}", tr!(hz))
         };
 
         let freq_display =
@@ -85,26 +86,26 @@ impl TunerDisplay {
         let cents_indicator = self.cents_display();
 
         let status_text = if self.info.in_tune {
-            text("IN TUNE ✓")
+            text(format!("{} ✓", tr!(in_tune)))
                 .size(24)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
                     color: Some(Color::from_rgb(0.2, 1.0, 0.2)),
                 })
         } else if self.info.cents_off.is_some() {
-            text("ADJUST")
+            text(tr!(adjust))
                 .size(20)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
                     color: Some(Color::from_rgb(1.0, 0.7, 0.3)),
                 })
         } else {
-            text("PLAY A NOTE")
+            text(tr!(play_a_note))
                 .size(20)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
                     color: Some(Color::from_rgb(0.5, 0.5, 0.5)),
                 })
         };
 
-        let close_button = button("Close")
+        let close_button = button(tr!(close))
             .on_press(Message::ToggleTuner) // Toggles off since it's already open
             .style(iced::widget::button::primary)
             .padding(10);
@@ -169,13 +170,16 @@ impl TunerDisplay {
                 Color::from_rgb(1.0, 0.3, 0.3) // Red
             };
 
+            let flat_label = format!("♭ {}", tr!(flat));
+            let sharp_label = format!("{} ♯", tr!(sharp));
+
             column![
                 text(bar_str)
                     .font(iced::Font::MONOSPACE)
                     .size(24)
                     .style(move |_: &iced::Theme| iced::widget::text::Style { color: Some(color) }),
                 row![
-                    text("♭ FLAT")
+                    text(flat_label)
                         .size(14)
                         .style(|_: &iced::Theme| iced::widget::text::Style {
                             color: Some(Color::from_rgb(0.6, 0.6, 0.6)),
@@ -185,7 +189,7 @@ impl TunerDisplay {
                         iced::widget::text::Style { color: Some(color) }
                     }),
                     space::horizontal(),
-                    text("SHARP ♯")
+                    text(sharp_label)
                         .size(14)
                         .style(|_: &iced::Theme| iced::widget::text::Style {
                             color: Some(Color::from_rgb(0.6, 0.6, 0.6)),

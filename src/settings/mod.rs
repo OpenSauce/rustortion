@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+use crate::i18n::Language;
 use crate::midi::MidiMapping;
 
 impl std::fmt::Display for AudioSettings {
@@ -77,6 +78,8 @@ pub struct Settings {
     pub preset_dir: String,
     pub ir_bypassed: bool,
     pub selected_preset: Option<String>,
+    #[serde(default)]
+    pub language: Language,
 }
 
 impl std::fmt::Display for Settings {
@@ -99,6 +102,7 @@ impl std::fmt::Display for Settings {
             "Selected Preset: {}",
             self.selected_preset.as_deref().unwrap_or("None")
         )?;
+        writeln!(f, "Language: {}", self.language)?;
         Ok(())
     }
 }
@@ -113,6 +117,7 @@ impl Default for Settings {
             preset_dir: "./presets".to_string(),
             ir_bypassed: false,
             selected_preset: None,
+            language: Language::default(),
         }
     }
 }

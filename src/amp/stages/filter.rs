@@ -12,8 +12,8 @@ pub enum FilterType {
 impl std::fmt::Display for FilterType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FilterType::Highpass => write!(f, "Highpass"),
-            FilterType::Lowpass => write!(f, "Lowpass"),
+            FilterType::Highpass => write!(f, "{}", crate::tr!(filter_highpass)),
+            FilterType::Lowpass => write!(f, "{}", crate::tr!(filter_lowpass)),
         }
     }
 }

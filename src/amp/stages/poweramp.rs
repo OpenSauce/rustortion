@@ -12,9 +12,9 @@ pub enum PowerAmpType {
 impl std::fmt::Display for PowerAmpType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PowerAmpType::ClassA => write!(f, "Class A"),
-            PowerAmpType::ClassAB => write!(f, "Class AB"),
-            PowerAmpType::ClassB => write!(f, "Class B"),
+            PowerAmpType::ClassA => write!(f, "{}", crate::tr!(poweramp_class_a)),
+            PowerAmpType::ClassAB => write!(f, "{}", crate::tr!(poweramp_class_ab)),
+            PowerAmpType::ClassB => write!(f, "{}", crate::tr!(poweramp_class_b)),
         }
     }
 }

@@ -18,6 +18,7 @@ use crate::gui::messages::{
     CompressorMessage, FilterMessage, LevelMessage, NoiseGateMessage, PowerAmpMessage,
     PreampMessage, StageMessage, ToneStackMessage,
 };
+use crate::tr;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
@@ -37,13 +38,13 @@ pub enum StageType {
 impl Display for StageType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            StageType::Filter => write!(f, "Filter"),
-            StageType::Preamp => write!(f, "Preamp"),
-            StageType::Compressor => write!(f, "Compressor"),
-            StageType::ToneStack => write!(f, "Tone Stack"),
-            StageType::PowerAmp => write!(f, "Power Amp"),
-            StageType::Level => write!(f, "Level"),
-            StageType::NoiseGate => write!(f, "Noise Gate"),
+            StageType::Filter => write!(f, "{}", tr!(stage_filter)),
+            StageType::Preamp => write!(f, "{}", tr!(stage_preamp)),
+            StageType::Compressor => write!(f, "{}", tr!(stage_compressor)),
+            StageType::ToneStack => write!(f, "{}", tr!(stage_tone_stack)),
+            StageType::PowerAmp => write!(f, "{}", tr!(stage_power_amp)),
+            StageType::Level => write!(f, "{}", tr!(stage_level)),
+            StageType::NoiseGate => write!(f, "{}", tr!(stage_noise_gate)),
         }
     }
 }

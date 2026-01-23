@@ -14,11 +14,11 @@ pub enum ClipperType {
 impl std::fmt::Display for ClipperType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ClipperType::Soft => write!(f, "Soft Clipping"),
-            ClipperType::Medium => write!(f, "Medium Clipping"),
-            ClipperType::Hard => write!(f, "Hard Clipping"),
-            ClipperType::Asymmetric => write!(f, "Asymmetric Clipping"),
-            ClipperType::ClassA => write!(f, "Class A Tube Preamp"),
+            ClipperType::Soft => write!(f, "{}", crate::tr!(clipper_soft)),
+            ClipperType::Medium => write!(f, "{}", crate::tr!(clipper_medium)),
+            ClipperType::Hard => write!(f, "{}", crate::tr!(clipper_hard)),
+            ClipperType::Asymmetric => write!(f, "{}", crate::tr!(clipper_asymmetric)),
+            ClipperType::ClassA => write!(f, "{}", crate::tr!(clipper_class_a)),
         }
     }
 }
