@@ -1,0 +1,21 @@
+name: Translate Readme
+
+on:
+    push:
+        branches: ['**']
+
+jobs:
+    translate:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v3
+              with:
+                fetch-depth: 3
+
+            - name: Auto Translate
+              uses: Lin-jun-xiang/action-translate-readme@v2
+              with:
+                token: ${{ secrets.ACTION_BIT }}
+                openai: ${{ secrets.OPENAI_API_KEY }}
+                langs: "en,zh-CN"
