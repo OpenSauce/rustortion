@@ -2,26 +2,28 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::sync::atomic::{AtomicU8, Ordering};
 
-static CURRENT_LANGUAGE: AtomicU8 = AtomicU8::new(0); // 0 = English, 1 = Chinese
+static CURRENT_LANGUAGE: AtomicU8 = AtomicU8::new(0); // 0 = English, 1 = ZhCn
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Language {
     #[default]
+    #[serde(alias = "en")]
     English,
-    Chinese,
+    #[serde(rename = "zh-CN", alias = "Chinese")]
+    ZhCn,
 }
 
 impl Language {
     fn to_u8(self) -> u8 {
         match self {
             Language::English => 0,
-            Language::Chinese => 1,
+            Language::ZhCn => 1,
         }
     }
 
     fn from_u8(val: u8) -> Self {
         match val {
-            1 => Language::Chinese,
+            1 => Language::ZhCn,
             _ => Language::English,
         }
     }
@@ -31,12 +33,12 @@ impl Display for Language {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Language::English => write!(f, "English"),
-            Language::Chinese => write!(f, "中文"),
+            Language::ZhCn => write!(f, "中文（简体）"),
         }
     }
 }
 
-pub const LANGUAGES: &[Language] = &[Language::English, Language::Chinese];
+pub const LANGUAGES: &[Language] = &[Language::English, Language::ZhCn];
 
 /// Set the current language globally
 pub fn set_language(lang: Language) {
@@ -209,13 +211,13 @@ pub struct Translations {
 impl Translations {
     pub fn for_language(lang: Language) -> &'static Self {
         match lang {
-            Language::English => &ENGLISH,
-            Language::Chinese => &CHINESE,
+            Language::English => &EN,
+            Language::ZhCn => &ZH_CN,
         }
     }
 }
 
-pub static ENGLISH: Translations = Translations {
+pub static EN: Translations = Translations {
     // Top bar buttons
     midi: "Midi",
     tuner: "Tuner",
@@ -353,7 +355,7 @@ pub static ENGLISH: Translations = Translations {
     ms: "ms",
 };
 
-pub static CHINESE: Translations = Translations {
+pub static ZH_CN: Translations = Translations {
     // Top bar buttons
     midi: "MIDI",
     tuner: "调音器",
