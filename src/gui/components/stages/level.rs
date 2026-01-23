@@ -4,14 +4,13 @@ use iced::{Element, Length};
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
 use crate::gui::config::LevelConfig;
 use crate::gui::messages::{LevelMessage, Message, StageMessage};
-
-const HEADER_TEXT: &str = "Level";
+use crate::tr;
 
 pub fn view(idx: usize, cfg: &LevelConfig, total_stages: usize) -> Element<'_, Message> {
-    let header = stage_header(HEADER_TEXT, idx, total_stages);
+    let header = stage_header(tr!(stage_level), idx, total_stages);
 
     let body = column![labeled_slider(
-        "Gain",
+        tr!(gain),
         0.0..=2.0,
         cfg.gain,
         move |v| Message::Stage(idx, StageMessage::Level(LevelMessage::GainChanged(v))),

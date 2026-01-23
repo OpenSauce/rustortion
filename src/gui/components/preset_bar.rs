@@ -2,6 +2,7 @@ use iced::widget::{button, container, pick_list, row, space, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 
 use crate::gui::messages::{Message, PresetGuiMessage, PresetMessage};
+use crate::tr;
 
 pub struct PresetBar {
     preset_name_input: String,
@@ -80,7 +81,7 @@ impl PresetBar {
         available_presets: Vec<String>,
     ) -> Element<'static, Message> {
         let preset_selector = row![
-            text("Preset:").width(Length::Fixed(80.0)),
+            text(tr!(preset)).width(Length::Fixed(80.0)),
             pick_list(available_presets.clone(), selected_preset.clone(), |p| {
                 PresetMessage::Select(p).into()
             })
@@ -91,10 +92,15 @@ impl PresetBar {
 
         if self.show_overwrite_confirmation {
             let confirmation_controls = row![
-                text(format!("Overwrite '{}'?", self.overwrite_target)),
-                button("Yes")
+                text(format!(
+                    "{} '{}'?",
+                    tr!(overwrite_preset),
+                    self.overwrite_target
+                )),
+                button(tr!(yes))
                     .on_press(PresetMessage::Gui(PresetGuiMessage::ConfirmOverwrite).into()),
-                button("No").on_press(PresetMessage::Gui(PresetGuiMessage::CancelOverwrite).into()),
+                button(tr!(no))
+                    .on_press(PresetMessage::Gui(PresetGuiMessage::CancelOverwrite).into()),
             ]
             .spacing(5)
             .align_y(Alignment::Center);
@@ -116,26 +122,27 @@ impl PresetBar {
 
         let save_controls = if self.show_save_input {
             row![
-                text_input("Preset name...", &self.preset_name_input)
+                text_input(tr!(preset_name_placeholder), &self.preset_name_input)
                     .on_input(|p| PresetMessage::Gui(PresetGuiMessage::NameChanged(p)).into())
                     .width(Length::Fixed(150.0)),
-                button("Save")
+                button(tr!(save))
                     .on_press(PresetMessage::Save(self.preset_name_input.to_owned()).into()),
-                button("Cancel").on_press(PresetMessage::Gui(PresetGuiMessage::CancelSave).into()),
+                button(tr!(cancel))
+                    .on_press(PresetMessage::Gui(PresetGuiMessage::CancelSave).into()),
             ]
             .spacing(5)
             .align_y(Alignment::Center)
         } else {
             let mut controls = row![
-                button("Save As...")
+                button(tr!(save_as))
                     .on_press(PresetMessage::Gui(PresetGuiMessage::ShowSave).into()),
             ];
 
             if let Some(ref preset_name) = selected_preset {
                 controls = controls
-                    .push(button("Update").on_press(PresetMessage::Update.into()))
+                    .push(button(tr!(update)).on_press(PresetMessage::Update.into()))
                     .push(
-                        button("Delete")
+                        button(tr!(delete))
                             .on_press(PresetMessage::Delete(preset_name.clone()).into())
                             .style(iced::widget::button::danger),
                     );

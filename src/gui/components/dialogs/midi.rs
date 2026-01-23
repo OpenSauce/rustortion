@@ -3,6 +3,7 @@ use iced::{Alignment, Color, Element, Length};
 
 use crate::gui::messages::Message;
 use crate::midi::{MidiInputEvent, MidiManager, MidiMapping};
+use crate::tr;
 
 const MAX_DEBUG_MESSAGES: usize = 20;
 
@@ -166,12 +167,11 @@ impl MidiDialog {
             return None;
         }
 
-        let title =
-            text("MIDI Settings")
-                .size(24)
-                .style(|theme: &iced::Theme| iced::widget::text::Style {
-                    color: Some(theme.palette().text),
-                });
+        let title = text(tr!(midi_settings))
+            .size(24)
+            .style(|theme: &iced::Theme| iced::widget::text::Style {
+                color: Some(theme.palette().text),
+            });
 
         // Controller selection section
         let controller_section = self.controller_section_view();
@@ -184,9 +184,9 @@ impl MidiDialog {
 
         // Controls
         let controls = row![
-            button("Refresh Controllers").on_press(Message::MidiRefreshControllers),
+            button(tr!(refresh_controllers)).on_press(Message::MidiRefreshControllers),
             space::horizontal(),
-            button("Close").on_press(Message::MidiClose),
+            button(tr!(close)).on_press(Message::MidiClose),
         ]
         .spacing(10)
         .width(Length::Fill);
@@ -217,20 +217,20 @@ impl MidiDialog {
 
     fn controller_section_view(&self) -> Element<'_, Message> {
         let header =
-            text("Controller")
+            text(tr!(controller))
                 .size(18)
                 .style(|theme: &iced::Theme| iced::widget::text::Style {
                     color: Some(theme.palette().text),
                 });
 
         let status_text = if self.selected_controller.is_some() {
-            text("Connected")
+            text(tr!(connected))
                 .size(14)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
                     color: Some(Color::from_rgb(0.3, 1.0, 0.3)),
                 })
         } else {
-            text("Not connected")
+            text(tr!(not_connected))
                 .size(14)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
                     color: Some(Color::from_rgb(0.7, 0.7, 0.7)),
@@ -238,24 +238,24 @@ impl MidiDialog {
         };
 
         let controller_picker = row![
-            text("Device:").width(Length::Fixed(80.0)),
+            text(tr!(device)).width(Length::Fixed(80.0)),
             pick_list(
                 self.available_controllers.clone(),
                 self.selected_controller.clone(),
                 Message::MidiControllerSelected
             )
             .width(Length::Fill)
-            .placeholder("Select a MIDI controller..."),
+            .placeholder(tr!(select_midi_controller)),
         ]
         .spacing(10)
         .align_y(Alignment::Center);
 
         let disconnect_button = if self.selected_controller.is_some() {
-            button("Disconnect")
+            button(tr!(disconnect))
                 .on_press(Message::MidiDisconnect)
                 .style(iced::widget::button::danger)
         } else {
-            button("Disconnect").style(iced::widget::button::secondary)
+            button(tr!(disconnect)).style(iced::widget::button::secondary)
         };
 
         container(
@@ -277,18 +277,18 @@ impl MidiDialog {
     }
 
     fn mappings_section_view(&self) -> Element<'_, Message> {
-        let header = text("Input Mappings")
+        let header = text(tr!(input_mappings))
             .size(18)
             .style(|theme: &iced::Theme| iced::widget::text::Style {
                 color: Some(theme.palette().text),
             });
 
         let add_button = if self.learning_state == LearningState::Idle {
-            button("Add Mapping")
+            button(tr!(add_mapping))
                 .on_press(Message::MidiStartLearning)
                 .style(iced::widget::button::success)
         } else {
-            button("Cancel")
+            button(tr!(cancel))
                 .on_press(Message::MidiCancelLearning)
                 .style(iced::widget::button::danger)
         };
@@ -296,7 +296,7 @@ impl MidiDialog {
         let learning_content: Element<'_, Message> = match &self.learning_state {
             LearningState::Idle => column![].into(),
             LearningState::WaitingForInput => container(
-                text("Press a button or move a control on your MIDI device...")
+                text(tr!(press_midi_device))
                     .size(16)
                     .style(|_: &iced::Theme| iced::widget::text::Style {
                         color: Some(Color::from_rgb(1.0, 0.8, 0.3)),
@@ -311,32 +311,31 @@ impl MidiDialog {
             .width(Length::Fill)
             .into(),
             LearningState::InputCaptured { description, .. } => {
-                let captured_text =
-                    text(format!("Captured: {}", description))
-                        .size(16)
-                        .style(|_: &iced::Theme| iced::widget::text::Style {
-                            color: Some(Color::from_rgb(0.3, 1.0, 0.3)),
-                        });
+                let captured_text = text(format!("{} {}", tr!(captured), description))
+                    .size(16)
+                    .style(|_: &iced::Theme| iced::widget::text::Style {
+                        color: Some(Color::from_rgb(0.3, 1.0, 0.3)),
+                    });
 
                 let preset_picker = row![
-                    text("Assign to:").width(Length::Fixed(80.0)),
+                    text(tr!(assign_to)).width(Length::Fixed(80.0)),
                     pick_list(
                         self.available_presets.clone(),
                         self.selected_preset_for_mapping.clone(),
                         Message::MidiPresetForMappingSelected
                     )
                     .width(Length::Fill)
-                    .placeholder("Select a preset..."),
+                    .placeholder(tr!(select_preset)),
                 ]
                 .spacing(10)
                 .align_y(Alignment::Center);
 
                 let confirm_button = if self.selected_preset_for_mapping.is_some() {
-                    button("Confirm Mapping")
+                    button(tr!(confirm_mapping))
                         .on_press(Message::MidiConfirmMapping)
                         .style(iced::widget::button::success)
                 } else {
-                    button("Confirm Mapping").style(iced::widget::button::secondary)
+                    button(tr!(confirm_mapping)).style(iced::widget::button::secondary)
                 };
 
                 container(column![captured_text, preset_picker, confirm_button,].spacing(10))
@@ -353,7 +352,7 @@ impl MidiDialog {
 
         // Existing mappings list
         let mappings_list: Element<'_, Message> = if self.mappings.is_empty() {
-            text("No mappings configured")
+            text(tr!(no_mappings_configured))
                 .size(14)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
                     color: Some(Color::from_rgb(0.5, 0.5, 0.5)),
@@ -403,14 +402,14 @@ impl MidiDialog {
 
     fn debug_section_view(&self) -> Element<'_, Message> {
         let header =
-            text("Debug Log")
+            text(tr!(debug_log))
                 .size(18)
                 .style(|theme: &iced::Theme| iced::widget::text::Style {
                     color: Some(theme.palette().text),
                 });
 
         let debug_content: Element<'_, Message> = if self.debug_messages.is_empty() {
-            text("No MIDI messages received yet")
+            text(tr!(no_midi_messages))
                 .size(12)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
                     color: Some(Color::from_rgb(0.5, 0.5, 0.5)),

@@ -1,6 +1,7 @@
 pub mod amp;
 pub mod audio;
 pub mod gui;
+pub mod i18n;
 pub mod ir;
 pub mod metronome;
 pub mod midi;

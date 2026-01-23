@@ -19,10 +19,10 @@ pub enum ToneStackModel {
 impl std::fmt::Display for ToneStackModel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ToneStackModel::Modern => write!(f, "Modern"),
-            ToneStackModel::British => write!(f, "British"),
-            ToneStackModel::American => write!(f, "American"),
-            ToneStackModel::Flat => write!(f, "Flat"),
+            ToneStackModel::Modern => write!(f, "{}", crate::tr!(tonestack_modern)),
+            ToneStackModel::British => write!(f, "{}", crate::tr!(tonestack_british)),
+            ToneStackModel::American => write!(f, "{}", crate::tr!(tonestack_american)),
+            ToneStackModel::Flat => write!(f, "{}", crate::tr!(tonestack_flat)),
         }
     }
 }

@@ -1,4 +1,5 @@
 use crate::gui::config::{StageConfig, StageType};
+use crate::i18n::Language;
 
 pub mod preset;
 pub mod stage;
@@ -35,6 +36,7 @@ pub enum Message {
     BufferSizeChanged(u32),
     SampleRateChanged(u32),
     OversamplingFactorChanged(u32),
+    LanguageChanged(Language),
 
     // IR Cabinet messages
     IrSelected(String),

@@ -5,15 +5,15 @@ use crate::amp::stages::filter::FilterType;
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
 use crate::gui::config::FilterConfig;
 use crate::gui::messages::{FilterMessage, Message, StageMessage};
+use crate::tr;
 
-const HEADER_TEXT: &str = "Filter";
 const FILTER_TYPES: [FilterType; 2] = [FilterType::Highpass, FilterType::Lowpass];
 
 pub fn view(idx: usize, cfg: &FilterConfig, total_stages: usize) -> Element<'_, Message> {
-    let header = stage_header(HEADER_TEXT, idx, total_stages);
+    let header = stage_header(tr!(stage_filter), idx, total_stages);
 
     let type_picker = row![
-        text("Type:").width(Length::FillPortion(3)),
+        text(tr!(type_label)).width(Length::FillPortion(3)),
         pick_list(FILTER_TYPES, Some(cfg.filter_type), move |t| {
             Message::Stage(idx, StageMessage::Filter(FilterMessage::TypeChanged(t)))
         })
@@ -30,11 +30,11 @@ pub fn view(idx: usize, cfg: &FilterConfig, total_stages: usize) -> Element<'_, 
     let body = column![
         type_picker,
         labeled_slider(
-            "Cutoff",
+            tr!(cutoff),
             range,
             cfg.cutoff_hz,
             move |v| Message::Stage(idx, StageMessage::Filter(FilterMessage::CutoffChanged(v))),
-            |v| format!("{v:.0} Hz"),
+            |v| format!("{v:.0} {}", tr!(hz)),
             1.0
         ),
     ]
