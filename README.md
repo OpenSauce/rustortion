@@ -2,6 +2,7 @@
 # Rustortion
 
 English | [简体中文](README.zh-CN.md)
+
 A guitar amp simulator built in Rust using JACK.
 
 ## Screenshot
