@@ -17,5 +17,4 @@ jobs:
               uses: Lin-jun-xiang/action-translate-readme@v2
               with:
                 token: ${{ secrets.ACTION_BOT }}
-                openai: ${{ secrets.OPENAI_API_KEY }}
                 langs: "en,zh-CN"
