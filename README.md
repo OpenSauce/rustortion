@@ -45,12 +45,14 @@ With the rust toolchain installed, you can clone the repository and run the appl
 ```bash
 sudo apt-get install libjack-jackd2-dev libasound2-dev pkg-config
 cargo run --release
+
+or
 ```
 
-On some linux machines with pipewire you have to run jack explicitly
-Don't forget to install pipewire jack emulator: sudo apt-get install pipewire-jack
+On some linux machines with pipewire you have to run jack explicitly.
+
+Don't forget to install pipewire jack emulator: sudo apt-get install pipewire-jack.
 ```bash
-pw-jack cargo run --release
 ```
 
 ## Contributing
