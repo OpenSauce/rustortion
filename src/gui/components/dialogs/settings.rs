@@ -192,11 +192,16 @@ impl SettingsDialog {
         // Latency display (based on actual JACK values)
         let latency =
             (self.jack_status.buffer_size as f32 / self.jack_status.sample_rate as f32) * 1000.0;
-        let latency_text = text(format!("{} {:.2} {}", tr!(actual_latency), latency, tr!(ms)))
-            .size(14)
-            .style(|_theme: &iced::Theme| iced::widget::text::Style {
-                color: Some(Color::from_rgb(0.7, 0.7, 0.7)),
-            });
+        let latency_text = text(format!(
+            "{} {:.2} {}",
+            tr!(actual_latency),
+            latency,
+            tr!(ms)
+        ))
+        .size(14)
+        .style(|_theme: &iced::Theme| iced::widget::text::Style {
+            color: Some(Color::from_rgb(0.7, 0.7, 0.7)),
+        });
 
         // Control buttons
         let controls = row![
@@ -290,7 +295,10 @@ impl SettingsDialog {
         } else {
             format!(
                 "{} {} ({} {})",
-                self.jack_status.sample_rate, tr!(hz), tr!(requested), self.temp_settings.sample_rate
+                self.jack_status.sample_rate,
+                tr!(hz),
+                tr!(requested),
+                self.temp_settings.sample_rate
             )
         };
 
@@ -299,7 +307,10 @@ impl SettingsDialog {
         } else {
             format!(
                 "{} {} ({} {})",
-                self.jack_status.buffer_size, tr!(samples), tr!(requested), self.temp_settings.buffer_size
+                self.jack_status.buffer_size,
+                tr!(samples),
+                tr!(requested),
+                self.temp_settings.buffer_size
             )
         };
 
