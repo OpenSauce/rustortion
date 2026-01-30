@@ -17,6 +17,7 @@ const STAGE_TYPES: &[StageType] = &[
     StageType::PowerAmp,
     StageType::Level,
     StageType::NoiseGate,
+    StageType::MultibandSaturator,
 ];
 
 impl Control {

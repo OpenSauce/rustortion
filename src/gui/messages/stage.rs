@@ -11,6 +11,7 @@ pub enum StageMessage {
     PowerAmp(PowerAmpMessage),
     Level(LevelMessage),
     NoiseGate(NoiseGateMessage),
+    MultibandSaturator(MultibandSaturatorMessage),
 }
 
 #[derive(Debug, Clone)]
@@ -63,4 +64,16 @@ pub enum PowerAmpMessage {
 #[derive(Debug, Clone)]
 pub enum LevelMessage {
     GainChanged(f32),
+}
+
+#[derive(Debug, Clone)]
+pub enum MultibandSaturatorMessage {
+    LowDriveChanged(f32),
+    MidDriveChanged(f32),
+    HighDriveChanged(f32),
+    LowLevelChanged(f32),
+    MidLevelChanged(f32),
+    HighLevelChanged(f32),
+    LowFreqChanged(f32),
+    HighFreqChanged(f32),
 }
