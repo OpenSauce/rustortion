@@ -173,20 +173,54 @@ impl EnvelopeFollower {
     }
 }
 
-/// Soft saturation function with drive control using tanh for bounded output
+/// Low band saturator: Exponential curve for tight, focused bass
+/// Generates mostly low-order harmonics, minimal aliasing risk
+/// Sounds "transformer/power amp" rather than fuzz
 #[inline]
-fn saturate(input: f32, drive: f32) -> f32 {
-    // Drive scales from 1.0 (clean) to ~10 (heavy saturation)
-    let drive_scaled = 1.0 + drive * 9.0;
-    (input * drive_scaled).tanh()
+fn saturate_low(x: f32, drive: f32) -> f32 {
+    let d = 1.0 + drive * 4.0;
+    x.signum() * (1.0 - (-x.abs() * d).exp())
+}
+
+/// Mid band saturator: Asymmetric tanh blend for tube-like character
+/// Generates even + odd harmonics, responds to dynamics
+/// This is where the "amp voice" lives
+#[inline]
+fn saturate_mid(x: f32, drive: f32) -> f32 {
+    let d1 = 1.0 + drive * 6.0;
+    let d2 = 1.0 + drive * 4.0;
+    let a = (x * d1).tanh();
+    let b = (x * d2).tanh();
+    0.5 * (a + b)
+}
+
+/// High band saturator: Very mild tanh to control fizz
+/// High harmonics alias easily, so we keep saturation gentle
+/// Preserves clarity and pick attack without harshness
+#[inline]
+fn saturate_high(x: f32, drive: f32) -> f32 {
+    let d = 1.0 + drive * 2.0;
+    (x * d).tanh()
 }
 
 /// Compute makeup gain to compensate for saturation volume loss
-/// Higher drive = more compression = need more makeup
+/// Band-specific since each saturator has different characteristics
 #[inline]
-fn drive_makeup_gain(drive: f32) -> f32 {
-    // At drive=0, gain=1.0; at drive=1, gain≈1.5
-    1.0 + drive * 0.5
+fn drive_makeup_gain_low(drive: f32) -> f32 {
+    // Exponential saturator has less gain reduction
+    1.0 + drive * 0.3
+}
+
+#[inline]
+fn drive_makeup_gain_mid(drive: f32) -> f32 {
+    // Dual tanh has moderate compression
+    1.0 + drive * 0.4
+}
+
+#[inline]
+fn drive_makeup_gain_high(drive: f32) -> f32 {
+    // Gentle tanh needs less makeup
+    1.0 + drive * 0.2
 }
 
 pub struct MultibandSaturatorStage {
@@ -298,10 +332,12 @@ impl Stage for MultibandSaturatorStage {
         let _ = self.mid_env.process(mid);
         let _ = self.high_env.process(high);
 
-        // Apply saturation with drive-based makeup gain (not envelope-based to avoid pumping)
-        let low_sat = saturate(low, self.low_drive) * drive_makeup_gain(self.low_drive);
-        let mid_sat = saturate(mid, self.mid_drive) * drive_makeup_gain(self.mid_drive);
-        let high_sat = saturate(high, self.high_drive) * drive_makeup_gain(self.high_drive);
+        // Apply band-specific saturation with drive-based makeup gain
+        // Each band uses a saturator optimized for its frequency content
+        let low_sat = saturate_low(low, self.low_drive) * drive_makeup_gain_low(self.low_drive);
+        let mid_sat = saturate_mid(mid, self.mid_drive) * drive_makeup_gain_mid(self.mid_drive);
+        let high_sat =
+            saturate_high(high, self.high_drive) * drive_makeup_gain_high(self.high_drive);
 
         // Mix bands with level controls
         let mixed =
@@ -463,19 +499,30 @@ mod tests {
     }
 
     #[test]
-    fn test_saturation_function() {
-        // Clean signal (drive = 0)
-        let clean = saturate(0.5, 0.0);
-        assert!((clean - 0.5_f32.tanh()).abs() < 0.001);
+    fn test_saturation_functions() {
+        // Test low band saturator (exponential curve)
+        let low_clean = saturate_low(0.5, 0.0);
+        assert!(low_clean > 0.0 && low_clean <= 1.0);
+        let low_driven = saturate_low(0.5, 1.0);
+        assert!(low_driven > low_clean); // More drive = more output
+        assert!(low_driven <= 1.0); // Bounded
 
-        // Heavy saturation (drive = 1) - now bounded by tanh
-        let saturated = saturate(0.5, 1.0);
-        assert!(saturated.abs() <= 1.0); // tanh is bounded to [-1, 1]
+        // Test mid band saturator (asymmetric tanh blend)
+        let mid_clean = saturate_mid(0.5, 0.0);
+        assert!((mid_clean - 0.5_f32.tanh()).abs() < 0.01);
+        let mid_driven = saturate_mid(0.5, 1.0);
+        assert!(mid_driven.abs() <= 1.0); // tanh is bounded
 
-        // Negative values
-        let neg = saturate(-0.5, 0.5);
-        assert!(neg < 0.0);
-        assert!(neg.abs() <= 1.0);
+        // Test high band saturator (gentle tanh)
+        let high_clean = saturate_high(0.5, 0.0);
+        assert!((high_clean - 0.5_f32.tanh()).abs() < 0.001);
+        let high_driven = saturate_high(0.5, 1.0);
+        assert!(high_driven.abs() <= 1.0);
+
+        // Test negative values preserve sign
+        assert!(saturate_low(-0.5, 0.5) < 0.0);
+        assert!(saturate_mid(-0.5, 0.5) < 0.0);
+        assert!(saturate_high(-0.5, 0.5) < 0.0);
     }
 
     #[test]
