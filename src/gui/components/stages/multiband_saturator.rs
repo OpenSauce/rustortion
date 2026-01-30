@@ -15,7 +15,7 @@ pub fn view(
 
     // Crossover frequency controls
     let crossover_section = column![
-        text("Crossover").size(14),
+        text(tr!(crossover)).size(14),
         labeled_slider(
             tr!(low_freq),
             50.0..=500.0,

@@ -183,6 +183,7 @@ pub struct Translations {
     pub low_freq: &'static str,
     pub high_freq: &'static str,
     pub level: &'static str,
+    pub crossover: &'static str,
 
     // Filter types
     pub filter_highpass: &'static str,
@@ -337,6 +338,7 @@ pub static EN: Translations = Translations {
     low_freq: "Low Crossover",
     high_freq: "High Crossover",
     level: "Level",
+    crossover: "Crossover",
 
     // Filter types
     filter_highpass: "Highpass",
@@ -482,6 +484,7 @@ pub static ZH_CN: Translations = Translations {
     low_freq: "低频分频点",
     high_freq: "高频分频点",
     level: "电平",
+    crossover: "分频",
 
     // Filter types
     filter_highpass: "高通",
