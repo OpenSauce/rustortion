@@ -1,6 +1,12 @@
 use crate::amp::stages::Stage;
 use std::f32::consts::PI;
 
+/// Flush denormals to zero to avoid CPU spikes at silence
+#[inline]
+fn zap_denormal(x: f32) -> f32 {
+    if x.abs() < 1e-20 { 0.0 } else { x }
+}
+
 /// Linkwitz-Riley 4th order crossover filter (cascaded 2nd order Butterworth)
 /// This creates a flat summed response at the crossover frequency
 #[derive(Clone)]
@@ -67,6 +73,20 @@ impl LR4Filter {
         }
         self.a1 = (-2.0 * cos_omega) / a0;
         self.a2 = (1.0 - alpha) / a0;
+
+        // Reset state to avoid clicks when changing cutoff
+        self.reset_state();
+    }
+
+    fn reset_state(&mut self) {
+        self.x1_1 = 0.0;
+        self.x2_1 = 0.0;
+        self.y1_1 = 0.0;
+        self.y2_1 = 0.0;
+        self.x1_2 = 0.0;
+        self.x2_2 = 0.0;
+        self.y1_2 = 0.0;
+        self.y2_2 = 0.0;
     }
 
     #[inline]
@@ -78,18 +98,18 @@ impl LR4Filter {
         self.x2_1 = self.x1_1;
         self.x1_1 = input;
         self.y2_1 = self.y1_1;
-        self.y1_1 = y1;
+        self.y1_1 = zap_denormal(y1);
 
         // Second biquad (cascade)
-        let y2 = self.b0 * y1 + self.b1 * self.x1_2 + self.b2 * self.x2_2
+        let y2 = self.b0 * self.y1_1 + self.b1 * self.x1_2 + self.b2 * self.x2_2
             - self.a1 * self.y1_2
             - self.a2 * self.y2_2;
         self.x2_2 = self.x1_2;
-        self.x1_2 = y1;
+        self.x1_2 = self.y1_1;
         self.y2_2 = self.y1_2;
-        self.y1_2 = y2;
+        self.y1_2 = zap_denormal(y2);
 
-        y2
+        self.y1_2
     }
 }
 
@@ -116,12 +136,12 @@ impl DcBlocker {
     fn process(&mut self, input: f32) -> f32 {
         let output = input - self.x_prev + self.coeff * self.y_prev;
         self.x_prev = input;
-        self.y_prev = output;
-        output
+        self.y_prev = zap_denormal(output);
+        self.y_prev
     }
 }
 
-/// Simple envelope follower for adaptive saturation
+/// Simple envelope follower with configurable attack/release
 #[derive(Clone)]
 struct EnvelopeFollower {
     envelope: f32,
@@ -130,10 +150,7 @@ struct EnvelopeFollower {
 }
 
 impl EnvelopeFollower {
-    fn new(sample_rate: f32) -> Self {
-        // Fast attack (1ms), slow release (50ms)
-        let attack_ms = 1.0;
-        let release_ms = 50.0;
+    fn new(attack_ms: f32, release_ms: f32, sample_rate: f32) -> Self {
         Self {
             envelope: 0.0,
             attack_coeff: (-1.0 / (attack_ms * 0.001 * sample_rate)).exp(),
@@ -151,37 +168,42 @@ impl EnvelopeFollower {
             self.envelope =
                 self.release_coeff * self.envelope + (1.0 - self.release_coeff) * abs_input;
         }
+        self.envelope = zap_denormal(self.envelope);
         self.envelope
     }
 }
 
-/// Soft saturation function with drive control
+/// Soft saturation function with drive control using tanh for bounded output
 #[inline]
 fn saturate(input: f32, drive: f32) -> f32 {
     // Drive scales from 1.0 (clean) to ~10 (heavy saturation)
     let drive_scaled = 1.0 + drive * 9.0;
-    let x = input * drive_scaled;
-    // Soft clipping using tanh-like function
-    x / (1.0 + x.abs()).sqrt()
+    (input * drive_scaled).tanh()
+}
+
+/// Compute makeup gain to compensate for saturation volume loss
+/// Higher drive = more compression = need more makeup
+#[inline]
+fn drive_makeup_gain(drive: f32) -> f32 {
+    // At drive=0, gain=1.0; at drive=1, gain≈1.5
+    1.0 + drive * 0.5
 }
 
 pub struct MultibandSaturatorStage {
     // Crossover filters for low/mid split
     low_lp: LR4Filter,
-    mid_hp_low: LR4Filter,
-    // Crossover filters for mid/high split
-    mid_lp_high: LR4Filter,
+    low_hp: LR4Filter, // HP at low_freq, feeds mid+high
+    // Crossover filters for mid/high split (fed from low_hp output)
+    mid_lp: LR4Filter,
     high_hp: LR4Filter,
 
-    // Per-band envelope followers
+    // Per-band envelope followers (different time constants per band)
     low_env: EnvelopeFollower,
     mid_env: EnvelopeFollower,
     high_env: EnvelopeFollower,
 
-    // Per-band DC blockers
-    low_dc: DcBlocker,
-    mid_dc: DcBlocker,
-    high_dc: DcBlocker,
+    // Single DC blocker at output
+    dc_blocker: DcBlocker,
 
     // Parameters
     low_drive: f32,
@@ -209,21 +231,28 @@ impl MultibandSaturatorStage {
         high_freq: f32,
         sample_rate: f32,
     ) -> Self {
+        // Clamp frequencies first, including Nyquist guard
+        let nyquist = 0.5 * sample_rate;
+        let low_freq = low_freq.clamp(50.0, 500.0).min(nyquist * 0.49);
+        let high_freq = high_freq.clamp(1000.0, 6000.0).min(nyquist * 0.49);
+
         Self {
-            // Low/mid crossover
+            // Low/mid+high crossover
             low_lp: LR4Filter::new(low_freq, sample_rate, false),
-            mid_hp_low: LR4Filter::new(low_freq, sample_rate, true),
-            // Mid/high crossover
-            mid_lp_high: LR4Filter::new(high_freq, sample_rate, false),
+            low_hp: LR4Filter::new(low_freq, sample_rate, true),
+            // Mid/high crossover (both fed from low_hp output for proper LR4 summing)
+            mid_lp: LR4Filter::new(high_freq, sample_rate, false),
             high_hp: LR4Filter::new(high_freq, sample_rate, true),
 
-            low_env: EnvelopeFollower::new(sample_rate),
-            mid_env: EnvelopeFollower::new(sample_rate),
-            high_env: EnvelopeFollower::new(sample_rate),
+            // Band-specific envelope times:
+            // - Low: slower release (200ms) to avoid pumping on bass
+            // - Mid: medium (100ms)
+            // - High: faster (30ms) for transient response
+            low_env: EnvelopeFollower::new(1.0, 200.0, sample_rate),
+            mid_env: EnvelopeFollower::new(1.0, 100.0, sample_rate),
+            high_env: EnvelopeFollower::new(1.0, 30.0, sample_rate),
 
-            low_dc: DcBlocker::new(sample_rate),
-            mid_dc: DcBlocker::new(sample_rate),
-            high_dc: DcBlocker::new(sample_rate),
+            dc_blocker: DcBlocker::new(sample_rate),
 
             low_drive: low_drive.clamp(0.0, 1.0),
             mid_drive: mid_drive.clamp(0.0, 1.0),
@@ -231,67 +260,55 @@ impl MultibandSaturatorStage {
             low_level: low_level.clamp(0.0, 2.0),
             mid_level: mid_level.clamp(0.0, 2.0),
             high_level: high_level.clamp(0.0, 2.0),
-            low_freq: low_freq.clamp(50.0, 500.0),
-            high_freq: high_freq.clamp(1000.0, 6000.0),
+            low_freq,
+            high_freq,
 
             sample_rate,
         }
     }
 
-    fn update_crossover_frequencies(&mut self) {
+    fn update_low_crossover(&mut self) {
         self.low_lp.set_cutoff(self.low_freq, self.sample_rate);
-        self.mid_hp_low.set_cutoff(self.low_freq, self.sample_rate);
-        self.mid_lp_high
-            .set_cutoff(self.high_freq, self.sample_rate);
+        self.low_hp.set_cutoff(self.low_freq, self.sample_rate);
+    }
+
+    fn update_high_crossover(&mut self) {
+        self.mid_lp.set_cutoff(self.high_freq, self.sample_rate);
         self.high_hp.set_cutoff(self.high_freq, self.sample_rate);
     }
 }
 
 impl Stage for MultibandSaturatorStage {
     fn process(&mut self, input: f32) -> f32 {
-        // Split into three bands using LR4 crossovers
-        // Low band: input -> lowpass at low_freq
+        // Split into three bands using proper LR4 crossover topology
+        // Low band: LP at low_freq
         let low = self.low_lp.process(input);
 
-        // Mid band: input -> highpass at low_freq -> lowpass at high_freq
-        let mid_temp = self.mid_hp_low.process(input);
-        let mid = self.mid_lp_high.process(mid_temp);
+        // Rest (mid+high): HP at low_freq
+        let rest = self.low_hp.process(input);
 
-        // High band: input -> highpass at high_freq
-        let high = self.high_hp.process(input);
+        // Mid band: rest -> LP at high_freq
+        let mid = self.mid_lp.process(rest);
 
-        // Track envelopes for adaptive saturation
-        let low_env = self.low_env.process(low);
-        let mid_env = self.mid_env.process(mid);
-        let high_env = self.high_env.process(high);
+        // High band: rest -> HP at high_freq (proper LR4 summing)
+        let high = self.high_hp.process(rest);
 
-        // Apply saturation with envelope-based gain compensation
-        // This helps maintain consistent apparent loudness
-        let low_sat = if low_env > 0.0001 {
-            saturate(low / (1.0 + low_env), self.low_drive) * (1.0 + low_env * 0.5)
-        } else {
-            saturate(low, self.low_drive)
-        };
+        // Track envelopes (used for potential future dynamics, kept for monitoring)
+        let _ = self.low_env.process(low);
+        let _ = self.mid_env.process(mid);
+        let _ = self.high_env.process(high);
 
-        let mid_sat = if mid_env > 0.0001 {
-            saturate(mid / (1.0 + mid_env), self.mid_drive) * (1.0 + mid_env * 0.5)
-        } else {
-            saturate(mid, self.mid_drive)
-        };
+        // Apply saturation with drive-based makeup gain (not envelope-based to avoid pumping)
+        let low_sat = saturate(low, self.low_drive) * drive_makeup_gain(self.low_drive);
+        let mid_sat = saturate(mid, self.mid_drive) * drive_makeup_gain(self.mid_drive);
+        let high_sat = saturate(high, self.high_drive) * drive_makeup_gain(self.high_drive);
 
-        let high_sat = if high_env > 0.0001 {
-            saturate(high / (1.0 + high_env), self.high_drive) * (1.0 + high_env * 0.5)
-        } else {
-            saturate(high, self.high_drive)
-        };
+        // Mix bands with level controls
+        let mixed =
+            low_sat * self.low_level + mid_sat * self.mid_level + high_sat * self.high_level;
 
-        // Apply DC blocking to remove any DC offset from saturation
-        let low_clean = self.low_dc.process(low_sat);
-        let mid_clean = self.mid_dc.process(mid_sat);
-        let high_clean = self.high_dc.process(high_sat);
-
-        // Mix bands with level controls and sum
-        low_clean * self.low_level + mid_clean * self.mid_level + high_clean * self.high_level
+        // Single DC blocker at output (saturation is symmetric, minimal DC expected)
+        self.dc_blocker.process(mixed)
     }
 
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
@@ -345,21 +362,25 @@ impl Stage for MultibandSaturatorStage {
                 }
             }
             "low_freq" => {
-                if (50.0..=500.0).contains(&value) {
+                let nyquist = 0.5 * self.sample_rate;
+                let max_freq = 500.0_f32.min(nyquist * 0.49);
+                if (50.0..=max_freq).contains(&value) {
                     self.low_freq = value;
-                    self.update_crossover_frequencies();
+                    self.update_low_crossover();
                     Ok(())
                 } else {
-                    Err("Low freq must be 50-500 Hz")
+                    Err("Low freq must be 50-500 Hz (and below Nyquist)")
                 }
             }
             "high_freq" => {
-                if (1000.0..=6000.0).contains(&value) {
+                let nyquist = 0.5 * self.sample_rate;
+                let max_freq = 6000.0_f32.min(nyquist * 0.49);
+                if (1000.0..=max_freq).contains(&value) {
                     self.high_freq = value;
-                    self.update_crossover_frequencies();
+                    self.update_high_crossover();
                     Ok(())
                 } else {
-                    Err("High freq must be 1000-6000 Hz")
+                    Err("High freq must be 1000-6000 Hz (and below Nyquist)")
                 }
             }
             _ => Err("Unknown parameter"),
@@ -445,18 +466,16 @@ mod tests {
     fn test_saturation_function() {
         // Clean signal (drive = 0)
         let clean = saturate(0.5, 0.0);
-        assert!((clean - 0.408).abs() < 0.01); // Slight compression even at 0
+        assert!((clean - 0.5_f32.tanh()).abs() < 0.001);
 
-        // Heavy saturation (drive = 1)
+        // Heavy saturation (drive = 1) - now bounded by tanh
         let saturated = saturate(0.5, 1.0);
-        // Saturation applies compression but doesn't hard-limit to [-1, 1]
-        // With drive=1, input 0.5 becomes x=5.0, output ≈ 2.04
-        assert!(saturated > 1.0); // High drive amplifies
-        assert!(saturated < 3.0); // But compression keeps it reasonable
+        assert!(saturated.abs() <= 1.0); // tanh is bounded to [-1, 1]
 
         // Negative values
         let neg = saturate(-0.5, 0.5);
         assert!(neg < 0.0);
+        assert!(neg.abs() <= 1.0);
     }
 
     #[test]
@@ -472,5 +491,44 @@ mod tests {
 
         // DC should be mostly blocked
         assert!(last_output.abs() < 0.1);
+    }
+
+    #[test]
+    fn test_frequency_clamping() {
+        // Test that out-of-range frequencies are clamped
+        let stage = MultibandSaturatorStage::new(
+            0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 10.0,    // too low
+            10000.0, // too high
+            48000.0,
+        );
+
+        assert!((stage.get_parameter("low_freq").unwrap() - 50.0).abs() < 0.001);
+        assert!((stage.get_parameter("high_freq").unwrap() - 6000.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_nyquist_guard() {
+        // At 8000 Hz sample rate, Nyquist is 4000 Hz
+        // high_freq should be clamped to 4000 * 0.49 = 1960 Hz
+        let stage = MultibandSaturatorStage::new(
+            0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 200.0, 3000.0, // would be above Nyquist
+            8000.0,
+        );
+
+        let high_freq = stage.get_parameter("high_freq").unwrap();
+        assert!(high_freq < 4000.0 * 0.5); // Must be below Nyquist
+    }
+
+    #[test]
+    fn test_denormal_protection() {
+        let mut stage =
+            MultibandSaturatorStage::new(0.0, 0.0, 0.0, 1.0, 1.0, 1.0, 200.0, 2000.0, 48000.0);
+
+        // Process silence for a while - should not produce denormals
+        for _ in 0..100000 {
+            let out = stage.process(0.0);
+            // Output should be exactly 0 or a normal number, not denormal
+            assert!(out == 0.0 || out.is_normal());
+        }
     }
 }
