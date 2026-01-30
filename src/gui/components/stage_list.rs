@@ -34,6 +34,9 @@ impl StageList {
                 StageConfig::NoiseGate(cfg) => {
                     stages::noise_gate::view(idx, cfg, self.stages.len())
                 }
+                StageConfig::MultibandSaturator(cfg) => {
+                    stages::multiband_saturator::view(idx, cfg, self.stages.len())
+                }
             };
             col = col.push(widget);
         }

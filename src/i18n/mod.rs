@@ -157,6 +157,7 @@ pub struct Translations {
     pub stage_power_amp: &'static str,
     pub stage_level: &'static str,
     pub stage_noise_gate: &'static str,
+    pub stage_multiband_saturator: &'static str,
 
     // Stage parameters
     pub clipper: &'static str,
@@ -176,6 +177,12 @@ pub struct Translations {
     pub sag: &'static str,
     pub cutoff: &'static str,
     pub hold: &'static str,
+    pub low_band: &'static str,
+    pub mid_band: &'static str,
+    pub high_band: &'static str,
+    pub low_freq: &'static str,
+    pub high_freq: &'static str,
+    pub level: &'static str,
 
     // Filter types
     pub filter_highpass: &'static str,
@@ -304,6 +311,7 @@ pub static EN: Translations = Translations {
     stage_power_amp: "Power Amp",
     stage_level: "Level",
     stage_noise_gate: "Noise Gate",
+    stage_multiband_saturator: "Multiband Saturator",
 
     // Stage parameters
     clipper: "Clipper:",
@@ -323,6 +331,12 @@ pub static EN: Translations = Translations {
     sag: "Sag",
     cutoff: "Cutoff",
     hold: "Hold",
+    low_band: "Low Band",
+    mid_band: "Mid Band",
+    high_band: "High Band",
+    low_freq: "Low Crossover",
+    high_freq: "High Crossover",
+    level: "Level",
 
     // Filter types
     filter_highpass: "Highpass",
@@ -442,6 +456,7 @@ pub static ZH_CN: Translations = Translations {
     stage_power_amp: "功率放大",
     stage_level: "电平",
     stage_noise_gate: "噪声门",
+    stage_multiband_saturator: "多段饱和器",
 
     // Stage parameters
     clipper: "削波器:",
@@ -461,6 +476,12 @@ pub static ZH_CN: Translations = Translations {
     sag: "下垂",
     cutoff: "截止",
     hold: "保持",
+    low_band: "低频段",
+    mid_band: "中频段",
+    high_band: "高频段",
+    low_freq: "低频分频点",
+    high_freq: "高频分频点",
+    level: "电平",
 
     // Filter types
     filter_highpass: "高通",
