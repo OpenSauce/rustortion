@@ -182,16 +182,16 @@ fn saturate_low(x: f32, drive: f32) -> f32 {
     x.signum() * (1.0 - (-x.abs() * d).exp())
 }
 
-/// Mid band saturator: Asymmetric tanh blend for tube-like character
-/// Generates even + odd harmonics, responds to dynamics
-/// This is where the "amp voice" lives
+/// Mid band saturator: Genuinely asymmetric tanh for tube-like character
+/// DC bias before tanh generates even harmonics (2nd, 4th, etc.)
+/// This is where the "amp voice" and tube warmth lives
 #[inline]
 fn saturate_mid(x: f32, drive: f32) -> f32 {
-    let d1 = 1.0 + drive * 6.0;
-    let d2 = 1.0 + drive * 4.0;
-    let a = (x * d1).tanh();
-    let b = (x * d2).tanh();
-    0.5 * (a + b)
+    let d = 1.0 + drive * 6.0;
+    let bias = 0.15 * drive; // Asymmetry amount scales with drive
+    let y = ((x + bias) * d).tanh();
+    // Remove the DC offset introduced by the bias
+    y - (bias * d).tanh()
 }
 
 /// High band saturator: Very mild tanh to control fizz
@@ -203,26 +203,6 @@ fn saturate_high(x: f32, drive: f32) -> f32 {
     (x * d).tanh()
 }
 
-/// Compute makeup gain to compensate for saturation volume loss
-/// Band-specific since each saturator has different characteristics
-#[inline]
-fn drive_makeup_gain_low(drive: f32) -> f32 {
-    // Exponential saturator has less gain reduction
-    1.0 + drive * 0.3
-}
-
-#[inline]
-fn drive_makeup_gain_mid(drive: f32) -> f32 {
-    // Dual tanh has moderate compression
-    1.0 + drive * 0.4
-}
-
-#[inline]
-fn drive_makeup_gain_high(drive: f32) -> f32 {
-    // Gentle tanh needs less makeup
-    1.0 + drive * 0.2
-}
-
 pub struct MultibandSaturatorStage {
     // Crossover filters for low/mid split
     low_lp: LR4Filter,
@@ -231,9 +211,7 @@ pub struct MultibandSaturatorStage {
     mid_lp: LR4Filter,
     high_hp: LR4Filter,
 
-    // Per-band envelope followers (different time constants per band)
-    low_env: EnvelopeFollower,
-    mid_env: EnvelopeFollower,
+    // High band envelope follower for dynamic fizz control
     high_env: EnvelopeFollower,
 
     // Single DC blocker at output
@@ -278,12 +256,8 @@ impl MultibandSaturatorStage {
             mid_lp: LR4Filter::new(high_freq, sample_rate, false),
             high_hp: LR4Filter::new(high_freq, sample_rate, true),
 
-            // Band-specific envelope times:
-            // - Low: slower release (200ms) to avoid pumping on bass
-            // - Mid: medium (100ms)
-            // - High: faster (30ms) for transient response
-            low_env: EnvelopeFollower::new(1.0, 200.0, sample_rate),
-            mid_env: EnvelopeFollower::new(1.0, 100.0, sample_rate),
+            // High band envelope for dynamic fizz control
+            // Fast attack (1ms), quick release (30ms) for transient response
             high_env: EnvelopeFollower::new(1.0, 30.0, sample_rate),
 
             dc_blocker: DcBlocker::new(sample_rate),
@@ -327,17 +301,18 @@ impl Stage for MultibandSaturatorStage {
         // High band: rest -> HP at high_freq (proper LR4 summing)
         let high = self.high_hp.process(rest);
 
-        // Track envelopes (used for potential future dynamics, kept for monitoring)
-        let _ = self.low_env.process(low);
-        let _ = self.mid_env.process(mid);
-        let _ = self.high_env.process(high);
+        // Track envelope for high band fizz control
+        let high_env = self.high_env.process(high);
 
-        // Apply band-specific saturation with drive-based makeup gain
-        // Each band uses a saturator optimized for its frequency content
-        let low_sat = saturate_low(low, self.low_drive) * drive_makeup_gain_low(self.low_drive);
-        let mid_sat = saturate_mid(mid, self.mid_drive) * drive_makeup_gain_mid(self.mid_drive);
-        let high_sat =
-            saturate_high(high, self.high_drive) * drive_makeup_gain_high(self.high_drive);
+        // Apply band-specific saturation
+        // No automatic makeup gain - users control loudness via level parameters
+        let low_sat = saturate_low(low, self.low_drive);
+        let mid_sat = saturate_mid(mid, self.mid_drive);
+
+        // High band: use envelope to dynamically tame fizz
+        // When highs get loud, reduce input to saturator to prevent harsh aliasing artifacts
+        let fizz_control = 1.0 / (1.0 + high_env * 2.0);
+        let high_sat = saturate_high(high * fizz_control, self.high_drive);
 
         // Mix bands with level controls
         let mixed =
@@ -507,11 +482,16 @@ mod tests {
         assert!(low_driven > low_clean); // More drive = more output
         assert!(low_driven <= 1.0); // Bounded
 
-        // Test mid band saturator (asymmetric tanh blend)
+        // Test mid band saturator (genuinely asymmetric)
         let mid_clean = saturate_mid(0.5, 0.0);
-        assert!((mid_clean - 0.5_f32.tanh()).abs() < 0.01);
+        assert!((mid_clean - 0.5_f32.tanh()).abs() < 0.01); // At drive=0, bias=0
         let mid_driven = saturate_mid(0.5, 1.0);
-        assert!(mid_driven.abs() <= 1.0); // tanh is bounded
+        assert!(mid_driven.abs() <= 1.5); // Bounded (with some headroom for asymmetry)
+
+        // Verify asymmetry: positive and negative inputs should produce different magnitudes
+        let mid_pos = saturate_mid(0.5, 1.0);
+        let mid_neg = saturate_mid(-0.5, 1.0);
+        assert!((mid_pos.abs() - mid_neg.abs()).abs() > 0.01); // Not symmetric
 
         // Test high band saturator (gentle tanh)
         let high_clean = saturate_high(0.5, 0.0);
@@ -574,8 +554,10 @@ mod tests {
         // Process silence for a while - should not produce denormals
         for _ in 0..100000 {
             let out = stage.process(0.0);
-            // Output should be exactly 0 or a normal number, not denormal
-            assert!(out == 0.0 || out.is_normal());
+            // Output must be finite (not NaN/inf)
+            assert!(out.is_finite());
+            // Output must not be subnormal (denormal)
+            assert!(out == 0.0 || out.abs() >= f32::MIN_POSITIVE);
         }
     }
 }
