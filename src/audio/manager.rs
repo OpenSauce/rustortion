@@ -27,7 +27,7 @@ impl Manager {
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
             .context("failed to create JACK client")?;
 
-        let sample_rate = client.sample_rate();
+        let sample_rate = client.sample_rate() as usize;
         let buffer_size = client.buffer_size() as usize;
 
         let (tuner, tuner_handle) = Tuner::new(sample_rate);
@@ -221,7 +221,7 @@ impl Manager {
     }
 
     pub fn sample_rate(&self) -> usize {
-        self.active_client.as_client().sample_rate()
+        self.active_client.as_client().sample_rate() as usize
     }
 
     pub fn buffer_size(&self) -> usize {
