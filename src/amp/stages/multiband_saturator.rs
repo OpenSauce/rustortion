@@ -161,8 +161,8 @@ fn saturate(input: f32, drive: f32) -> f32 {
     // Drive scales from 1.0 (clean) to ~10 (heavy saturation)
     let drive_scaled = 1.0 + drive * 9.0;
     let x = input * drive_scaled;
-    // Soft clipping using tanh-like function
-    x / (1.0 + x.abs()).sqrt()
+    // Soft clipping bounded to (-1, 1)
+    x / (1.0 + x.abs())
 }
 
 pub struct MultibandSaturatorStage {
@@ -172,6 +172,9 @@ pub struct MultibandSaturatorStage {
     // Crossover filters for mid/high split
     mid_lp_high: LR4Filter,
     high_hp: LR4Filter,
+    // Allpass phase compensation for low band (LP + HP at high_freq = allpass)
+    low_allpass_lp: LR4Filter,
+    low_allpass_hp: LR4Filter,
 
     // Per-band envelope followers
     low_env: EnvelopeFollower,
@@ -216,6 +219,9 @@ impl MultibandSaturatorStage {
             // Mid/high crossover
             mid_lp_high: LR4Filter::new(high_freq, sample_rate, false),
             high_hp: LR4Filter::new(high_freq, sample_rate, true),
+            // Allpass compensation for low band (matches phase delay of mid/high split)
+            low_allpass_lp: LR4Filter::new(high_freq, sample_rate, false),
+            low_allpass_hp: LR4Filter::new(high_freq, sample_rate, true),
 
             low_env: EnvelopeFollower::new(sample_rate),
             mid_env: EnvelopeFollower::new(sample_rate),
@@ -244,21 +250,26 @@ impl MultibandSaturatorStage {
         self.mid_lp_high
             .set_cutoff(self.high_freq, self.sample_rate);
         self.high_hp.set_cutoff(self.high_freq, self.sample_rate);
+        self.low_allpass_lp
+            .set_cutoff(self.high_freq, self.sample_rate);
+        self.low_allpass_hp
+            .set_cutoff(self.high_freq, self.sample_rate);
     }
 }
 
 impl Stage for MultibandSaturatorStage {
     fn process(&mut self, input: f32) -> f32 {
         // Split into three bands using LR4 crossovers
-        // Low band: input -> lowpass at low_freq
-        let low = self.low_lp.process(input);
+        // First split: low vs high_side at low_freq
+        let low_raw = self.low_lp.process(input);
+        let high_side = self.mid_hp_low.process(input);
 
-        // Mid band: input -> highpass at low_freq -> lowpass at high_freq
-        let mid_temp = self.mid_hp_low.process(input);
-        let mid = self.mid_lp_high.process(mid_temp);
+        // Second split: mid vs high from high_side at high_freq
+        let mid = self.mid_lp_high.process(high_side);
+        let high = self.high_hp.process(high_side);
 
-        // High band: input -> highpass at high_freq
-        let high = self.high_hp.process(input);
+        // Allpass phase compensation for low band (LP + HP at high_freq = allpass)
+        let low = self.low_allpass_lp.process(low_raw) + self.low_allpass_hp.process(low_raw);
 
         // Track envelopes for adaptive saturation
         let low_env = self.low_env.process(low);
@@ -445,18 +456,91 @@ mod tests {
     fn test_saturation_function() {
         // Clean signal (drive = 0)
         let clean = saturate(0.5, 0.0);
-        assert!((clean - 0.408).abs() < 0.01); // Slight compression even at 0
+        // drive=0 → drive_scaled=1.0, x=0.5, output = 0.5/1.5 ≈ 0.333
+        assert!((clean - 1.0 / 3.0).abs() < 0.01);
 
         // Heavy saturation (drive = 1)
         let saturated = saturate(0.5, 1.0);
-        // Saturation applies compression but doesn't hard-limit to [-1, 1]
-        // With drive=1, input 0.5 becomes x=5.0, output ≈ 2.04
-        assert!(saturated > 1.0); // High drive amplifies
-        assert!(saturated < 3.0); // But compression keeps it reasonable
+        // drive=1 → drive_scaled=10.0, x=5.0, output = 5.0/6.0 ≈ 0.833
+        assert!(saturated > 0.0);
+        assert!(saturated < 1.0); // Bounded waveshaper stays below 1.0
 
         // Negative values
         let neg = saturate(-0.5, 0.5);
         assert!(neg < 0.0);
+        assert!(neg > -1.0); // Bounded below too
+    }
+
+    #[test]
+    fn test_waveshaper_bounded() {
+        // Verify saturate() output is always in (-1, 1) for extreme inputs
+        for &drive in &[0.0, 0.25, 0.5, 0.75, 1.0] {
+            for &input in &[0.0, 0.1, 0.5, 1.0, 5.0, 100.0, 10000.0] {
+                let pos = saturate(input, drive);
+                let neg = saturate(-input, drive);
+                assert!(
+                    pos.abs() < 1.0,
+                    "saturate({input}, {drive}) = {pos}, expected |output| < 1.0"
+                );
+                assert!(
+                    neg.abs() < 1.0,
+                    "saturate({}, {drive}) = {neg}, expected |output| < 1.0",
+                    -input
+                );
+                // Odd symmetry: f(-x) = -f(x)
+                assert!(
+                    (pos + neg).abs() < 1e-6,
+                    "saturate is not odd-symmetric for input={input}, drive={drive}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_crossover_reconstruction() {
+        // With all drives at 0.0 and levels at 1.0, the crossover should preserve
+        // signal energy (flat magnitude response). The LR4 crossover introduces
+        // group delay (allpass), so we compare RMS energy rather than sample-by-sample.
+        // Small amplitudes keep the saturator in its linear region.
+        let mut stage = MultibandSaturatorStage::new(
+            0.0, 0.0, 0.0, // drives = 0
+            1.0, 1.0, 1.0, // levels
+            200.0, 2000.0, // crossover frequencies
+            48000.0,
+        );
+
+        let num_samples = 48000; // 1 second
+        let settle = 24000; // let filters reach steady state
+        let mut input_rms_sum: f64 = 0.0;
+        let mut output_rms_sum: f64 = 0.0;
+        let mut measurement_samples = 0u64;
+
+        for i in 0..num_samples {
+            let t = i as f32 / 48000.0;
+            // Mix of frequencies across all bands, small amplitude
+            let input = 0.00001 * (2.0 * PI * 100.0 * t).sin() // low band
+                      + 0.00001 * (2.0 * PI * 800.0 * t).sin() // mid band
+                      + 0.00001 * (2.0 * PI * 4000.0 * t).sin(); // high band
+
+            let output = stage.process(input);
+
+            if i >= settle {
+                input_rms_sum += (input as f64) * (input as f64);
+                output_rms_sum += (output as f64) * (output as f64);
+                measurement_samples += 1;
+            }
+        }
+
+        let input_rms = (input_rms_sum / measurement_samples as f64).sqrt();
+        let output_rms = (output_rms_sum / measurement_samples as f64).sqrt();
+
+        // The output RMS should be very close to input RMS (flat magnitude response).
+        // Allow 1% deviation for floating-point and DC blocker effects.
+        let ratio = output_rms / input_rms;
+        assert!(
+            (ratio - 1.0).abs() < 0.01,
+            "Crossover reconstruction energy mismatch: output/input RMS ratio = {ratio}"
+        );
     }
 
     #[test]
