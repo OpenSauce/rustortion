@@ -24,72 +24,83 @@ pub struct PowerAmpStage {
     amp_type: PowerAmpType,
     sag: f32,
     sag_envelope: f32,
-    sample_rate: f32,
+    sag_attack_coeff: f32,
+    sag_release_coeff: f32,
 }
 
 impl PowerAmpStage {
+    fn sag_coeff(sample_rate: f32, tau_s: f32) -> f32 {
+        (-1.0 / (sample_rate * tau_s)).exp()
+    }
+
     pub fn new(drive: f32, amp_type: PowerAmpType, sag: f32, sample_rate: f32) -> Self {
         Self {
             drive: drive.clamp(0.0, 1.0),
             amp_type,
             sag: sag.clamp(0.0, 1.0),
             sag_envelope: 0.0,
-            sample_rate,
+            sag_attack_coeff: Self::sag_coeff(sample_rate, 0.002), // 2ms attack
+            sag_release_coeff: Self::sag_coeff(sample_rate, 0.050), // 50ms release
         }
     }
 }
 
 impl Stage for PowerAmpStage {
     fn process(&mut self, input: f32) -> f32 {
-        // Calculate sag effect (voltage dropping under load)
-        // This creates dynamic compression and affects the frequency response
-        let input_abs = input.abs();
-
-        // Sag envelope follower
-        let sag_attack = (-1.0 / (self.sample_rate * 0.002)).exp(); // 5ms attack
-        let sag_release = (-1.0 / (self.sample_rate * 0.050)).exp(); // 50ms release
-
-        if input_abs > self.sag_envelope {
-            self.sag_envelope = sag_attack * (self.sag_envelope - input_abs) + input_abs;
-        } else {
-            self.sag_envelope = sag_release * (self.sag_envelope - input_abs) + input_abs;
-        }
-
         // Calculate dynamic drive reduction from sag
         let sag_amount = 1.0 - (self.sag * self.sag_envelope * 0.5).min(0.5);
         let dynamic_drive = self.drive * sag_amount;
 
-        // Apply power amp clipping based on type
+        // Apply power amp drive
         let driven = input * (1.0 + dynamic_drive * 3.0);
+
+        // Update sag envelope from post-drive signal for consistent behavior
+        let driven_abs = driven.abs();
+        if driven_abs > self.sag_envelope {
+            self.sag_envelope =
+                self.sag_attack_coeff * (self.sag_envelope - driven_abs) + driven_abs;
+        } else {
+            self.sag_envelope =
+                self.sag_release_coeff * (self.sag_envelope - driven_abs) + driven_abs;
+        }
+        // Denormal protection
+        if self.sag_envelope.abs() < 1e-20 {
+            self.sag_envelope = 0.0;
+        }
 
         match self.amp_type {
             PowerAmpType::ClassA => {
-                // Class A - smooth, asymmetric clipping
-                if driven > 0.0 {
+                // Class A: smooth, asymmetric saturation.
+                // Both halves bounded via tanh; negative side has reduced gain
+                // for the even-harmonic asymmetry characteristic of single-ended amps.
+                if driven >= 0.0 {
                     driven.tanh()
                 } else {
-                    driven * 0.8 // Less gain for negative side
+                    (driven * 0.8).tanh()
                 }
             }
             PowerAmpType::ClassAB => {
-                // Class AB - asymmetric with crossover characteristics
-                if driven > 0.15 {
-                    // Positive values above crossover
-                    driven.tanh()
-                } else if driven < -0.15 {
-                    // Negative values below crossover
-                    0.9 * driven.tanh() // Slightly less gain on negative
+                // Class AB: smooth deadzone around zero for crossover distortion,
+                // then asymmetric saturation on both halves.
+                // f(x) = x³/(x²+dz²) is C∞ smooth, gain→0 at zero crossing,
+                // gain→1 for |x|>>dz — models reduced transconductance near zero.
+                let dz: f32 = 0.1;
+                let x2 = driven * driven;
+                let crossover = driven * x2 / (x2 + dz * dz);
+                if crossover >= 0.0 {
+                    crossover.tanh()
                 } else {
-                    // Crossover region with slight distortion
-                    driven * (1.0 + 0.2 * driven.abs())
+                    (crossover * 0.9).tanh()
                 }
             }
             PowerAmpType::ClassB => {
-                // Class B - hard crossover distortion
-                if driven > 0.0 {
+                // Class B: push-pull with stronger asymmetry than Class AB.
+                // Both halves bounded via tanh; negative side has reduced gain
+                // creating the characteristic crossover distortion.
+                if driven >= 0.0 {
                     driven.tanh()
                 } else {
-                    driven * 0.9 // Less gain on negative side creating crossover distortion
+                    (driven * 0.7).tanh()
                 }
             }
         }
