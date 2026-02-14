@@ -28,18 +28,21 @@ pub struct FilterStage {
 }
 
 impl FilterStage {
+    /// Minimum cutoff frequency to avoid division-by-zero in the RC calculation.
+    /// 0.1 Hz makes a highpass effectively a passthrough.
+    const MIN_CUTOFF_HZ: f32 = 0.1;
+
+    fn compute_alpha(filter_type: FilterType, cutoff: f32, sample_rate: f32) -> f32 {
+        let rc = 1.0 / (2.0 * PI * cutoff.max(Self::MIN_CUTOFF_HZ));
+        let dt = 1.0 / sample_rate;
+        match filter_type {
+            FilterType::Highpass => rc / (rc + dt),
+            FilterType::Lowpass => dt / (rc + dt),
+        }
+    }
+
     pub fn new(filter_type: FilterType, cutoff: f32, sample_rate: f32) -> Self {
-        // Calculate initial alpha value from cutoff
-        let alpha = match filter_type {
-            FilterType::Highpass => {
-                let rc = 1.0 / (2.0 * PI * cutoff);
-                rc / (rc + (1.0 / sample_rate))
-            }
-            FilterType::Lowpass => {
-                let rc = 1.0 / (2.0 * PI * cutoff);
-                (1.0 / sample_rate) / (rc + (1.0 / sample_rate))
-            }
-        };
+        let alpha = Self::compute_alpha(filter_type, cutoff, sample_rate);
 
         Self {
             filter_type,
@@ -53,16 +56,7 @@ impl FilterStage {
 
     // This recalculates alpha when cutoff changes
     fn update_coefficients(&mut self) {
-        self.alpha = match self.filter_type {
-            FilterType::Highpass => {
-                let rc = 1.0 / (2.0 * PI * self.cutoff);
-                rc / (rc + (1.0 / self.sample_rate))
-            }
-            FilterType::Lowpass => {
-                let rc = 1.0 / (2.0 * PI * self.cutoff);
-                (1.0 / self.sample_rate) / (rc + (1.0 / self.sample_rate))
-            }
-        };
+        self.alpha = Self::compute_alpha(self.filter_type, self.cutoff, self.sample_rate);
     }
 }
 
@@ -88,12 +82,12 @@ impl Stage for FilterStage {
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "cutoff" => {
-                if value > 20.0 && value < 20000.0 {
+                if (0.0..=20000.0).contains(&value) {
                     self.cutoff = value;
                     self.update_coefficients();
                     Ok(())
                 } else {
-                    Err("Cutoff must be between 20Hz and 20kHz")
+                    Err("Cutoff must be between 0Hz and 20kHz")
                 }
             }
             _ => Err("Unknown parameter name"),
@@ -161,5 +155,17 @@ mod tests {
             hf_avg_abs > 0.5,
             "High-frequency attenuated too much: avg_abs={hf_avg_abs}"
         );
+    }
+
+    #[test]
+    fn highpass_zero_cutoff_produces_finite_output() {
+        let mut hp = FilterStage::new(FilterType::Highpass, 0.0, 48_000.0);
+        for _ in 0..256 {
+            let out = hp.process(1.0);
+            assert!(
+                out.is_finite(),
+                "zero-cutoff highpass produced non-finite output"
+            );
+        }
     }
 }
