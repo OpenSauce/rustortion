@@ -28,7 +28,7 @@ impl std::fmt::Display for ToneStackModel {
 }
 
 /// Highly efficient 3‑band tone stack (+ Presence shelf).
-/// * All controls are 0.0 – 1.0, with 0.5 meaning “flat”.
+/// * All controls are 0.0 – 2.0, with 1.0 meaning “flat”.
 /// * Internally uses first‑order filters → ~0.005 % CPU on modern hardware.
 pub struct ToneStackStage {
     model: ToneStackModel,
@@ -42,9 +42,6 @@ pub struct ToneStackStage {
     dc_hp: f32,
 
     bass_lp: f32,
-
-    mid_lp: f32,
-    mid_hp: f32,
 
     treble_lp: f32,
     presence_lp: f32,
@@ -61,17 +58,15 @@ impl ToneStackStage {
     ) -> Self {
         Self {
             model,
-            bass: bass.clamp(0.0, 1.0),
-            mid: mid.clamp(0.0, 1.0),
-            treble: treble.clamp(0.0, 1.0),
-            presence: presence.clamp(0.0, 1.0),
+            bass: bass.clamp(0.0, 2.0),
+            mid: mid.clamp(0.0, 2.0),
+            treble: treble.clamp(0.0, 2.0),
+            presence: presence.clamp(0.0, 2.0),
             sample_rate,
 
             // state
             dc_hp: 0.0,
             bass_lp: 0.0,
-            mid_lp: 0.0,
-            mid_hp: 0.0,
             treble_lp: 0.0,
             presence_lp: 0.0,
         }
@@ -102,11 +97,11 @@ impl Stage for ToneStackStage {
         // ---------------------------------------------------------
         // Model‑specific corner frequencies (Hz)
         // ---------------------------------------------------------
-        let (bass_f, mid_f, treble_f, presence_f) = match self.model {
-            ToneStackModel::Modern => (120.0, 800.0, 2200.0, 6000.0),
-            ToneStackModel::British => (100.0, 700.0, 2000.0, 5000.0),
-            ToneStackModel::American => (80.0, 500.0, 1800.0, 4000.0),
-            ToneStackModel::Flat => (100.0, 800.0, 2000.0, 5000.0),
+        let (bass_f, treble_f, presence_f) = match self.model {
+            ToneStackModel::Modern => (120.0, 2200.0, 6000.0),
+            ToneStackModel::British => (100.0, 2000.0, 5000.0),
+            ToneStackModel::American => (80.0, 1800.0, 4000.0),
+            ToneStackModel::Flat => (100.0, 2000.0, 5000.0),
         };
 
         // ---------------------------------------------------------
@@ -115,35 +110,34 @@ impl Stage for ToneStackStage {
         let bass_lp = Self::one_pole_lp(self.alpha(bass_f), &mut self.bass_lp, x);
 
         // ---------------------------------------------------------
-        // 2. Mid – first HP then LP → crude but phase‑coherent BP
-        // ---------------------------------------------------------
-        let mid_hp_alpha = self.alpha(bass_f); // same as bass corner → remove lows
-        self.mid_hp += mid_hp_alpha * (x - self.mid_hp);
-        let mid_hp = x - self.mid_hp; // high‑passed signal
-        let mid_bp = Self::one_pole_lp(self.alpha(mid_f), &mut self.mid_lp, mid_hp);
-        let mid_bp = mid_hp - mid_bp; // band‑pass around mid_f
-
-        // ---------------------------------------------------------
-        // 3. Treble – input minus first‑order LP at treble_f
+        // 2. Treble – input minus first‑order LP at treble_f
         // ---------------------------------------------------------
         let treble_lp = Self::one_pole_lp(self.alpha(treble_f), &mut self.treble_lp, x);
         let treble_hp = x - treble_lp;
 
         // ---------------------------------------------------------
-        // 4. Primary 3‑band mix (unity at 0.5)
+        // 3. Mid – subtractive: everything between bass LP and treble LP
+        //    At unity gains: bass + mid + treble = LP(bass) + [LP(treble) - LP(bass)] + [x - LP(treble)] = x
         // ---------------------------------------------------------
-        let bass_gain = (self.bass * 2.0).max(0.001); // 0 → −∞ dB, 0.5 → 0 dB, 1 → +6 dB
-        let mid_gain = (self.mid * 2.0).max(0.001);
-        let treble_gain = (self.treble * 2.0).max(0.001);
-
-        let mut y = bass_lp * bass_gain + mid_bp * mid_gain + treble_hp * treble_gain;
+        let mid = treble_lp - bass_lp;
 
         // ---------------------------------------------------------
-        // 5. Presence – gentle high‑shelf (±6 dB)
+        // 4. Primary 3‑band mix (unity at 1.0)
+        // ---------------------------------------------------------
+        let bass_gain = self.bass.max(0.001); // 0 → −∞ dB, 1.0 → 0 dB, 2.0 → +6 dB
+        let mid_gain = self.mid.max(0.001);
+        let treble_gain = self.treble.max(0.001);
+
+        let mut y = bass_lp * bass_gain + mid * mid_gain + treble_hp * treble_gain;
+
+        // ---------------------------------------------------------
+        // 5. Presence -- high-shelf (+-6 dB, dB-mapped)
         // ---------------------------------------------------------
         let pres_alpha = self.alpha(presence_f);
         self.presence_lp += pres_alpha * (y - self.presence_lp);
-        let shelf = y + (y - self.presence_lp) * (self.presence * 2.0 - 1.0);
+        let pres_db = (self.presence - 1.0) * 6.0;
+        let pres_lin = 10.0_f32.powf(pres_db / 20.0);
+        let shelf = self.presence_lp + (y - self.presence_lp) * pres_lin;
 
         // ---------------------------------------------------------
         // 6. Model flavour adjustments
