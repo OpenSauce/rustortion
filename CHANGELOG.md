@@ -1,3 +1,27 @@
+## [0.1.7] - 2026-02-21
+
+### 🚀 Features
+
+- Add chinese (zh-CN) localization (#178)
+- Add multi-band saturation (#181)
+- Add pitch shifting (#189)
+
+### 🐛 Bug Fixes
+
+- Convert JACK sample_rate from u32 to usize (#184)
+- Correct multiband saturator crossover topology and bound waveshaper (#185)
+- Correct tonestack mid-band extraction and constructor clamping (#186)
+- Bound poweramp saturation, fix crossover distortion, and precompute sag (#187)
+- Clamp filter cutoff minimum (#188)
+- Reduce latency on pitch shifting fft (#190)
+
+### 🚜 Refactor
+
+- Rename sim module to amp and cleanup logging (#176)
+
+### ⚙️ Miscellaneous Tasks
+
+- Add chinese zh-cn readme (#180)
 ## [0.1.6] - 2026-01-10
 
 ### 🚀 Features
