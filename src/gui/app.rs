@@ -5,6 +5,7 @@ use crate::amp::chain::AmplifierChain;
 use crate::audio::manager::Manager;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::peak_meter::PeakMeterDisplay;
+use crate::gui::components::pitch_shift_control::PitchShiftControl;
 use crate::gui::components::{
     control::Control,
     dialogs::midi::MidiDialog,
@@ -35,6 +36,7 @@ pub struct AmplifierApp {
     settings_dialog: SettingsDialog,
     dirty_chain: bool,
     ir_cabinet_control: IrCabinetControl,
+    pitch_shift_control: PitchShiftControl,
     tuner_dialog: TunerDisplay,
     tuner_enabled: bool,
     preset_handler: PresetHandler,
@@ -62,11 +64,17 @@ impl AmplifierApp {
         let mut ir_cabinet_control = IrCabinetControl::new(settings.ir_bypassed, preset.ir_gain);
         ir_cabinet_control.set_available_irs(audio_manager.get_available_irs());
 
+        let pitch_shift_control = PitchShiftControl::new(preset.pitch_shift_semitones);
+
         if settings.ir_bypassed {
             audio_manager.engine().set_ir_bypass(true);
         }
 
         audio_manager.engine().set_ir_gain(preset.ir_gain);
+
+        audio_manager
+            .engine()
+            .set_pitch_shift(preset.pitch_shift_semitones);
 
         if let Some(ir_name) = preset.ir_name {
             ir_cabinet_control.set_selected_ir(Some(ir_name.clone()));
@@ -108,6 +116,7 @@ impl AmplifierApp {
                 // Set dirty chain to true to trigger initial rebuild
                 dirty_chain: true,
                 ir_cabinet_control,
+                pitch_shift_control,
                 tuner_dialog: TunerDisplay::new(),
                 tuner_enabled: false,
                 preset_handler,
@@ -125,6 +134,7 @@ impl AmplifierApp {
         let top_bar = row![
             self.peak_meter_display.view(),
             space::horizontal(),
+            self.pitch_shift_control.view(),
             button(tr!(midi))
                 .on_press(Message::OpenMidi)
                 .style(iced::widget::button::secondary),
@@ -315,6 +325,10 @@ impl AmplifierApp {
                 self.ir_cabinet_control.set_gain(gain);
                 self.audio_manager.engine().set_ir_gain(gain);
             }
+            Message::PitchShiftChanged(semitones) => {
+                self.pitch_shift_control.set_semitones(semitones);
+                self.audio_manager.engine().set_pitch_shift(semitones);
+            }
             Message::Stage(idx, stage_msg) => {
                 if let Some(stage) = self.stages.get_mut(idx)
                     && stage.apply(stage_msg)
@@ -470,6 +484,7 @@ impl AmplifierApp {
                     self.stages.clone(),
                     self.ir_cabinet_control.get_selected_ir(),
                     self.ir_cabinet_control.get_gain(),
+                    self.pitch_shift_control.get_semitones(),
                 );
             }
         }

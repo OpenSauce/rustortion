@@ -15,6 +15,8 @@ pub struct Preset {
     pub ir_name: Option<String>,
     #[serde(default = "default_ir_gain")]
     pub ir_gain: f32,
+    #[serde(default)]
+    pub pitch_shift_semitones: i32,
 }
 
 fn default_ir_gain() -> f32 {
@@ -30,6 +32,7 @@ impl Default for Preset {
             stages: Vec::new(),
             ir_name: None,
             ir_gain: 0.1,
+            pitch_shift_semitones: 0,
         }
     }
 }
@@ -40,6 +43,7 @@ impl Preset {
         stages: Vec<StageConfig>,
         ir_name: Option<String>,
         ir_gain: f32,
+        pitch_shift_semitones: i32,
     ) -> Self {
         Self {
             name,
@@ -48,6 +52,7 @@ impl Preset {
             stages,
             ir_name,
             ir_gain,
+            pitch_shift_semitones,
         }
     }
 

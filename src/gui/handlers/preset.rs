@@ -41,6 +41,7 @@ impl PresetHandler {
         stages: Vec<StageConfig>,
         ir_name: Option<String>,
         ir_gain: f32,
+        pitch_shift_semitones: i32,
     ) -> Task<Message> {
         use crate::gui::messages::PresetMessage;
 
@@ -60,19 +61,27 @@ impl PresetHandler {
 
                         let set_ir_gain_task = Task::done(Message::IrGainChanged(preset.ir_gain));
 
-                        return Task::batch(vec![set_stage_task, set_ir_task, set_ir_gain_task]);
+                        let set_pitch_shift_task =
+                            Task::done(Message::PitchShiftChanged(preset.pitch_shift_semitones));
+
+                        return Task::batch(vec![
+                            set_stage_task,
+                            set_ir_task,
+                            set_ir_gain_task,
+                            set_pitch_shift_task,
+                        ]);
                     }
                 }
             }
             PresetMessage::Save(name) => {
                 debug!("Saving preset... {name}");
                 if !name.trim().is_empty() {
-                    self.save_preset_named(&name, stages, ir_name, ir_gain);
+                    self.save_preset_named(&name, stages, ir_name, ir_gain, pitch_shift_semitones);
                 }
             }
             PresetMessage::Update => {
                 if let Some(name) = self.selected_preset.clone() {
-                    self.save_preset_named(&name, stages, ir_name, ir_gain);
+                    self.save_preset_named(&name, stages, ir_name, ir_gain, pitch_shift_semitones);
                 }
             }
             PresetMessage::Delete(preset_name) => {
@@ -87,7 +96,15 @@ impl PresetHandler {
 
                     let set_ir_gain_task = Task::done(Message::IrGainChanged(preset.ir_gain));
 
-                    return Task::batch(vec![set_stage_task, set_ir_task, set_ir_gain_task]);
+                    let set_pitch_shift_task =
+                        Task::done(Message::PitchShiftChanged(preset.pitch_shift_semitones));
+
+                    return Task::batch(vec![
+                        set_stage_task,
+                        set_ir_task,
+                        set_ir_gain_task,
+                        set_pitch_shift_task,
+                    ]);
                 }
 
                 return Task::done(Message::SetStages(Vec::new()));
@@ -150,8 +167,15 @@ impl PresetHandler {
         stages: Vec<StageConfig>,
         ir_name: Option<String>,
         ir_gain: f32,
+        pitch_shift_semitones: i32,
     ) {
-        let preset = Preset::new(name.to_owned(), stages.clone(), ir_name, ir_gain);
+        let preset = Preset::new(
+            name.to_owned(),
+            stages.clone(),
+            ir_name,
+            ir_gain,
+            pitch_shift_semitones,
+        );
         match self.preset_manager.save_preset(&preset) {
             Ok(()) => {
                 debug!("Saved preset: {name}");

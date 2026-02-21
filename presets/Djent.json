@@ -6,7 +6,7 @@
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 187.0
+        "cutoff_hz": 133.0
       }
     },
     {
@@ -24,10 +24,10 @@
     },
     {
       "ToneStack": {
-        "model": "American",
-        "bass": 1.0,
-        "mid": 1.25,
-        "treble": 1.35,
+        "model": "Modern",
+        "bass": 0.90000004,
+        "mid": 1.2,
+        "treble": 1.1,
         "presence": 0.95
       }
     },
@@ -58,14 +58,14 @@
     },
     {
       "MultibandSaturator": {
-        "low_drive": 0.53999996,
+        "low_drive": 0.42,
         "mid_drive": 0.59999996,
-        "high_drive": 0.53,
-        "low_level": 1.01,
+        "high_drive": 0.64,
+        "low_level": 0.91999996,
         "mid_level": 0.97999996,
         "high_level": 0.97999996,
-        "low_freq": 196.0,
-        "high_freq": 2540.0
+        "low_freq": 413.0,
+        "high_freq": 2410.0
       }
     },
     {
@@ -82,10 +82,10 @@
     },
     {
       "Level": {
-        "gain": 0.2
+        "gain": 0.25
       }
     }
   ],
   "ir_name": "Science Amplification/4x12/G12H-150/SM57 Brighter.wav",
-  "ir_gain": 0.13
+  "ir_gain": 0.17999999
 }

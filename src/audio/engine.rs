@@ -4,6 +4,7 @@ use log::{debug, error};
 
 use crate::amp::chain::AmplifierChain;
 use crate::audio::peak_meter::PeakMeter;
+use crate::audio::pitch_shifter::PitchShifter;
 use crate::audio::recorder::Recorder;
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
@@ -18,6 +19,7 @@ pub enum EngineMessage {
     SetIrBypass(bool),
     SetIrGain(f32),
     SetTunerEnabled(bool),
+    SetPitchShift(i32),
 }
 
 pub struct Engine {
@@ -32,6 +34,7 @@ pub struct Engine {
     recorder: Option<Recorder>,
     peak_meter: PeakMeter,
     metronome: Metronome,
+    pitch_shifter: Option<PitchShifter>,
 }
 
 pub struct EngineHandle {
@@ -58,6 +61,7 @@ impl Engine {
                 recorder: None,
                 peak_meter,
                 metronome,
+                pitch_shifter: None,
             },
             EngineHandle { engine_sender },
         ))
@@ -76,6 +80,10 @@ impl Engine {
             self.process_without_upsampling(input, output)?;
         } else {
             self.process_with_upsampling(input, output)?;
+        }
+
+        if let Some(ref mut shifter) = self.pitch_shifter {
+            shifter.process_block(output);
         }
 
         if let Some(ref mut cab) = self.ir_cabinet {
@@ -195,6 +203,18 @@ impl Engine {
 
                     self.recorder = None;
                 }
+                EngineMessage::SetPitchShift(semitones) => {
+                    if semitones == 0 {
+                        self.pitch_shifter = None;
+                        debug!("Pitch shift disabled (bypass)");
+                    } else if let Some(ref mut shifter) = self.pitch_shifter {
+                        shifter.set_semitones(semitones as f32);
+                        debug!("Pitch shift set to {} semitones", semitones);
+                    } else {
+                        self.pitch_shifter = Some(PitchShifter::new(semitones as f32));
+                        debug!("Pitch shift set to {} semitones", semitones);
+                    }
+                }
             }
         }
     }
@@ -240,6 +260,11 @@ impl EngineHandle {
 
     pub fn set_amp_chain(&self, new_chain: AmplifierChain) {
         let update = EngineMessage::SetAmpChain(Box::new(new_chain));
+        self.send(update);
+    }
+
+    pub fn set_pitch_shift(&self, semitones: i32) {
+        let update = EngineMessage::SetPitchShift(semitones);
         self.send(update);
     }
 
