@@ -6,15 +6,13 @@
     {
       "Filter": {
         "filter_type": "Highpass",
-        "cutoff_hz": 117.0,
-        "resonance": 0.0
+        "cutoff_hz": 117.0
       }
     },
     {
       "Filter": {
         "filter_type": "Lowpass",
-        "cutoff_hz": 7174.0,
-        "resonance": 0.0
+        "cutoff_hz": 7174.0
       }
     },
     {
@@ -28,8 +26,8 @@
     },
     {
       "Preamp": {
-        "gain": 1.2,
-        "bias": 0.0,
+        "gain": 1.1,
+        "bias": 1.4901161e-8,
         "clipper_type": "ClassA"
       }
     },
@@ -37,16 +35,29 @@
       "ToneStack": {
         "model": "British",
         "bass": 1.0500001,
-        "mid": 1.15,
-        "treble": 1.1,
-        "presence": 0.4
+        "mid": 1.4,
+        "treble": 1.25,
+        "presence": 1.45
+      }
+    },
+    {
+      "MultibandSaturator": {
+        "low_drive": 0.099999994,
+        "mid_drive": 0.17999999,
+        "high_drive": 0.11,
+        "low_level": 1.0,
+        "mid_level": 1.54,
+        "high_level": 1.0,
+        "low_freq": 325.0,
+        "high_freq": 2850.0
       }
     },
     {
       "Level": {
-        "gain": 1.6
+        "gain": 0.90000004
       }
     }
   ],
-  "ir_name": "Jesterdyne/AX1500g/4x12-classic.wav"
+  "ir_name": "Science Amplification/4x12/G12H-150/MD 421-U Brighter.wav",
+  "ir_gain": 0.1
 }

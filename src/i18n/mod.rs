@@ -207,6 +207,11 @@ pub struct Translations {
     pub tonestack_american: &'static str,
     pub tonestack_flat: &'static str,
 
+    // Pitch shift control
+    pub pitch_shift: &'static str,
+    pub semitones: &'static str,
+    pub pitch_bypass: &'static str,
+
     // Misc UI labels
     pub output: &'static str,
     pub samples: &'static str,
@@ -362,6 +367,11 @@ pub static EN: Translations = Translations {
     tonestack_american: "American",
     tonestack_flat: "Flat",
 
+    // Pitch shift control
+    pitch_shift: "Pitch Shift",
+    semitones: "st",
+    pitch_bypass: "Bypass (no shift)",
+
     // Misc UI labels
     output: "Output:",
     samples: "samples",
@@ -507,6 +517,11 @@ pub static ZH_CN: Translations = Translations {
     tonestack_british: "英式",
     tonestack_american: "美式",
     tonestack_flat: "平直",
+
+    // Pitch shift control
+    pitch_shift: "音高移位",
+    semitones: "半音",
+    pitch_bypass: "旁通（无移位）",
 
     // Misc UI labels
     output: "输出:",

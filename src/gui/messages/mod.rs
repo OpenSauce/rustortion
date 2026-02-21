@@ -43,6 +43,9 @@ pub enum Message {
     IrBypassed(bool),
     IrGainChanged(f32),
 
+    // Pitch shift messages
+    PitchShiftChanged(i32),
+
     // Stage-specific messages
     Stage(usize, StageMessage),
 
