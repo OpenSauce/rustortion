@@ -60,6 +60,7 @@ pub struct PitchShifter {
     shifted_mag: Vec<f64>,
     shifted_phase: Vec<f64>,
     peak_bin: Vec<usize>,
+    peaks: Vec<usize>,
     first_frame: bool,
 }
 
@@ -77,8 +78,23 @@ impl PitchShifter {
             .map(|i| 0.5 * (1.0 - (2.0 * PI * i as f64 / FFT_SIZE as f64).cos()) as f32)
             .collect();
 
-        // Hann² with 87.5% overlap sums to exactly 3.0 at every sample
-        let output_scale = 1.0 / (FFT_SIZE as f32 * 3.0);
+        // Compute the COLA (Constant Overlap-Add) normalization for Hann²
+        // with the current hop size, rather than relying on a magic constant.
+        // For hop = N/8 this evaluates to 3.0, but computing it makes the code
+        // robust to future hop/window changes.
+        let num_overlaps = FFT_SIZE / HOP_SIZE;
+        let cola_sum: f32 = (0..HOP_SIZE)
+            .map(|i| {
+                (0..num_overlaps)
+                    .map(|m| {
+                        let idx = i + m * HOP_SIZE;
+                        window[idx] * window[idx]
+                    })
+                    .sum::<f32>()
+            })
+            .sum::<f32>()
+            / HOP_SIZE as f32;
+        let output_scale = 1.0 / (FFT_SIZE as f32 * cola_sum);
 
         Self {
             ratio,
@@ -106,6 +122,7 @@ impl PitchShifter {
             shifted_mag: vec![0.0; NUM_BINS],
             shifted_phase: vec![0.0; NUM_BINS],
             peak_bin: vec![0; NUM_BINS],
+            peaks: Vec::with_capacity(64),
             first_frame: true,
         }
     }
@@ -262,25 +279,30 @@ impl PitchShifter {
     /// adjacent peaks and splits ownership there. Bins within a peak's region
     /// share coherent phase relationships, reducing "spacey" smearing.
     fn find_peak_regions(&mut self) {
-        let max_mag = self.shifted_mag.iter().cloned().fold(0.0_f64, f64::max);
+        let max_mag = self
+            .shifted_mag
+            .iter()
+            .cloned()
+            .fold(0.0_f64, f64::max)
+            .max(1e-12);
         let thresh = max_mag * 0.02;
 
-        // Collect peak indices
-        let mut peaks = Vec::with_capacity(64);
-        peaks.push(0); // DC
+        // Collect peak indices (reuse struct-owned Vec to avoid RT allocation)
+        self.peaks.clear();
+        self.peaks.push(0); // DC
         for j in 1..NUM_BINS - 1 {
             if self.shifted_mag[j] > thresh
                 && self.shifted_mag[j] >= self.shifted_mag[j - 1]
                 && self.shifted_mag[j] >= self.shifted_mag[j + 1]
             {
-                peaks.push(j);
+                self.peaks.push(j);
             }
         }
-        peaks.push(NUM_BINS - 1); // Nyquist
+        self.peaks.push(NUM_BINS - 1); // Nyquist
 
         // For each pair of adjacent peaks, find the valley (magnitude minimum)
         // between them and split ownership there
-        for w in peaks.windows(2) {
+        for w in self.peaks.windows(2) {
             let left = w[0];
             let right = w[1];
 
