@@ -51,11 +51,13 @@ pub struct PitchShiftControl {
 
 impl PitchShiftControl {
     pub fn new(semitones: i32) -> Self {
-        Self { semitones }
+        Self {
+            semitones: semitones.clamp(-12, 12),
+        }
     }
 
     pub fn set_semitones(&mut self, semitones: i32) {
-        self.semitones = semitones;
+        self.semitones = semitones.clamp(-12, 12);
     }
 
     pub fn get_semitones(&self) -> i32 {

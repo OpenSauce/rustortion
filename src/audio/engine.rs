@@ -207,6 +207,9 @@ impl Engine {
                     if semitones == 0 {
                         self.pitch_shifter = None;
                         debug!("Pitch shift disabled (bypass)");
+                    } else if let Some(ref mut shifter) = self.pitch_shifter {
+                        shifter.set_semitones(semitones as f32);
+                        debug!("Pitch shift set to {} semitones", semitones);
                     } else {
                         self.pitch_shifter = Some(PitchShifter::new(semitones as f32));
                         debug!("Pitch shift set to {} semitones", semitones);

@@ -22,6 +22,8 @@ const OUTPUT_SIZE: usize = FFT_SIZE * 2;
 /// and uses identity phase locking to maintain coherent phase relationships
 /// within each spectral peak, eliminating the "phasiness" / doubled quality
 /// of basic phase vocoders.
+///
+/// Adds ~`FFT_SIZE / sample_rate` latency (≈43 ms at 48 kHz).
 pub struct PitchShifter {
     ratio: f64,
 
@@ -125,6 +127,14 @@ impl PitchShifter {
             peaks: Vec::with_capacity(64),
             first_frame: true,
         }
+    }
+
+    /// Update the pitch ratio without reallocating buffers.
+    pub fn set_semitones(&mut self, semitones: f32) {
+        self.ratio = (2.0_f64).powf(semitones as f64 / 12.0);
+        self.last_phase.fill(0.0);
+        self.accum_phase.fill(0.0);
+        self.first_frame = true;
     }
 
     pub fn process_block(&mut self, data: &mut [f32]) {
