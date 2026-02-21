@@ -4,6 +4,13 @@ use std::sync::Arc;
 use realfft::{ComplexToReal, RealFftPlanner, RealToComplex};
 use rustfft::num_complex::Complex;
 
+/// Interpolate between two phases using shortest-path unwrapping.
+fn lerp_phase(ph0: f64, ph1: f64, t: f64) -> f64 {
+    let mut d = ph1 - ph0;
+    d -= (d / (2.0 * PI)).round() * 2.0 * PI;
+    ph0 + d * t
+}
+
 const FFT_SIZE: usize = 2048;
 const HOP_SIZE: usize = FFT_SIZE / 8; // 87.5% overlap
 const NUM_BINS: usize = FFT_SIZE / 2 + 1;
@@ -53,6 +60,7 @@ pub struct PitchShifter {
     shifted_mag: Vec<f64>,
     shifted_phase: Vec<f64>,
     peak_bin: Vec<usize>,
+    first_frame: bool,
 }
 
 impl PitchShifter {
@@ -98,6 +106,7 @@ impl PitchShifter {
             shifted_mag: vec![0.0; NUM_BINS],
             shifted_phase: vec![0.0; NUM_BINS],
             peak_bin: vec![0; NUM_BINS],
+            first_frame: true,
         }
     }
 
@@ -157,7 +166,7 @@ impl PitchShifter {
 
         for j in 0..NUM_BINS {
             let source = j as f64 / self.ratio;
-            let src_k = source as usize;
+            let src_k = source.floor() as usize;
             if src_k >= NUM_BINS - 1 {
                 continue;
             }
@@ -170,41 +179,49 @@ impl PitchShifter {
                 + (self.analysis_freq[src_k + 1] - self.analysis_freq[src_k]) * frac)
                 * self.ratio;
 
-            self.accum_phase[j] += freq;
+            if self.first_frame {
+                // Seed from interpolated analysis phase to avoid startup smear
+                let phase = lerp_phase(
+                    self.analysis_phase[src_k],
+                    self.analysis_phase[src_k + 1],
+                    frac,
+                );
+                self.accum_phase[j] = phase;
+            } else {
+                self.accum_phase[j] += freq;
+            }
+
+            // Wrap to [0, 2π) to prevent precision loss over long sessions
+            self.accum_phase[j] -= (self.accum_phase[j] / (2.0 * PI)).floor() * 2.0 * PI;
+
             self.shifted_mag[j] = mag;
             self.shifted_phase[j] = self.accum_phase[j];
         }
 
-        // Preserve spectral energy: bin shifting loses energy from truncated
-        // bins, interpolation smoothing, and phase imperfections. Scale the
-        // output magnitudes so total energy matches the input.
-        let input_energy: f64 = self.analysis_mag.iter().map(|&m| m * m).sum();
-        let output_energy: f64 = self.shifted_mag.iter().map(|&m| m * m).sum();
-        if output_energy > 1e-20 {
-            let gain = (input_energy / output_energy).sqrt();
-            for m in &mut self.shifted_mag {
-                *m *= gain;
-            }
-        }
+        self.first_frame = false;
 
         // --- Identity phase locking ---
         // Find the nearest peak for each bin
         // A peak is a local maximum in the shifted magnitude spectrum
-        self.find_nearest_peaks();
+        self.find_peak_regions();
 
         // Lock non-peak bins to their nearest peak's phase, preserving the
-        // original phase offset relative to that peak
+        // original phase offset relative to that peak (with interpolated lookup)
         for j in 0..NUM_BINS {
             let p = self.peak_bin[j];
             if p != j {
-                // Phase offset this bin had relative to the peak in the analysis
                 let src_j = j as f64 / self.ratio;
-                let src_p = p as f64 / self.ratio;
-                let src_j_k = (src_j as usize).min(NUM_BINS - 1);
-                let src_p_k = (src_p as usize).min(NUM_BINS - 1);
-                let original_offset = self.analysis_phase[src_j_k] - self.analysis_phase[src_p_k];
+                let sj = (src_j.floor() as usize).min(NUM_BINS - 2);
+                let tj = src_j - sj as f64;
 
-                self.shifted_phase[j] = self.shifted_phase[p] + original_offset;
+                let src_p = p as f64 / self.ratio;
+                let sp = (src_p.floor() as usize).min(NUM_BINS - 2);
+                let tp = src_p - sp as f64;
+
+                let ph_j = lerp_phase(self.analysis_phase[sj], self.analysis_phase[sj + 1], tj);
+                let ph_p = lerp_phase(self.analysis_phase[sp], self.analysis_phase[sp + 1], tp);
+
+                self.shifted_phase[j] = self.shifted_phase[p] + (ph_j - ph_p);
             }
         }
 
@@ -238,47 +255,52 @@ impl PitchShifter {
         self.output_write = (self.output_write + HOP_SIZE) % OUTPUT_SIZE;
     }
 
-    /// For each bin, find the nearest spectral peak (local magnitude maximum).
-    /// Peaks are assigned to themselves; non-peak bins inherit the nearest peak.
-    fn find_nearest_peaks(&mut self) {
-        // Mark peaks
-        let mut is_peak = [false; NUM_BINS];
-        if NUM_BINS > 0 {
-            is_peak[0] = true; // treat DC as its own peak
-        }
-        for (j, peak) in is_peak
-            .iter_mut()
-            .enumerate()
-            .take(NUM_BINS.saturating_sub(1))
-            .skip(1)
-        {
-            if self.shifted_mag[j] >= self.shifted_mag[j - 1]
+    /// Assign each bin to its owning spectral peak using region-of-influence.
+    ///
+    /// Instead of assigning to the nearest peak by distance (which can cross
+    /// spectral valleys), this finds the magnitude valley between each pair of
+    /// adjacent peaks and splits ownership there. Bins within a peak's region
+    /// share coherent phase relationships, reducing "spacey" smearing.
+    fn find_peak_regions(&mut self) {
+        let max_mag = self.shifted_mag.iter().cloned().fold(0.0_f64, f64::max);
+        let thresh = max_mag * 0.02;
+
+        // Collect peak indices
+        let mut peaks = Vec::with_capacity(64);
+        peaks.push(0); // DC
+        for j in 1..NUM_BINS - 1 {
+            if self.shifted_mag[j] > thresh
+                && self.shifted_mag[j] >= self.shifted_mag[j - 1]
                 && self.shifted_mag[j] >= self.shifted_mag[j + 1]
             {
-                *peak = true;
+                peaks.push(j);
             }
         }
-        if NUM_BINS > 1 {
-            is_peak[NUM_BINS - 1] = true; // treat Nyquist as its own peak
-        }
+        peaks.push(NUM_BINS - 1); // Nyquist
 
-        // Forward pass: propagate nearest peak from the left
-        let mut last_peak = 0;
-        for (j, &peak) in is_peak.iter().enumerate().take(NUM_BINS) {
-            if peak {
-                last_peak = j;
-            }
-            self.peak_bin[j] = last_peak;
-        }
+        // For each pair of adjacent peaks, find the valley (magnitude minimum)
+        // between them and split ownership there
+        for w in peaks.windows(2) {
+            let left = w[0];
+            let right = w[1];
 
-        // Backward pass: pick closer peak between left and right
-        last_peak = NUM_BINS - 1;
-        for j in (0..NUM_BINS).rev() {
-            if is_peak[j] {
-                last_peak = j;
+            // Find the bin with minimum magnitude between the two peaks
+            let mut valley = left;
+            let mut min_mag = f64::MAX;
+            for j in left..=right {
+                if self.shifted_mag[j] < min_mag {
+                    min_mag = self.shifted_mag[j];
+                    valley = j;
+                }
             }
-            if (last_peak as isize - j as isize).unsigned_abs() < (self.peak_bin[j]).abs_diff(j) {
-                self.peak_bin[j] = last_peak;
+
+            // Left peak owns bins up to and including the valley
+            for j in left..=valley {
+                self.peak_bin[j] = left;
+            }
+            // Right peak owns bins after the valley
+            for j in (valley + 1)..=right {
+                self.peak_bin[j] = right;
             }
         }
     }
