@@ -456,7 +456,9 @@ impl AmplifierApp {
             }
             Message::PeakMeterUpdate => {
                 let info = self.audio_manager.peak_meter().get_info();
-                self.peak_meter_display.update(info);
+                let xrun_count = self.audio_manager.xrun_count();
+                let cpu_load = self.audio_manager.cpu_load();
+                self.peak_meter_display.update(info, xrun_count, cpu_load);
             }
             Message::Preset(msg) => {
                 match msg.clone() {

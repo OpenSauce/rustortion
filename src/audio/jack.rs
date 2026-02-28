@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use anyhow::{Context, Result};
 use jack::Client;
 use log::{error, warn};
@@ -5,7 +8,10 @@ use log::{error, warn};
 use crate::audio::engine::Engine;
 use crate::audio::ports::Ports;
 
-pub struct NotificationHandler;
+pub struct NotificationHandler {
+    xrun_count: Arc<AtomicU64>,
+}
+
 pub struct ProcessHandler {
     ports: Ports,
     audio_engine: Engine,
@@ -13,10 +19,21 @@ pub struct ProcessHandler {
     metronome_buffer: Vec<f32>,
 }
 
+impl NotificationHandler {
+    pub fn new(xrun_count: Arc<AtomicU64>) -> Self {
+        Self { xrun_count }
+    }
+}
+
 impl jack::NotificationHandler for NotificationHandler {
     fn sample_rate(&mut self, _: &Client, sample_rate: jack::Frames) -> jack::Control {
         warn!("JACK sample_rate changed to {sample_rate}");
 
+        jack::Control::Continue
+    }
+
+    fn xrun(&mut self, _: &Client) -> jack::Control {
+        self.xrun_count.fetch_add(1, Ordering::Relaxed);
         jack::Control::Continue
     }
 }
