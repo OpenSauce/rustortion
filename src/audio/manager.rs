@@ -1,3 +1,6 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use anyhow::{Context, Result};
 use jack::{AsyncClient, Client, ClientOptions};
 use log::{error, info, warn};
@@ -19,6 +22,7 @@ pub struct Manager {
     tuner_handle: TunerHandle,
     engine_handle: EngineHandle,
     peak_meter_handle: PeakMeterHandle,
+    xrun_count: Arc<AtomicU64>,
     available_irs: Vec<String>,
 }
 
@@ -58,8 +62,11 @@ impl Manager {
         let jack_handler =
             ProcessHandler::new(&client, engine).context("failed to create process handler")?;
 
+        let xrun_count = Arc::new(AtomicU64::new(0));
+        let notification_handler = NotificationHandler::new(xrun_count.clone());
+
         let active_client = client
-            .activate_async(NotificationHandler, jack_handler)
+            .activate_async(notification_handler, jack_handler)
             .context("failed to activate async client")?;
 
         let mut manager = Self {
@@ -68,6 +75,7 @@ impl Manager {
             tuner_handle,
             engine_handle,
             peak_meter_handle,
+            xrun_count,
             available_irs,
         };
 
@@ -149,6 +157,14 @@ impl Manager {
 
     pub fn peak_meter(&self) -> &PeakMeterHandle {
         &self.peak_meter_handle
+    }
+
+    pub fn xrun_count(&self) -> u64 {
+        self.xrun_count.load(Ordering::Relaxed)
+    }
+
+    pub fn cpu_load(&self) -> f32 {
+        self.active_client.as_client().cpu_load()
     }
 
     /// Reconnect with new settings

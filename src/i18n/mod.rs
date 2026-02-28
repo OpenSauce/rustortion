@@ -219,6 +219,10 @@ pub struct Translations {
     pub hz: &'static str,
     pub db: &'static str,
     pub ms: &'static str,
+
+    // Peak meter / status
+    pub xruns: &'static str,
+    pub cpu: &'static str,
 }
 
 impl Translations {
@@ -379,6 +383,10 @@ pub static EN: Translations = Translations {
     hz: "Hz",
     db: "dB",
     ms: "ms",
+
+    // Peak meter / status
+    xruns: "xruns",
+    cpu: "CPU",
 };
 
 pub static ZH_CN: Translations = Translations {
@@ -530,4 +538,8 @@ pub static ZH_CN: Translations = Translations {
     hz: "赫兹",
     db: "分贝",
     ms: "毫秒",
+
+    // Peak meter / status
+    xruns: "欠载",
+    cpu: "CPU",
 };
