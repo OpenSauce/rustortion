@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
+use crate::hotkey::HotkeyMapping;
 use crate::i18n::Language;
 use crate::midi::MidiMapping;
 
@@ -69,6 +70,11 @@ pub struct MidiSettings {
     pub mappings: Vec<MidiMapping>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct HotkeySettings {
+    pub mappings: Vec<HotkeyMapping>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub audio: AudioSettings,
@@ -80,6 +86,8 @@ pub struct Settings {
     pub selected_preset: Option<String>,
     #[serde(default)]
     pub language: Language,
+    #[serde(default)]
+    pub hotkeys: HotkeySettings,
 }
 
 impl std::fmt::Display for Settings {
@@ -118,6 +126,7 @@ impl Default for Settings {
             ir_bypassed: false,
             selected_preset: None,
             language: Language::default(),
+            hotkeys: HotkeySettings::default(),
         }
     }
 }

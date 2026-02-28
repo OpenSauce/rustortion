@@ -65,6 +65,16 @@ pub enum Message {
     MidiRemoveMapping(usize),
     MidiUpdate,
 
+    // Hotkey messages
+    OpenHotkeys,
+    HotkeyClose,
+    HotkeyStartLearning,
+    HotkeyCancelLearning,
+    HotkeyPresetSelected(String),
+    HotkeyConfirmMapping,
+    HotkeyRemoveMapping(usize),
+    KeyPressed(iced::keyboard::Key, iced::keyboard::Modifiers),
+
     // Peak meter messages
     PeakMeterUpdate,
 }
