@@ -1,8 +1,8 @@
 use iced::widget::{column, scrollable};
 use iced::{Element, Length};
 
-use crate::gui::config::StageConfig;
 use crate::gui::messages::Message;
+use crate::gui::stages::StageConfig;
 
 pub struct StageList {
     stages: Vec<StageConfig>,

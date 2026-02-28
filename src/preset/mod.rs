@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::gui::config::StageConfig;
+use crate::gui::stages::StageConfig;
 
 pub mod manager;
 

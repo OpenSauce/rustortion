@@ -1,8 +1,8 @@
 use iced::widget::{button, container, pick_list, row, space, text};
 use iced::{Alignment, Element, Length};
 
-use crate::gui::config::StageType;
 use crate::gui::messages::Message;
+use crate::gui::stages::StageType;
 use crate::tr;
 
 pub struct Control {

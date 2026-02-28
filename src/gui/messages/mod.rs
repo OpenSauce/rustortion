@@ -1,18 +1,21 @@
-use crate::gui::config::{StageConfig, StageType};
+use crate::gui::stages::{StageConfig, StageType};
 
 pub mod hotkey;
 pub mod midi;
 pub mod preset;
 pub mod settings;
-pub mod stage;
 pub mod tuner;
 
 pub use hotkey::*;
 pub use midi::*;
 pub use preset::*;
 pub use settings::*;
-pub use stage::*;
 pub use tuner::*;
+
+pub use crate::gui::stages::{
+    CompressorMessage, FilterMessage, LevelMessage, MultibandSaturatorMessage, NoiseGateMessage,
+    PowerAmpMessage, PreampMessage, StageMessage, ToneStackMessage,
+};
 
 #[derive(Debug, Clone)]
 pub enum Message {
