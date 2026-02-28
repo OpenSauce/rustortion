@@ -23,7 +23,7 @@ impl Default for LevelConfig {
 }
 
 impl LevelConfig {
-    pub fn to_stage(&self) -> LevelStage {
+    pub fn to_stage(&self, _sample_rate: f32) -> LevelStage {
         LevelStage::new(self.gain)
     }
 
