@@ -220,6 +220,11 @@ pub struct Translations {
     pub db: &'static str,
     pub ms: &'static str,
 
+    // Hotkey dialog
+    pub hotkey_settings: &'static str,
+    pub hotkeys: &'static str,
+    pub press_any_key: &'static str,
+
     // Peak meter / status
     pub xruns: &'static str,
     pub cpu: &'static str,
@@ -384,6 +389,11 @@ pub static EN: Translations = Translations {
     db: "dB",
     ms: "ms",
 
+    // Hotkey dialog
+    hotkey_settings: "Hotkey Settings",
+    hotkeys: "Hotkeys",
+    press_any_key: "Press any key...",
+
     // Peak meter / status
     xruns: "xruns",
     cpu: "CPU",
@@ -538,6 +548,11 @@ pub static ZH_CN: Translations = Translations {
     hz: "赫兹",
     db: "分贝",
     ms: "毫秒",
+
+    // Hotkey dialog
+    hotkey_settings: "快捷键设置",
+    hotkeys: "快捷键",
+    press_any_key: "请按任意键...",
 
     // Peak meter / status
     xruns: "欠载",

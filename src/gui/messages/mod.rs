@@ -1,9 +1,11 @@
 use crate::gui::config::{StageConfig, StageType};
 use crate::i18n::Language;
 
+pub mod hotkey;
 pub mod preset;
 pub mod stage;
 
+pub use hotkey::*;
 pub use preset::*;
 pub use stage::*;
 
@@ -65,6 +67,10 @@ pub enum Message {
     MidiRemoveMapping(usize),
     MidiUpdate,
 
+    // Hotkey messages
+    Hotkey(HotkeyMessage),
+    KeyPressed(iced::keyboard::Key, iced::keyboard::Modifiers),
+
     // Peak meter messages
     PeakMeterUpdate,
 }
@@ -72,5 +78,11 @@ pub enum Message {
 impl From<PresetMessage> for Message {
     fn from(msg: PresetMessage) -> Self {
         Message::Preset(msg)
+    }
+}
+
+impl From<HotkeyMessage> for Message {
+    fn from(msg: HotkeyMessage) -> Self {
+        Message::Hotkey(msg)
     }
 }

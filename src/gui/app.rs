@@ -1,4 +1,4 @@
-use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
+use iced::{Element, Length, Subscription, Task, Theme, keyboard, time, time::Duration};
 use log::{debug, error};
 
 use crate::amp::chain::AmplifierChain;
@@ -14,8 +14,9 @@ use crate::gui::components::{
     stage_list::StageList,
 };
 use crate::gui::config::{StageConfig, StageType};
+use crate::gui::handlers::hotkey::HotkeyHandler;
 use crate::gui::handlers::preset::PresetHandler;
-use crate::gui::messages::{Message, PresetMessage};
+use crate::gui::messages::{HotkeyMessage, Message, PresetMessage};
 use crate::i18n;
 use crate::midi::{MidiEvent, MidiHandle, start_midi_manager};
 use crate::settings::{AudioSettings, Settings};
@@ -43,6 +44,7 @@ pub struct AmplifierApp {
     peak_meter_display: PeakMeterDisplay,
     midi_handle: MidiHandle,
     midi_dialog: MidiDialog,
+    hotkey_handler: HotkeyHandler,
 }
 
 impl AmplifierApp {
@@ -104,6 +106,8 @@ impl AmplifierApp {
         // Set the global language from settings
         i18n::set_language(settings.language);
 
+        let hotkey_handler = HotkeyHandler::new(settings.hotkeys.clone());
+
         (
             Self {
                 audio_manager,
@@ -123,6 +127,7 @@ impl AmplifierApp {
                 peak_meter_display: PeakMeterDisplay::new(),
                 midi_handle,
                 midi_dialog,
+                hotkey_handler,
             },
             Task::none(),
         )
@@ -135,6 +140,9 @@ impl AmplifierApp {
             self.peak_meter_display.view(),
             space::horizontal(),
             self.pitch_shift_control.view(),
+            button(tr!(hotkeys))
+                .on_press(Message::Hotkey(HotkeyMessage::Open))
+                .style(iced::widget::button::secondary),
             button(tr!(midi))
                 .on_press(Message::OpenMidi)
                 .style(iced::widget::button::secondary),
@@ -161,6 +169,8 @@ impl AmplifierApp {
             tuner_dialog
         } else if let Some(midi_dialog) = self.midi_dialog.view() {
             midi_dialog
+        } else if let Some(hotkey_dialog) = self.hotkey_handler.view() {
+            hotkey_dialog
         } else {
             container(main_content)
                 .width(Length::Fill)
@@ -199,7 +209,23 @@ impl AmplifierApp {
             Subscription::none()
         };
 
-        Subscription::batch(vec![rebuild_sub, tuner_sub, peak_meter_sub, midi_sub])
+        let keyboard_sub = keyboard::listen().filter_map(|event| match event {
+            keyboard::Event::KeyPressed {
+                key,
+                modifiers,
+                repeat: false,
+                ..
+            } => Some(Message::KeyPressed(key, modifiers)),
+            _ => None,
+        });
+
+        Subscription::batch(vec![
+            rebuild_sub,
+            tuner_sub,
+            peak_meter_sub,
+            midi_sub,
+            keyboard_sub,
+        ])
     }
 
     pub fn update(&mut self, message: Message) -> Task<Message> {
@@ -452,6 +478,37 @@ impl AmplifierApp {
                             error!("MIDI error: {}", e);
                         }
                     }
+                }
+            }
+            Message::Hotkey(msg) => {
+                let presets = self.preset_handler.get_available_presets();
+                if self.hotkey_handler.handle(msg, presets) {
+                    self.settings.hotkeys = self.hotkey_handler.settings().clone();
+                    if let Err(e) = self.settings.save() {
+                        error!("Failed to save hotkey mappings: {e}");
+                    }
+                }
+            }
+            Message::KeyPressed(key, modifiers) => {
+                // If hotkey dialog is in learning mode, capture the key
+                if self.hotkey_handler.is_learning() {
+                    self.hotkey_handler.on_key_input(&key, modifiers);
+                    return Task::none();
+                }
+
+                // If any dialog is open, don't trigger hotkeys
+                if self.settings_dialog.is_visible()
+                    || self.tuner_dialog.is_visible()
+                    || self.midi_dialog.is_visible()
+                    || self.hotkey_handler.is_visible()
+                {
+                    return Task::none();
+                }
+
+                // Check against hotkey mappings
+                if let Some(preset_name) = self.hotkey_handler.check_mapping(&key, modifiers) {
+                    debug!("Hotkey triggered preset: {}", preset_name);
+                    return Task::done(Message::Preset(PresetMessage::Select(preset_name)));
                 }
             }
             Message::PeakMeterUpdate => {
