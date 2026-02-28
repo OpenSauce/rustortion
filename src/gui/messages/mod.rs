@@ -1,13 +1,18 @@
 use crate::gui::config::{StageConfig, StageType};
-use crate::i18n::Language;
 
 pub mod hotkey;
+pub mod midi;
 pub mod preset;
+pub mod settings;
 pub mod stage;
+pub mod tuner;
 
 pub use hotkey::*;
+pub use midi::*;
 pub use preset::*;
+pub use settings::*;
 pub use stage::*;
+pub use tuner::*;
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -28,17 +33,7 @@ pub enum Message {
     StopRecording,
 
     // Settings messages
-    OpenSettings,
-    CancelSettings,
-    ApplySettings,
-    RefreshPorts,
-    InputPortChanged(String),
-    OutputLeftPortChanged(String),
-    OutputRightPortChanged(String),
-    BufferSizeChanged(u32),
-    SampleRateChanged(u32),
-    OversamplingFactorChanged(u32),
-    LanguageChanged(Language),
+    Settings(SettingsMessage),
 
     // IR Cabinet messages
     IrSelected(String),
@@ -52,20 +47,10 @@ pub enum Message {
     Stage(usize, StageMessage),
 
     // Tuner messages
-    ToggleTuner,
-    TunerUpdate,
+    Tuner(TunerMessage),
 
-    OpenMidi,
-    MidiClose,
-    MidiControllerSelected(String),
-    MidiDisconnect,
-    MidiRefreshControllers,
-    MidiStartLearning,
-    MidiCancelLearning,
-    MidiPresetForMappingSelected(String),
-    MidiConfirmMapping,
-    MidiRemoveMapping(usize),
-    MidiUpdate,
+    // MIDI messages
+    Midi(MidiMessage),
 
     // Hotkey messages
     Hotkey(HotkeyMessage),
@@ -84,5 +69,23 @@ impl From<PresetMessage> for Message {
 impl From<HotkeyMessage> for Message {
     fn from(msg: HotkeyMessage) -> Self {
         Message::Hotkey(msg)
+    }
+}
+
+impl From<MidiMessage> for Message {
+    fn from(msg: MidiMessage) -> Self {
+        Message::Midi(msg)
+    }
+}
+
+impl From<SettingsMessage> for Message {
+    fn from(msg: SettingsMessage) -> Self {
+        Message::Settings(msg)
+    }
+}
+
+impl From<TunerMessage> for Message {
+    fn from(msg: TunerMessage) -> Self {
+        Message::Tuner(msg)
     }
 }

@@ -1,4 +1,5 @@
 use iced::Element;
+use iced::Task;
 use iced::keyboard::{Key, Modifiers};
 use log::debug;
 
@@ -19,45 +20,39 @@ impl HotkeyHandler {
         }
     }
 
-    /// Handle a hotkey message. Returns `true` if settings were modified and need saving.
-    pub fn handle(&mut self, message: HotkeyMessage, presets: Vec<String>) -> bool {
+    pub fn open(&mut self, presets: Vec<String>) {
+        self.dialog.show(presets, self.settings.mappings.clone());
+    }
+
+    pub fn handle(&mut self, message: HotkeyMessage) -> Task<Message> {
         match message {
-            HotkeyMessage::Open => {
-                self.dialog.show(presets, self.settings.mappings.clone());
-                false
-            }
+            HotkeyMessage::Open => {}
             HotkeyMessage::Close => {
                 self.dialog.hide();
-                false
             }
             HotkeyMessage::StartLearning => {
                 self.dialog.start_learning();
-                false
             }
             HotkeyMessage::CancelLearning => {
                 self.dialog.cancel_learning();
-                false
             }
             HotkeyMessage::PresetSelected(preset) => {
                 self.dialog.set_preset_for_mapping(preset);
-                false
             }
             HotkeyMessage::ConfirmMapping => {
                 if self.dialog.complete_mapping().is_some() {
                     self.settings.mappings = self.dialog.get_mappings();
                     debug!("Hotkey mapping added and saved");
-                    true
-                } else {
-                    false
                 }
             }
             HotkeyMessage::RemoveMapping(idx) => {
                 self.dialog.remove_mapping(idx);
                 self.settings.mappings = self.dialog.get_mappings();
                 debug!("Hotkey mapping removed and saved");
-                true
             }
         }
+
+        Task::none()
     }
 
     pub fn on_key_input(&mut self, key: &Key, modifiers: Modifiers) {
@@ -86,6 +81,6 @@ impl HotkeyHandler {
     }
 
     pub fn view(&self) -> Option<Element<'_, Message>> {
-        self.dialog.view()
+        self.dialog.view().map(|e| e.map(Message::Hotkey))
     }
 }
