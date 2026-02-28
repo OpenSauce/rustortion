@@ -48,9 +48,15 @@ impl Metronome {
         };
         let spec = reader.spec();
         debug!("Loaded WAV: {:?}", spec);
-        let samples: Vec<f32> = reader
-            .samples::<i16>()
-            .filter_map(|s| s.ok())
+        let raw_samples: Vec<i16> = match reader.samples::<i16>().collect::<Result<Vec<_>, _>>() {
+            Ok(s) => s,
+            Err(e) => {
+                error!("Failed to decode samples from WAV file '{file_path}': {e}");
+                return;
+            }
+        };
+        let samples: Vec<f32> = raw_samples
+            .into_iter()
             .map(|s| s as f32 / i16::MAX as f32)
             .collect();
         if spec.sample_rate != self.sample_rate as u32 {

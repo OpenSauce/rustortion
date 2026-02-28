@@ -168,6 +168,13 @@ impl PitchShifter {
             .process_with_scratch(&mut self.frame, &mut self.spectrum, &mut self.r2c_scratch)
             .is_err()
         {
+            // Emit a silent hop but still advance output_write to keep
+            // it aligned with the read pointer.
+            for i in 0..HOP_SIZE {
+                let idx = (self.output_write + i) % OUTPUT_SIZE;
+                self.output_accum[idx] = 0.0;
+            }
+            self.output_write = (self.output_write + HOP_SIZE) % OUTPUT_SIZE;
             return;
         }
 
@@ -277,6 +284,8 @@ impl PitchShifter {
             )
             .is_err()
         {
+            // Advance output_write to keep buffer alignment on error.
+            self.output_write = (self.output_write + HOP_SIZE) % OUTPUT_SIZE;
             return;
         }
 

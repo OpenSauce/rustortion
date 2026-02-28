@@ -243,6 +243,8 @@ impl TwoStageConvolver {
             )
             .is_err()
         {
+            // Advance ola_write to keep buffer alignment on error.
+            self.ola_write = (self.ola_write + self.partition_size) % self.block_size;
             return;
         }
 
@@ -277,6 +279,8 @@ impl TwoStageConvolver {
             )
             .is_err()
         {
+            // Advance ola_write to keep buffer alignment on error.
+            self.ola_write = (self.ola_write + self.partition_size) % self.block_size;
             return;
         }
 
