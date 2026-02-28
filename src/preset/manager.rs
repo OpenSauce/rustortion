@@ -104,7 +104,6 @@ fn sanitize_filename(name: &str) -> String {
     name.chars()
         .map(|c| match c {
             'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' => c,
-            ' ' => '_',
             _ => '_',
         })
         .collect()

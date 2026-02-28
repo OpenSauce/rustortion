@@ -78,9 +78,6 @@ impl Control {
             .into()
     }
 
-    pub fn set_selected(&mut self, t: StageType) {
-        self.selected_stage_type = t;
-    }
     pub fn selected(&self) -> StageType {
         self.selected_stage_type
     }

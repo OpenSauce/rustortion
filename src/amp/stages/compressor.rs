@@ -1,20 +1,14 @@
 use crate::amp::stages::Stage;
+use crate::amp::stages::common::{EnvelopeFollower, calculate_coefficient, db_to_lin};
 
 pub struct CompressorStage {
-    attack: f32,      // Attack coefficient (0-1)
-    release: f32,     // Release coefficient (0-1)
-    attack_ms: f32,   // Attack time in milliseconds
-    release_ms: f32,  // Release time in milliseconds
-    threshold: f32,   // Threshold in linear scale
-    ratio: f32,       // Compression ratio (e.g., 4.0 for 4:1)
-    makeup: f32,      // Makeup gain in linear scale
-    envelope: f32,    // Envelope follower state
-    sample_rate: f32, // Sample rate for recalculating coefficients
-}
-
-#[inline]
-fn db_to_lin(db: f32) -> f32 {
-    10f32.powf(db / 20.0)
+    attack_ms: f32,  // Attack time in milliseconds
+    release_ms: f32, // Release time in milliseconds
+    threshold: f32,  // Threshold in linear scale
+    ratio: f32,      // Compression ratio (e.g., 4.0 for 4:1)
+    makeup: f32,     // Makeup gain in linear scale
+    envelope: EnvelopeFollower,
+    sample_rate: f32,
 }
 
 impl CompressorStage {
@@ -26,71 +20,45 @@ impl CompressorStage {
         makeup_db: f32,
         sample_rate: f32,
     ) -> Self {
-        // Convert ms to one-pole coefficients
-        // For attack/release: smaller time constant = faster response = smaller coefficient
-        let attack = (-1.0 / (sample_rate * 0.001 * attack_ms)).exp();
-        let release = (-1.0 / (sample_rate * 0.001 * release_ms)).exp();
-
         Self {
-            attack,
-            release,
             attack_ms,
             release_ms,
             threshold: db_to_lin(threshold_db),
             ratio,
             makeup: db_to_lin(makeup_db),
-            envelope: 0.0,
+            envelope: EnvelopeFollower::from_ms(attack_ms, release_ms, sample_rate),
             sample_rate,
         }
     }
 
-    // Calculate coefficient from time constant in ms
-    fn calculate_coefficient(&self, time_ms: f32) -> f32 {
-        (-1.0 / (self.sample_rate * 0.001 * time_ms)).exp()
-    }
-
-    // Update just the attack time and coefficient
     fn update_attack(&mut self, attack_ms: f32) {
         self.attack_ms = attack_ms;
-        self.attack = self.calculate_coefficient(attack_ms);
+        self.envelope
+            .set_attack_coeff(calculate_coefficient(attack_ms, self.sample_rate));
     }
 
-    // Update just the release time and coefficient
     fn update_release(&mut self, release_ms: f32) {
         self.release_ms = release_ms;
-        self.release = self.calculate_coefficient(release_ms);
+        self.envelope
+            .set_release_coeff(calculate_coefficient(release_ms, self.sample_rate));
     }
 }
 
 impl Stage for CompressorStage {
     fn process(&mut self, input: f32) -> f32 {
-        // Envelope follower
-        let level_in = input.abs().max(1e-10); // Avoid log(0)
-
-        // Attack/release behavior - using proper one-pole filter form:
-        // y[n] = α·y[n-1] + (1-α)·x[n]
-        //
-        // Where α is closer to 1.0 for longer time constants
-        // For attack (level_in > envelope): use attack coefficient (faster)
-        // For release (level_in < envelope): use release coefficient (slower)
-        if level_in > self.envelope {
-            // Attack phase - faster coefficient
-            self.envelope = self.attack * self.envelope + (1.0 - self.attack) * level_in;
-        } else {
-            // Release phase - slower coefficient
-            self.envelope = self.release * self.envelope + (1.0 - self.release) * level_in;
-        }
+        // Envelope follower (feed abs input, avoid log(0))
+        let level_in = input.abs().max(1e-10);
+        self.envelope.process(level_in);
+        let env = self.envelope.value();
 
         // Compression gain calculation
-        let over_threshold = (self.envelope / self.threshold).max(1.0);
+        let over_threshold = (env / self.threshold).max(1.0);
         let gain_reduction = if over_threshold > 1.0 {
-            // G = (in/threshold)^(1/ratio-1)
             over_threshold.powf((1.0 / self.ratio) - 1.0)
         } else {
             1.0
         };
 
-        // Apply compression and makeup gain
         input * gain_reduction * self.makeup
     }
 
@@ -136,18 +104,18 @@ impl Stage for CompressorStage {
                     Err("Makeup must be between -12 dB and 24 dB")
                 }
             }
-            _ => Err("Unknown parameter name"),
+            _ => Err("Unknown parameter"),
         }
     }
 
     fn get_parameter(&self, name: &str) -> Result<f32, &'static str> {
         match name {
-            "threshold" => Ok(20.0 * self.threshold.log10()), // Convert back to dB
+            "threshold" => Ok(20.0 * self.threshold.log10()),
             "ratio" => Ok(self.ratio),
-            "attack" => Ok(self.attack_ms), // Return stored ms value directly
-            "release" => Ok(self.release_ms), // Return stored ms value directly
-            "makeup" => Ok(20.0 * self.makeup.log10()), // Convert back to dB
-            _ => Err("Unknown parameter name"),
+            "attack" => Ok(self.attack_ms),
+            "release" => Ok(self.release_ms),
+            "makeup" => Ok(20.0 * self.makeup.log10()),
+            _ => Err("Unknown parameter"),
         }
     }
 }

@@ -160,7 +160,7 @@ impl TwoStageConvolver {
             let mut freq_block = vec![Complex::new(0.0, 0.0); self.num_bins];
             self.r2c
                 .process_with_scratch(&mut time_block, &mut freq_block, &mut self.r2c_scratch)
-                .expect("FFT failed");
+                .map_err(|e| anyhow::anyhow!("FFT failed during IR partitioning: {e}"))?;
 
             self.tail_partitions.push(freq_block);
         }
@@ -234,13 +234,19 @@ impl TwoStageConvolver {
         }
 
         // Forward FFT
-        self.r2c
+        if self
+            .r2c
             .process_with_scratch(
                 &mut self.time_scratch,
                 &mut self.freq_scratch,
                 &mut self.r2c_scratch,
             )
-            .expect("FFT failed");
+            .is_err()
+        {
+            // Advance ola_write to keep buffer alignment on error.
+            self.ola_write = (self.ola_write + self.partition_size) % self.block_size;
+            return;
+        }
 
         // Store in history
         self.history[self.history_head].copy_from_slice(&self.freq_scratch);
@@ -264,13 +270,19 @@ impl TwoStageConvolver {
         }
 
         // Inverse FFT
-        self.c2r
+        if self
+            .c2r
             .process_with_scratch(
                 &mut self.freq_accumulator,
                 &mut self.time_scratch,
                 &mut self.c2r_scratch,
             )
-            .expect("IFFT failed");
+            .is_err()
+        {
+            // Advance ola_write to keep buffer alignment on error.
+            self.ola_write = (self.ola_write + self.partition_size) % self.block_size;
+            return;
+        }
 
         // Overlap-add into output buffer
         let scale = 1.0 / self.block_size as f32;

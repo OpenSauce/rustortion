@@ -2,6 +2,8 @@
 /recordings/*.wav
 *.reapeaks
 
+/claude
+
 impulse_responses/*
 !/impulse_responses/Misc
 !/impulse_responses/Jesterdyne

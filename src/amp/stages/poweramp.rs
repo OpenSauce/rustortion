@@ -1,4 +1,5 @@
 use crate::amp::stages::Stage;
+use crate::amp::stages::common::calculate_coefficient;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
@@ -29,18 +30,14 @@ pub struct PowerAmpStage {
 }
 
 impl PowerAmpStage {
-    fn sag_coeff(sample_rate: f32, tau_s: f32) -> f32 {
-        (-1.0 / (sample_rate * tau_s)).exp()
-    }
-
     pub fn new(drive: f32, amp_type: PowerAmpType, sag: f32, sample_rate: f32) -> Self {
         Self {
             drive: drive.clamp(0.0, 1.0),
             amp_type,
             sag: sag.clamp(0.0, 1.0),
             sag_envelope: 0.0,
-            sag_attack_coeff: Self::sag_coeff(sample_rate, 0.002), // 2ms attack
-            sag_release_coeff: Self::sag_coeff(sample_rate, 0.050), // 50ms release
+            sag_attack_coeff: calculate_coefficient(2.0, sample_rate), // 2ms attack
+            sag_release_coeff: calculate_coefficient(50.0, sample_rate), // 50ms release
         }
     }
 }

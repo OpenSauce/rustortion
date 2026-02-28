@@ -1,4 +1,5 @@
 use crate::amp::stages::Stage;
+use crate::amp::stages::common::{DcBlocker, EnvelopeFollower};
 use std::f32::consts::PI;
 
 /// Linkwitz-Riley 4th order crossover filter (cascaded 2nd order Butterworth)
@@ -93,68 +94,6 @@ impl LR4Filter {
     }
 }
 
-/// DC blocker to remove any DC offset introduced by saturation
-#[derive(Clone)]
-struct DcBlocker {
-    x_prev: f32,
-    y_prev: f32,
-    coeff: f32,
-}
-
-impl DcBlocker {
-    fn new(sample_rate: f32) -> Self {
-        // 15 Hz cutoff for DC blocking
-        let coeff = (-2.0 * PI * 15.0 / sample_rate).exp();
-        Self {
-            x_prev: 0.0,
-            y_prev: 0.0,
-            coeff,
-        }
-    }
-
-    #[inline]
-    fn process(&mut self, input: f32) -> f32 {
-        let output = input - self.x_prev + self.coeff * self.y_prev;
-        self.x_prev = input;
-        self.y_prev = output;
-        output
-    }
-}
-
-/// Simple envelope follower for adaptive saturation
-#[derive(Clone)]
-struct EnvelopeFollower {
-    envelope: f32,
-    attack_coeff: f32,
-    release_coeff: f32,
-}
-
-impl EnvelopeFollower {
-    fn new(sample_rate: f32) -> Self {
-        // Fast attack (1ms), slow release (50ms)
-        let attack_ms = 1.0;
-        let release_ms = 50.0;
-        Self {
-            envelope: 0.0,
-            attack_coeff: (-1.0 / (attack_ms * 0.001 * sample_rate)).exp(),
-            release_coeff: (-1.0 / (release_ms * 0.001 * sample_rate)).exp(),
-        }
-    }
-
-    #[inline]
-    fn process(&mut self, input: f32) -> f32 {
-        let abs_input = input.abs();
-        if abs_input > self.envelope {
-            self.envelope =
-                self.attack_coeff * self.envelope + (1.0 - self.attack_coeff) * abs_input;
-        } else {
-            self.envelope =
-                self.release_coeff * self.envelope + (1.0 - self.release_coeff) * abs_input;
-        }
-        self.envelope
-    }
-}
-
 /// Soft saturation function with drive control
 #[inline]
 fn saturate(input: f32, drive: f32) -> f32 {
@@ -223,13 +162,13 @@ impl MultibandSaturatorStage {
             low_allpass_lp: LR4Filter::new(high_freq, sample_rate, false),
             low_allpass_hp: LR4Filter::new(high_freq, sample_rate, true),
 
-            low_env: EnvelopeFollower::new(sample_rate),
-            mid_env: EnvelopeFollower::new(sample_rate),
-            high_env: EnvelopeFollower::new(sample_rate),
+            low_env: EnvelopeFollower::from_ms(1.0, 50.0, sample_rate),
+            mid_env: EnvelopeFollower::from_ms(1.0, 50.0, sample_rate),
+            high_env: EnvelopeFollower::from_ms(1.0, 50.0, sample_rate),
 
-            low_dc: DcBlocker::new(sample_rate),
-            mid_dc: DcBlocker::new(sample_rate),
-            high_dc: DcBlocker::new(sample_rate),
+            low_dc: DcBlocker::new(15.0, sample_rate),
+            mid_dc: DcBlocker::new(15.0, sample_rate),
+            high_dc: DcBlocker::new(15.0, sample_rate),
 
             low_drive: low_drive.clamp(0.0, 1.0),
             mid_drive: mid_drive.clamp(0.0, 1.0),
