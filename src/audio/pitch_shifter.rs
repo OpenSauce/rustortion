@@ -23,7 +23,7 @@ const OUTPUT_SIZE: usize = FFT_SIZE * 2;
 /// within each spectral peak, eliminating the "phasiness" / doubled quality
 /// of basic phase vocoders.
 ///
-/// Adds ~`FFT_SIZE / sample_rate` latency (≈41 ms at 48 kHz).
+/// Adds ~`FFT_SIZE / sample_rate` latency (≈42 ms at 48 kHz).
 pub struct PitchShifter {
     ratio: f64,
 
