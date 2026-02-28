@@ -1,9 +1,9 @@
-use iced::widget::{column, container};
-use iced::{Element, Length};
+use iced::widget::column;
+use iced::Element;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::level::LevelStage;
-use crate::gui::components::widgets::common::{labeled_slider, stage_header};
+use crate::gui::components::widgets::common::{labeled_slider, stage_card};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -49,12 +49,8 @@ pub fn view(
     total_stages: usize,
     is_collapsed: bool,
 ) -> Element<'_, Message> {
-    let header = stage_header(tr!(stage_level), idx, total_stages, is_collapsed);
-
-    let mut content = column![header].spacing(5);
-
-    if !is_collapsed {
-        let body = column![labeled_slider(
+    stage_card(tr!(stage_level), idx, total_stages, is_collapsed, || {
+        column![labeled_slider(
             tr!(gain),
             0.0..=2.0,
             cfg.gain,
@@ -62,19 +58,7 @@ pub fn view(
             |v| format!("{v:.2}"),
             0.05
         ),]
-        .spacing(5);
-
-        content = content.push(body);
-    }
-
-    let padding = if is_collapsed { 5 } else { 10 };
-
-    container(content.padding(padding))
-        .width(Length::Fill)
-        .style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(5))
-        })
+        .spacing(5)
         .into()
+    })
 }

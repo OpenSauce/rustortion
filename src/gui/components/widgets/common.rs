@@ -1,5 +1,5 @@
 use crate::gui::messages::Message;
-use iced::widget::{button, row, slider, text};
+use iced::widget::{button, column, container, row, slider, text};
 use iced::{Alignment, Element, Length};
 
 pub fn labeled_slider<'a, F: 'a + Fn(f32) -> Message>(
@@ -87,4 +87,31 @@ pub fn stage_header(
     .spacing(5)
     .align_y(Alignment::Center)
     .into()
+}
+
+pub fn stage_card<'a>(
+    stage_name: &'a str,
+    idx: usize,
+    total_stages: usize,
+    is_collapsed: bool,
+    body: impl FnOnce() -> Element<'a, Message>,
+) -> Element<'a, Message> {
+    let header = stage_header(stage_name, idx, total_stages, is_collapsed);
+
+    let mut content = column![header].spacing(5);
+
+    if !is_collapsed {
+        content = content.push(body());
+    }
+
+    let padding = if is_collapsed { 5 } else { 10 };
+
+    container(content.padding(padding))
+        .width(Length::Fill)
+        .style(|theme: &iced::Theme| {
+            container::Style::default()
+                .background(theme.palette().background)
+                .border(iced::Border::default().rounded(5))
+        })
+        .into()
 }

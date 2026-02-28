@@ -1,9 +1,9 @@
-use iced::widget::{column, container};
-use iced::{Element, Length};
+use iced::widget::column;
+use iced::Element;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::noise_gate::NoiseGateStage;
-use crate::gui::components::widgets::common::{labeled_slider, stage_header};
+use crate::gui::components::widgets::common::{labeled_slider, stage_card};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -74,81 +74,71 @@ pub fn view(
     total_stages: usize,
     is_collapsed: bool,
 ) -> Element<'_, Message> {
-    let header = stage_header(tr!(stage_noise_gate), idx, total_stages, is_collapsed);
-
-    let mut content = column![header].spacing(5);
-
-    if !is_collapsed {
-        let body = column![
-            labeled_slider(
-                tr!(threshold),
-                -80.0..=0.0,
-                cfg.threshold_db,
-                move |v| Message::Stage(
-                    idx,
-                    StageMessage::NoiseGate(NoiseGateMessage::ThresholdChanged(v))
+    stage_card(
+        tr!(stage_noise_gate),
+        idx,
+        total_stages,
+        is_collapsed,
+        || {
+            column![
+                labeled_slider(
+                    tr!(threshold),
+                    -80.0..=0.0,
+                    cfg.threshold_db,
+                    move |v| Message::Stage(
+                        idx,
+                        StageMessage::NoiseGate(NoiseGateMessage::ThresholdChanged(v))
+                    ),
+                    |v| format!("{v:.1} {}", tr!(db)),
+                    1.0
                 ),
-                |v| format!("{v:.1} {}", tr!(db)),
-                1.0
-            ),
-            labeled_slider(
-                tr!(ratio),
-                1.0..=100.0,
-                cfg.ratio,
-                move |v| Message::Stage(
-                    idx,
-                    StageMessage::NoiseGate(NoiseGateMessage::RatioChanged(v))
+                labeled_slider(
+                    tr!(ratio),
+                    1.0..=100.0,
+                    cfg.ratio,
+                    move |v| Message::Stage(
+                        idx,
+                        StageMessage::NoiseGate(NoiseGateMessage::RatioChanged(v))
+                    ),
+                    |v| format!("{v:.0}:1"),
+                    1.0
                 ),
-                |v| format!("{v:.0}:1"),
-                1.0
-            ),
-            labeled_slider(
-                tr!(attack),
-                0.1..=100.0,
-                cfg.attack_ms,
-                move |v| Message::Stage(
-                    idx,
-                    StageMessage::NoiseGate(NoiseGateMessage::AttackChanged(v))
+                labeled_slider(
+                    tr!(attack),
+                    0.1..=100.0,
+                    cfg.attack_ms,
+                    move |v| Message::Stage(
+                        idx,
+                        StageMessage::NoiseGate(NoiseGateMessage::AttackChanged(v))
+                    ),
+                    |v| format!("{v:.1} {}", tr!(ms)),
+                    0.1
                 ),
-                |v| format!("{v:.1} {}", tr!(ms)),
-                0.1
-            ),
-            labeled_slider(
-                tr!(hold),
-                0.0..=500.0,
-                cfg.hold_ms,
-                move |v| Message::Stage(
-                    idx,
-                    StageMessage::NoiseGate(NoiseGateMessage::HoldChanged(v))
+                labeled_slider(
+                    tr!(hold),
+                    0.0..=500.0,
+                    cfg.hold_ms,
+                    move |v| Message::Stage(
+                        idx,
+                        StageMessage::NoiseGate(NoiseGateMessage::HoldChanged(v))
+                    ),
+                    |v| format!("{v:.0} {}", tr!(ms)),
+                    1.0
                 ),
-                |v| format!("{v:.0} {}", tr!(ms)),
-                1.0
-            ),
-            labeled_slider(
-                tr!(release),
-                1.0..=1000.0,
-                cfg.release_ms,
-                move |v| Message::Stage(
-                    idx,
-                    StageMessage::NoiseGate(NoiseGateMessage::ReleaseChanged(v))
+                labeled_slider(
+                    tr!(release),
+                    1.0..=1000.0,
+                    cfg.release_ms,
+                    move |v| Message::Stage(
+                        idx,
+                        StageMessage::NoiseGate(NoiseGateMessage::ReleaseChanged(v))
+                    ),
+                    |v| format!("{v:.0} {}", tr!(ms)),
+                    1.0
                 ),
-                |v| format!("{v:.0} {}", tr!(ms)),
-                1.0
-            ),
-        ]
-        .spacing(5);
-
-        content = content.push(body);
-    }
-
-    let padding = if is_collapsed { 5 } else { 10 };
-
-    container(content.padding(padding))
-        .width(Length::Fill)
-        .style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(5))
-        })
-        .into()
+            ]
+            .spacing(5)
+            .into()
+        },
+    )
 }

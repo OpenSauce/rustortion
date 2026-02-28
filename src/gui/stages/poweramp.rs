@@ -1,9 +1,9 @@
-use iced::widget::{column, container, pick_list, row, text};
+use iced::widget::{column, pick_list, row, text};
 use iced::{Element, Length};
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::poweramp::{PowerAmpStage, PowerAmpType};
-use crate::gui::components::widgets::common::{labeled_slider, stage_header};
+use crate::gui::components::widgets::common::{labeled_slider, stage_card};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -65,59 +65,49 @@ pub fn view(
     total_stages: usize,
     is_collapsed: bool,
 ) -> Element<'_, Message> {
-    let header = stage_header(tr!(stage_power_amp), idx, total_stages, is_collapsed);
+    stage_card(
+        tr!(stage_power_amp),
+        idx,
+        total_stages,
+        is_collapsed,
+        || {
+            let type_picker = row![
+                text(tr!(type_label)).width(Length::FillPortion(3)),
+                pick_list(POWER_AMP_TYPES, Some(cfg.amp_type), move |t| {
+                    Message::Stage(idx, StageMessage::PowerAmp(PowerAmpMessage::TypeChanged(t)))
+                })
+                .width(Length::FillPortion(7)),
+            ]
+            .spacing(10)
+            .align_y(iced::Alignment::Center);
 
-    let mut content = column![header].spacing(5);
-
-    if !is_collapsed {
-        let type_picker = row![
-            text(tr!(type_label)).width(Length::FillPortion(3)),
-            pick_list(POWER_AMP_TYPES, Some(cfg.amp_type), move |t| {
-                Message::Stage(idx, StageMessage::PowerAmp(PowerAmpMessage::TypeChanged(t)))
-            })
-            .width(Length::FillPortion(7)),
-        ]
-        .spacing(10)
-        .align_y(iced::Alignment::Center);
-
-        let body = column![
-            type_picker,
-            labeled_slider(
-                tr!(drive),
-                0.0..=1.0,
-                cfg.drive,
-                move |v| Message::Stage(
-                    idx,
-                    StageMessage::PowerAmp(PowerAmpMessage::DriveChanged(v))
+            column![
+                type_picker,
+                labeled_slider(
+                    tr!(drive),
+                    0.0..=1.0,
+                    cfg.drive,
+                    move |v| Message::Stage(
+                        idx,
+                        StageMessage::PowerAmp(PowerAmpMessage::DriveChanged(v))
+                    ),
+                    |v| format!("{v:.2}"),
+                    0.05
                 ),
-                |v| format!("{v:.2}"),
-                0.05
-            ),
-            labeled_slider(
-                tr!(sag),
-                0.0..=1.0,
-                cfg.sag,
-                move |v| Message::Stage(
-                    idx,
-                    StageMessage::PowerAmp(PowerAmpMessage::SagChanged(v))
+                labeled_slider(
+                    tr!(sag),
+                    0.0..=1.0,
+                    cfg.sag,
+                    move |v| Message::Stage(
+                        idx,
+                        StageMessage::PowerAmp(PowerAmpMessage::SagChanged(v))
+                    ),
+                    |v| format!("{v:.2}"),
+                    0.05
                 ),
-                |v| format!("{v:.2}"),
-                0.05
-            ),
-        ]
-        .spacing(5);
-
-        content = content.push(body);
-    }
-
-    let padding = if is_collapsed { 5 } else { 10 };
-
-    container(content.padding(padding))
-        .width(Length::Fill)
-        .style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(5))
-        })
-        .into()
+            ]
+            .spacing(5)
+            .into()
+        },
+    )
 }

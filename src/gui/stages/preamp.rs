@@ -1,10 +1,10 @@
-use iced::widget::{column, container, pick_list, row, text};
+use iced::widget::{column, pick_list, row, text};
 use iced::{Element, Length};
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::clipper::ClipperType;
 use crate::amp::stages::preamp::PreampStage;
-use crate::gui::components::widgets::common::{labeled_slider, stage_header};
+use crate::gui::components::widgets::common::{labeled_slider, stage_card};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -68,11 +68,7 @@ pub fn view(
     total_stages: usize,
     is_collapsed: bool,
 ) -> Element<'_, Message> {
-    let header = stage_header(tr!(stage_preamp), idx, total_stages, is_collapsed);
-
-    let mut content = column![header].spacing(5);
-
-    if !is_collapsed {
+    stage_card(tr!(stage_preamp), idx, total_stages, is_collapsed, || {
         let clipper_picker = row![
             text(tr!(clipper)).width(Length::FillPortion(3)),
             pick_list(CLIPPER_TYPES, Some(cfg.clipper_type), move |t| {
@@ -83,7 +79,7 @@ pub fn view(
         .spacing(10)
         .align_y(iced::Alignment::Center);
 
-        let body = column![
+        column![
             clipper_picker,
             labeled_slider(
                 tr!(gain),
@@ -102,19 +98,7 @@ pub fn view(
                 0.1
             ),
         ]
-        .spacing(5);
-
-        content = content.push(body);
-    }
-
-    let padding = if is_collapsed { 5 } else { 10 };
-
-    container(content.padding(padding))
-        .width(Length::Fill)
-        .style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(5))
-        })
+        .spacing(5)
         .into()
+    })
 }
