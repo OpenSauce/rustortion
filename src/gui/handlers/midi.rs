@@ -18,24 +18,19 @@ impl MidiHandler {
         }
     }
 
-    pub fn handle(
-        &mut self,
-        message: MidiMessage,
-        presets: Vec<String>,
-        mappings: &[MidiMapping],
-    ) -> Task<Message> {
+    pub fn open(&mut self, presets: Vec<String>, mappings: Vec<MidiMapping>) {
+        self.dialog.show(presets, mappings);
+    }
+
+    pub fn handle(&mut self, message: MidiMessage) -> Task<Message> {
         match message {
-            MidiMessage::Open => {
-                self.dialog.show(presets, mappings.to_vec());
-            }
+            MidiMessage::Open => {}
             MidiMessage::Close => {
                 self.dialog.hide();
             }
             MidiMessage::ControllerSelected(controller_name) => {
-                self.dialog
-                    .set_selected_controller(Some(controller_name.clone()));
                 self.handle.connect(&controller_name);
-                return Task::none();
+                self.dialog.set_selected_controller(Some(controller_name));
             }
             MidiMessage::Disconnect => {
                 self.handle.disconnect();

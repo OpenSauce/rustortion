@@ -20,11 +20,13 @@ impl HotkeyHandler {
         }
     }
 
-    pub fn handle(&mut self, message: HotkeyMessage, presets: Vec<String>) -> Task<Message> {
+    pub fn open(&mut self, presets: Vec<String>) {
+        self.dialog.show(presets, self.settings.mappings.clone());
+    }
+
+    pub fn handle(&mut self, message: HotkeyMessage) -> Task<Message> {
         match message {
-            HotkeyMessage::Open => {
-                self.dialog.show(presets, self.settings.mappings.clone());
-            }
+            HotkeyMessage::Open => {}
             HotkeyMessage::Close => {
                 self.dialog.hide();
             }

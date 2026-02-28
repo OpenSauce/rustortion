@@ -311,46 +311,51 @@ impl AmplifierApp {
             Message::Tuner(msg) => {
                 return self.tuner_handler.handle(msg, &self.audio_manager);
             }
-            Message::Midi(ref msg) => {
-                // Cross-cutting: persist settings changes for certain messages
-                let needs_save = matches!(
+            Message::Midi(msg) => {
+                // Open is the only variant needing presets/mappings
+                if matches!(msg, MidiMessage::Open) {
+                    let presets = self.preset_handler.get_available_presets();
+                    let mappings = self.settings.midi.mappings.clone();
+                    self.midi_handler.open(presets, mappings);
+                    return Task::none();
+                }
+
+                // Extract settings data before moving msg into handler
+                let controller_update = match &msg {
+                    MidiMessage::ControllerSelected(name) => Some(Some(name.clone())),
+                    MidiMessage::Disconnect => Some(None),
+                    _ => None,
+                };
+                let save_mappings = matches!(
                     msg,
-                    MidiMessage::ControllerSelected(_)
-                        | MidiMessage::Disconnect
-                        | MidiMessage::ConfirmMapping
-                        | MidiMessage::RemoveMapping(_)
+                    MidiMessage::ConfirmMapping | MidiMessage::RemoveMapping(_)
                 );
 
-                let presets = self.preset_handler.get_available_presets();
-                let mappings = self.settings.midi.mappings.clone();
-                let task = self.midi_handler.handle(msg.clone(), presets, &mappings);
+                let task = self.midi_handler.handle(msg);
 
-                if needs_save {
-                    match msg {
-                        MidiMessage::ControllerSelected(name) => {
-                            self.settings.midi.controller_name = Some(name.clone());
-                        }
-                        MidiMessage::Disconnect => {
-                            self.settings.midi.controller_name = None;
-                        }
-                        MidiMessage::ConfirmMapping | MidiMessage::RemoveMapping(_) => {
-                            self.settings.midi.mappings = self.midi_handler.get_mappings();
-                        }
-                        _ => {}
-                    }
+                if let Some(name) = controller_update {
+                    self.settings.midi.controller_name = name;
+                    self.save_settings();
+                } else if save_mappings {
+                    self.settings.midi.mappings = self.midi_handler.get_mappings();
                     self.save_settings();
                 }
 
                 return task;
             }
             Message::Hotkey(msg) => {
+                if matches!(msg, HotkeyMessage::Open) {
+                    let presets = self.preset_handler.get_available_presets();
+                    self.hotkey_handler.open(presets);
+                    return Task::none();
+                }
+
                 let needs_save = matches!(
                     msg,
                     HotkeyMessage::ConfirmMapping | HotkeyMessage::RemoveMapping(_)
                 );
 
-                let presets = self.preset_handler.get_available_presets();
-                let task = self.hotkey_handler.handle(msg, presets);
+                let task = self.hotkey_handler.handle(msg);
 
                 if needs_save {
                     self.settings.hotkeys = self.hotkey_handler.settings().clone();
