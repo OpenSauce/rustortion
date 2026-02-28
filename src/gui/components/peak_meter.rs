@@ -29,7 +29,7 @@ impl PeakMeterDisplay {
         }
     }
 
-    pub fn update(&mut self, info: PeakMeterInfo, xrun_count: u64, cpu_load: f32) {
+    pub const fn update(&mut self, info: PeakMeterInfo, xrun_count: u64, cpu_load: f32) {
         self.info = info;
         self.xrun_count = xrun_count;
         self.cpu_load = cpu_load;

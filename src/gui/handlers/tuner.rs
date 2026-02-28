@@ -50,11 +50,11 @@ impl TunerHandler {
         self.dialog.view().map(|e| e.map(Message::Tuner))
     }
 
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.dialog.is_visible()
     }
 
-    pub fn is_enabled(&self) -> bool {
+    pub const fn is_enabled(&self) -> bool {
         self.enabled
     }
 }

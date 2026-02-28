@@ -33,7 +33,7 @@ impl PowerAmpConfig {
         PowerAmpStage::new(self.drive, self.amp_type, self.sag, sample_rate)
     }
 
-    pub fn apply(&mut self, msg: PowerAmpMessage) {
+    pub const fn apply(&mut self, msg: PowerAmpMessage) {
         match msg {
             PowerAmpMessage::TypeChanged(t) => self.amp_type = t,
             PowerAmpMessage::DriveChanged(v) => self.drive = v,

@@ -7,7 +7,7 @@ use crate::hotkey::{HotkeyMapping, is_uncapturable_key, serialize_key, serialize
 use crate::tr;
 
 /// State for the "learning" mode where we wait for a key press
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LearningState {
     /// Not learning, normal operation
     Idle,
@@ -37,7 +37,7 @@ impl Default for HotkeyDialog {
 }
 
 impl HotkeyDialog {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             show_dialog: false,
             mappings: Vec::new(),
@@ -59,11 +59,11 @@ impl HotkeyDialog {
         self.learning_state = LearningState::Idle;
     }
 
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.show_dialog
     }
 
-    pub fn is_learning(&self) -> bool {
+    pub const fn is_learning(&self) -> bool {
         matches!(
             self.learning_state,
             LearningState::WaitingForInput | LearningState::InputCaptured { .. }

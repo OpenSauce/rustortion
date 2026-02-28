@@ -11,7 +11,7 @@ pub struct MidiHandler {
 }
 
 impl MidiHandler {
-    pub fn new(handle: MidiHandle) -> Self {
+    pub const fn new(handle: MidiHandle) -> Self {
         Self {
             dialog: MidiDialog::new(),
             handle,
@@ -84,7 +84,7 @@ impl MidiHandler {
                     }
 
                     if let Some(preset_name) = self.handle.check_mapping(&input) {
-                        debug!("MIDI triggered preset: {}", preset_name);
+                        debug!("MIDI triggered preset: {preset_name}");
                         return Task::done(Message::Preset(PresetMessage::Select(preset_name)));
                     }
                 }
@@ -93,7 +93,7 @@ impl MidiHandler {
                     debug!("MIDI device disconnected");
                 }
                 MidiEvent::Error(e) => {
-                    log::error!("MIDI error: {}", e);
+                    log::error!("MIDI error: {e}");
                 }
             }
         }
@@ -104,7 +104,7 @@ impl MidiHandler {
         self.dialog.view().map(|e| e.map(Message::Midi))
     }
 
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.dialog.is_visible()
     }
 

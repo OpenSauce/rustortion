@@ -3,7 +3,7 @@ use crate::amp::stages::common::calculate_coefficient;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 
-#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum PowerAmpType {
     ClassA,
     ClassAB,
@@ -13,9 +13,9 @@ pub enum PowerAmpType {
 impl std::fmt::Display for PowerAmpType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PowerAmpType::ClassA => write!(f, "{}", crate::tr!(poweramp_class_a)),
-            PowerAmpType::ClassAB => write!(f, "{}", crate::tr!(poweramp_class_ab)),
-            PowerAmpType::ClassB => write!(f, "{}", crate::tr!(poweramp_class_b)),
+            Self::ClassA => write!(f, "{}", crate::tr!(poweramp_class_a)),
+            Self::ClassAB => write!(f, "{}", crate::tr!(poweramp_class_ab)),
+            Self::ClassB => write!(f, "{}", crate::tr!(poweramp_class_b)),
         }
     }
 }
@@ -54,11 +54,13 @@ impl Stage for PowerAmpStage {
         // Update sag envelope from post-drive signal for consistent behavior
         let driven_abs = driven.abs();
         if driven_abs > self.sag_envelope {
-            self.sag_envelope =
-                self.sag_attack_coeff * (self.sag_envelope - driven_abs) + driven_abs;
+            self.sag_envelope = self
+                .sag_attack_coeff
+                .mul_add(self.sag_envelope - driven_abs, driven_abs);
         } else {
-            self.sag_envelope =
-                self.sag_release_coeff * (self.sag_envelope - driven_abs) + driven_abs;
+            self.sag_envelope = self
+                .sag_release_coeff
+                .mul_add(self.sag_envelope - driven_abs, driven_abs);
         }
         // Denormal protection
         if self.sag_envelope.abs() < 1e-20 {
@@ -83,7 +85,7 @@ impl Stage for PowerAmpStage {
                 // gain→1 for |x|>>dz — models reduced transconductance near zero.
                 let dz: f32 = 0.1;
                 let x2 = driven * driven;
-                let crossover = driven * x2 / (x2 + dz * dz);
+                let crossover = driven * x2 / (dz.mul_add(dz, x2));
                 if crossover >= 0.0 {
                     crossover.tanh()
                 } else {

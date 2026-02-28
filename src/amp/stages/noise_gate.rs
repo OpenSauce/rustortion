@@ -93,18 +93,20 @@ impl Stage for NoiseGateStage {
         // Step 4: Smooth gate state transitions
         if target_state > self.gate_state {
             // Opening (attack)
-            self.gate_state =
-                self.attack_coeff * self.gate_state + (1.0 - self.attack_coeff) * target_state;
+            self.gate_state = self
+                .attack_coeff
+                .mul_add(self.gate_state, (1.0 - self.attack_coeff) * target_state);
         } else {
             // Closing (release)
-            self.gate_state =
-                self.release_coeff * self.gate_state + (1.0 - self.release_coeff) * target_state;
+            self.gate_state = self
+                .release_coeff
+                .mul_add(self.gate_state, (1.0 - self.release_coeff) * target_state);
         }
 
         // Step 5: Apply gating with ratio
         let reduction = if self.gate_state < 0.999 {
             let closed_gain = 1.0 / self.ratio;
-            closed_gain + (1.0 - closed_gain) * self.gate_state
+            (1.0 - closed_gain).mul_add(self.gate_state, closed_gain)
         } else {
             1.0
         };

@@ -26,16 +26,16 @@ impl Stage for PreampStage {
         const DRIVE_SCALE: f32 = 1.8;
         const CLIPPER_SCALE: f32 = 0.3;
 
-        let drive = DRIVE_MIN + self.gain * DRIVE_SCALE;
+        let drive = self.gain.mul_add(DRIVE_SCALE, DRIVE_MIN);
 
         // --- Initial asymmetric soft clip with DC compensation ---
         // Instead of adding DC to the input, shift the tanh curve and recenter:
-        let pre = (drive * input + self.bias).tanh() - self.bias.tanh();
+        let pre = drive.mul_add(input, self.bias).tanh() - self.bias.tanh();
 
         // Main clipper expects roughly zero-centered signal; keep threshold tied to gain
         let clipped = self
             .clipper_type
-            .process(pre, 1.0 + self.gain * CLIPPER_SCALE);
+            .process(pre, self.gain.mul_add(CLIPPER_SCALE, 1.0));
 
         // Remove any residual DC so next stage gets a clean, centered signal
         self.dc_blocker.process(clipped)

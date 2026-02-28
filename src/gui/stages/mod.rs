@@ -62,7 +62,7 @@ macro_rules! stage_registry {
                 }
             }
 
-            pub fn apply(&mut self, msg: StageMessage) -> bool {
+            pub const fn apply(&mut self, msg: StageMessage) -> bool {
                 match (self, msg) {
                     $(
                         (StageConfig::$Variant(cfg), StageMessage::$Variant(m)) => {

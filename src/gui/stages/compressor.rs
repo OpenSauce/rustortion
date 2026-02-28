@@ -44,7 +44,7 @@ impl CompressorConfig {
         )
     }
 
-    pub fn apply(&mut self, msg: CompressorMessage) {
+    pub const fn apply(&mut self, msg: CompressorMessage) {
         match msg {
             CompressorMessage::ThresholdChanged(v) => self.threshold_db = v,
             CompressorMessage::RatioChanged(v) => self.ratio = v,

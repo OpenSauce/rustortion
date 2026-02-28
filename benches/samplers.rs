@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic, clippy::nursery)]
+
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use std::hint::black_box;
 
@@ -173,7 +175,7 @@ fn bench_resampler_roundtrip(c: &mut Criterion) {
         let input = generate_test_signal(BUFFER_SIZE);
 
         group.bench_with_input(
-            BenchmarkId::new("SincFixedIn-Current", format!("{}x", factor)),
+            BenchmarkId::new("SincFixedIn-Current", format!("{factor}x")),
             &factor,
             |b, &factor| {
                 let mut pair = create_sinc_current(factor);
@@ -193,7 +195,7 @@ fn bench_resampler_roundtrip(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("SincFixedIn-VeryFast", format!("{}x", factor)),
+            BenchmarkId::new("SincFixedIn-VeryFast", format!("{factor}x")),
             &factor,
             |b, &factor| {
                 let mut pair = create_sinc_veryfast(factor);
@@ -213,7 +215,7 @@ fn bench_resampler_roundtrip(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("FastFixedIn-Cubic", format!("{}x", factor)),
+            BenchmarkId::new("FastFixedIn-Cubic", format!("{factor}x")),
             &factor,
             |b, &factor| {
                 let mut pair = create_fast_cubic(factor);
@@ -233,7 +235,7 @@ fn bench_resampler_roundtrip(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("FastFixedIn-Linear", format!("{}x", factor)),
+            BenchmarkId::new("FastFixedIn-Linear", format!("{factor}x")),
             &factor,
             |b, &factor| {
                 let mut pair = create_fast_linear(factor);
@@ -253,7 +255,7 @@ fn bench_resampler_roundtrip(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("FftFixed", format!("{}x", factor)),
+            BenchmarkId::new("FftFixed", format!("{factor}x")),
             &factor,
             |b, &factor| {
                 let mut pair = create_fft(factor);

@@ -5,7 +5,7 @@ pub struct LevelStage {
 }
 
 impl LevelStage {
-    pub fn new(gain: f32) -> Self {
+    pub const fn new(gain: f32) -> Self {
         Self { gain }
     }
 }

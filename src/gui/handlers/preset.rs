@@ -128,7 +128,7 @@ impl PresetHandler {
     ) {
         let preset = Preset::new(
             name.to_owned(),
-            stages.clone(),
+            stages,
             ir_name,
             ir_gain,
             pitch_shift_semitones,

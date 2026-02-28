@@ -18,7 +18,7 @@ impl Default for IrCabinetControl {
 }
 
 impl IrCabinetControl {
-    pub fn new(bypassed: bool, gain: f32) -> Self {
+    pub const fn new(bypassed: bool, gain: f32) -> Self {
         Self {
             available_irs: Vec::new(),
             selected_ir: None,
@@ -39,11 +39,11 @@ impl IrCabinetControl {
         self.selected_ir = ir;
     }
 
-    pub fn set_bypassed(&mut self, bypassed: bool) {
+    pub const fn set_bypassed(&mut self, bypassed: bool) {
         self.bypassed = bypassed;
     }
 
-    pub fn set_gain(&mut self, gain: f32) {
+    pub const fn set_gain(&mut self, gain: f32) {
         self.gain = gain;
     }
 
@@ -51,11 +51,11 @@ impl IrCabinetControl {
         self.selected_ir.clone()
     }
 
-    pub fn is_bypassed(&self) -> bool {
+    pub const fn is_bypassed(&self) -> bool {
         self.bypassed
     }
 
-    pub fn get_gain(&self) -> f32 {
+    pub const fn get_gain(&self) -> f32 {
         self.gain
     }
 

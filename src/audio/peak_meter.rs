@@ -37,10 +37,7 @@ impl PeakMeter {
     }
 
     pub fn process(&mut self, samples: &[f32]) {
-        let block_peak = samples
-            .iter()
-            .map(|s| s.abs())
-            .fold(0.0f32, |a, b| a.max(b));
+        let block_peak = samples.iter().map(|s| s.abs()).fold(0.0f32, f32::max);
 
         if block_peak > self.current_peak {
             self.current_peak = block_peak;

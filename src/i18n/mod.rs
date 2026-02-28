@@ -14,17 +14,17 @@ pub enum Language {
 }
 
 impl Language {
-    fn to_u8(self) -> u8 {
+    const fn to_u8(self) -> u8 {
         match self {
-            Language::English => 0,
-            Language::ZhCn => 1,
+            Self::English => 0,
+            Self::ZhCn => 1,
         }
     }
 
-    fn from_u8(val: u8) -> Self {
+    const fn from_u8(val: u8) -> Self {
         match val {
-            1 => Language::ZhCn,
-            _ => Language::English,
+            1 => Self::ZhCn,
+            _ => Self::English,
         }
     }
 }
@@ -32,8 +32,8 @@ impl Language {
 impl Display for Language {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Language::English => write!(f, "English"),
-            Language::ZhCn => write!(f, "中文（简体）"),
+            Self::English => write!(f, "English"),
+            Self::ZhCn => write!(f, "中文（简体）"),
         }
     }
 }

@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic, clippy::nursery)]
+
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
@@ -40,7 +42,7 @@ pub fn fir_vs_two_stage_benchmark(c: &mut Criterion) {
 
         // FIR Convolver
         group.bench_with_input(
-            BenchmarkId::new("FIR", format!("{:.0}ms", ir_ms)),
+            BenchmarkId::new("FIR", format!("{ir_ms:.0}ms")),
             &ir_len,
             |b, _| {
                 let mut conv = FirConvolver::new(ir_len);
@@ -62,7 +64,7 @@ pub fn fir_vs_two_stage_benchmark(c: &mut Criterion) {
 
         // TwoStage Convolver
         group.bench_with_input(
-            BenchmarkId::new("TwoStage", format!("{:.0}ms", ir_ms)),
+            BenchmarkId::new("TwoStage", format!("{ir_ms:.0}ms")),
             &ir_len,
             |b, _| {
                 let mut conv = TwoStageConvolver::new();

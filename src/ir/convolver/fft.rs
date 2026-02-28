@@ -319,7 +319,7 @@ impl TwoStageConvolver {
         self.freq_accumulator.fill(Complex::new(0.0, 0.0));
     }
 
-    pub fn num_tail_partitions(&self) -> usize {
+    pub const fn num_tail_partitions(&self) -> usize {
         self.num_tail_partitions
     }
 }

@@ -9,7 +9,7 @@ pub struct StageList {
 }
 
 impl StageList {
-    pub fn new(stages: Vec<StageConfig>) -> Self {
+    pub const fn new(stages: Vec<StageConfig>) -> Self {
         Self { stages }
     }
 

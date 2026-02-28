@@ -7,14 +7,14 @@ pub fn create_test_cabinet(ir_length: usize, sample_rate: usize) -> IrCabinet {
     let ir_dir = std::env::temp_dir().join("rustortion_bench_ir");
     fs::create_dir_all(&ir_dir).unwrap();
 
-    let ir_path = ir_dir.join(format!("test_ir_{}.wav", ir_length));
+    let ir_path = ir_dir.join(format!("test_ir_{ir_length}.wav"));
     if !ir_path.exists() {
         create_synthetic_ir(&ir_path, ir_length, sample_rate as u32);
     }
 
     let mut cabinet = IrCabinet::new(&ir_dir, sample_rate).unwrap();
     cabinet
-        .select_ir(&format!("test_ir_{}.wav", ir_length))
+        .select_ir(&format!("test_ir_{ir_length}.wav"))
         .unwrap();
 
     cabinet

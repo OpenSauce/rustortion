@@ -74,11 +74,11 @@ impl SettingsDialog {
         self.show_dialog = true;
     }
 
-    pub fn hide(&mut self) {
+    pub const fn hide(&mut self) {
         self.show_dialog = false;
     }
 
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.show_dialog
     }
 
@@ -163,7 +163,7 @@ impl SettingsDialog {
         .spacing(5);
 
         // Sample rate selection
-        let sample_rates = vec![44100u32, 48000, 88200, 96000, 176400, 192000];
+        let sample_rates = vec![44100u32, 48000, 88200, 96000, 176_400, 192_000];
         let sample_rate_section = column![
             text(tr!(sample_rate_requested)).size(16),
             pick_list(sample_rates, Some(self.temp_settings.sample_rate), |x| {

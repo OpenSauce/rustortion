@@ -1,11 +1,11 @@
 use iced::keyboard::{Key, Modifiers};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HotkeyMapping {
     /// Serialized key name (e.g. "F1", "1", "a")
     pub key: String,
-    /// Modifier keys (e.g. ["Ctrl"], ["Shift", "Alt"], or [])
+    /// Modifier keys (e.g. `["Ctrl"]`, `["Shift", "Alt"]`, or `[]`)
     pub modifiers: Vec<String>,
     /// The preset name to load when this hotkey is triggered
     pub preset_name: String,
@@ -98,7 +98,7 @@ fn format_description(modifiers: &[String], key: &str) -> String {
 
 /// Check if a key should be ignored during hotkey capture.
 /// This includes modifier-only keys and keys reserved for dialog interaction.
-pub fn is_uncapturable_key(key: &Key) -> bool {
+pub const fn is_uncapturable_key(key: &Key) -> bool {
     matches!(
         key,
         Key::Named(

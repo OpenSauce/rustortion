@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic, clippy::nursery)]
+
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use rustortion::amp::chain::AmplifierChain;
 use rustortion::amp::stages::{
@@ -75,7 +77,7 @@ fn bench_sample_vs_block(c: &mut Criterion) {
         let buffer_size = (BUFFER_SIZE as f64 * oversample) as usize;
 
         group.bench_with_input(
-            BenchmarkId::new("sample-by-sample", format!("{}x", oversample)),
+            BenchmarkId::new("sample-by-sample", format!("{oversample}x")),
             &oversample,
             |b, _| {
                 let mut chain = build_chain(effective_sample_rate);
@@ -90,7 +92,7 @@ fn bench_sample_vs_block(c: &mut Criterion) {
         );
 
         group.bench_with_input(
-            BenchmarkId::new("block", format!("{}x", oversample)),
+            BenchmarkId::new("block", format!("{oversample}x")),
             &oversample,
             |b, _| {
                 let mut chain = build_chain(effective_sample_rate);

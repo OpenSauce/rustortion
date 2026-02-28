@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
 /// Available EQ curves that loosely match well‑known amp families.
-#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ToneStackModel {
     /// Mesa Rectifier / Mark‑series – tight lows, scooped low‑mids.
     Modern,
@@ -19,10 +19,10 @@ pub enum ToneStackModel {
 impl std::fmt::Display for ToneStackModel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ToneStackModel::Modern => write!(f, "{}", crate::tr!(tonestack_modern)),
-            ToneStackModel::British => write!(f, "{}", crate::tr!(tonestack_british)),
-            ToneStackModel::American => write!(f, "{}", crate::tr!(tonestack_american)),
-            ToneStackModel::Flat => write!(f, "{}", crate::tr!(tonestack_flat)),
+            Self::Modern => write!(f, "{}", crate::tr!(tonestack_modern)),
+            Self::British => write!(f, "{}", crate::tr!(tonestack_british)),
+            Self::American => write!(f, "{}", crate::tr!(tonestack_american)),
+            Self::Flat => write!(f, "{}", crate::tr!(tonestack_flat)),
         }
     }
 }
@@ -48,7 +48,7 @@ pub struct ToneStackStage {
 }
 
 impl ToneStackStage {
-    pub fn new(
+    pub const fn new(
         model: ToneStackModel,
         bass: f32,
         mid: f32,
@@ -128,7 +128,7 @@ impl Stage for ToneStackStage {
         let mid_gain = self.mid.max(0.001);
         let treble_gain = self.treble.max(0.001);
 
-        let mut y = bass_lp * bass_gain + mid * mid_gain + treble_hp * treble_gain;
+        let mut y = treble_hp.mul_add(treble_gain, bass_lp.mul_add(bass_gain, mid * mid_gain));
 
         // ---------------------------------------------------------
         // 5. Presence -- high-shelf (+-6 dB, dB-mapped)
@@ -137,7 +137,7 @@ impl Stage for ToneStackStage {
         self.presence_lp += pres_alpha * (y - self.presence_lp);
         let pres_db = (self.presence - 1.0) * 6.0;
         let pres_lin = 10.0_f32.powf(pres_db / 20.0);
-        let shelf = self.presence_lp + (y - self.presence_lp) * pres_lin;
+        let shelf = (y - self.presence_lp).mul_add(pres_lin, self.presence_lp);
 
         // ---------------------------------------------------------
         // 6. Model flavour adjustments

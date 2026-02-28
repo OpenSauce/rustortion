@@ -33,7 +33,7 @@ impl Default for ToneStackConfig {
 }
 
 impl ToneStackConfig {
-    pub fn to_stage(&self, sample_rate: f32) -> ToneStackStage {
+    pub const fn to_stage(&self, sample_rate: f32) -> ToneStackStage {
         ToneStackStage::new(
             self.model,
             self.bass,
@@ -44,7 +44,7 @@ impl ToneStackConfig {
         )
     }
 
-    pub fn apply(&mut self, msg: ToneStackMessage) {
+    pub const fn apply(&mut self, msg: ToneStackMessage) {
         match msg {
             ToneStackMessage::ModelChanged(mo) => self.model = mo,
             ToneStackMessage::BassChanged(v) => self.bass = v,

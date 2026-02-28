@@ -17,8 +17,8 @@ pub struct IrLoader {
 }
 
 impl IrLoader {
-    pub fn new(directory: &Path, target_sample_rate: usize) -> Result<IrLoader> {
-        let mut loader = IrLoader {
+    pub fn new(directory: &Path, target_sample_rate: usize) -> Result<Self> {
+        let mut loader = Self {
             available_ir_paths: Vec::new(),
             ir_directory: directory.to_path_buf(),
             target_sample_rate,
@@ -44,7 +44,7 @@ impl IrLoader {
             }
         }
 
-        Err(anyhow!("ir name '{}' not found", name))
+        Err(anyhow!("ir name '{name}' not found"))
     }
 
     // available ir names returns a string list of impulse response names
@@ -101,7 +101,7 @@ impl IrLoader {
         };
 
         if let Some(max) = resampled.iter().fold(None::<f32>, |m, &x| {
-            Some(m.map_or(x.abs(), |mm| mm.max(x.abs())))
+            Some(m.map_or_else(|| x.abs(), |mm| mm.max(x.abs())))
         }) && max > 0.0
         {
             let g = 0.9 / max;
@@ -116,7 +116,7 @@ impl IrLoader {
     pub fn scan_ir_directory(&mut self) -> Result<()> {
         if !self.ir_directory.exists() {
             fs::create_dir_all(&self.ir_directory).context("Failed to create IR directory")?;
-            warn!("IR directory created at {:?}", self.ir_directory);
+            warn!("IR directory created at {}", self.ir_directory.display());
             return Ok(());
         }
 

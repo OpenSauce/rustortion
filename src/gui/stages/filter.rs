@@ -31,7 +31,7 @@ impl FilterConfig {
         FilterStage::new(self.filter_type, self.cutoff_hz, sample_rate)
     }
 
-    pub fn apply(&mut self, msg: FilterMessage) {
+    pub const fn apply(&mut self, msg: FilterMessage) {
         match msg {
             FilterMessage::TypeChanged(t) => self.filter_type = t,
             FilterMessage::CutoffChanged(v) => self.cutoff_hz = v,
