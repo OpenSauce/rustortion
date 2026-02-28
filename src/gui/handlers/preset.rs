@@ -19,11 +19,7 @@ impl PresetHandler {
     pub fn new(preset_dir: &str) -> Result<Self> {
         let preset_manager = Manager::new(preset_dir)?;
 
-        let presets: Vec<String> = preset_manager
-            .get_presets()
-            .iter()
-            .map(|p| p.name.clone())
-            .collect();
+        let presets = preset_names(&preset_manager);
         let selected_preset = presets.first().cloned();
         let preset_bar = PresetBar::new();
 
@@ -52,24 +48,7 @@ impl PresetHandler {
                     self.load_preset_by_name(&preset_name);
 
                     if let Some(preset) = self.get_selected_preset() {
-                        let set_stage_task = Task::done(Message::SetStages(preset.stages.clone()));
-
-                        let set_ir_task = match preset.ir_name {
-                            Some(ir_name) => Task::done(Message::IrSelected(ir_name)),
-                            None => Task::none(),
-                        };
-
-                        let set_ir_gain_task = Task::done(Message::IrGainChanged(preset.ir_gain));
-
-                        let set_pitch_shift_task =
-                            Task::done(Message::PitchShiftChanged(preset.pitch_shift_semitones));
-
-                        return Task::batch(vec![
-                            set_stage_task,
-                            set_ir_task,
-                            set_ir_gain_task,
-                            set_pitch_shift_task,
-                        ]);
+                        return build_preset_load_tasks(preset);
                     }
                 }
             }
@@ -87,24 +66,7 @@ impl PresetHandler {
             PresetMessage::Delete(preset_name) => {
                 self.delete_preset(&preset_name);
                 if let Some(preset) = self.get_selected_preset() {
-                    let set_stage_task = Task::done(Message::SetStages(preset.stages.clone()));
-
-                    let set_ir_task = match preset.ir_name {
-                        Some(ir_name) => Task::done(Message::IrSelected(ir_name)),
-                        None => Task::none(),
-                    };
-
-                    let set_ir_gain_task = Task::done(Message::IrGainChanged(preset.ir_gain));
-
-                    let set_pitch_shift_task =
-                        Task::done(Message::PitchShiftChanged(preset.pitch_shift_semitones));
-
-                    return Task::batch(vec![
-                        set_stage_task,
-                        set_ir_task,
-                        set_ir_gain_task,
-                        set_pitch_shift_task,
-                    ]);
+                    return build_preset_load_tasks(preset);
                 }
 
                 return Task::done(Message::SetStages(Vec::new()));
@@ -145,12 +107,7 @@ impl PresetHandler {
 
         debug!("Deleted preset: {preset_name}");
 
-        self.available_presets = self
-            .preset_manager
-            .get_presets()
-            .iter()
-            .map(|p| p.name.clone())
-            .collect();
+        self.available_presets = preset_names(&self.preset_manager);
 
         if self.selected_preset.as_deref() == Some(preset_name) {
             if let Some(first) = self.available_presets.first() {
@@ -182,14 +139,34 @@ impl PresetHandler {
                 self.selected_preset = Some(name.to_owned());
                 self.preset_bar.show_save_input(false);
 
-                self.available_presets = self
-                    .preset_manager
-                    .get_presets()
-                    .iter()
-                    .map(|p| p.name.clone())
-                    .collect();
+                self.available_presets = preset_names(&self.preset_manager);
             }
             Err(e) => error!("Failed to save preset: {e}"),
         }
     }
+}
+
+fn preset_names(manager: &Manager) -> Vec<String> {
+    manager
+        .get_presets()
+        .iter()
+        .map(|p| p.name.clone())
+        .collect()
+}
+
+fn build_preset_load_tasks(preset: Preset) -> Task<Message> {
+    let set_stage_task = Task::done(Message::SetStages(preset.stages));
+    let set_ir_task = match preset.ir_name {
+        Some(ir_name) => Task::done(Message::IrSelected(ir_name)),
+        None => Task::none(),
+    };
+    let set_ir_gain_task = Task::done(Message::IrGainChanged(preset.ir_gain));
+    let set_pitch_shift_task = Task::done(Message::PitchShiftChanged(preset.pitch_shift_semitones));
+
+    Task::batch(vec![
+        set_stage_task,
+        set_ir_task,
+        set_ir_gain_task,
+        set_pitch_shift_task,
+    ])
 }
