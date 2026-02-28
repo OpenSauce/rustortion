@@ -1,11 +1,53 @@
 use iced::widget::{column, container, pick_list, row, text};
 use iced::{Element, Length};
+use serde::{Deserialize, Serialize};
 
-use crate::amp::stages::filter::FilterType;
+use crate::amp::stages::filter::{FilterStage, FilterType};
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
-use crate::gui::config::FilterConfig;
-use crate::gui::messages::{FilterMessage, Message, StageMessage};
+use crate::gui::messages::Message;
 use crate::tr;
+
+use super::StageMessage;
+
+// --- Config ---
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct FilterConfig {
+    pub filter_type: FilterType,
+    pub cutoff_hz: f32,
+}
+
+impl Default for FilterConfig {
+    fn default() -> Self {
+        Self {
+            filter_type: FilterType::Highpass,
+            cutoff_hz: 100.0,
+        }
+    }
+}
+
+impl FilterConfig {
+    pub fn to_stage(&self, sample_rate: f32) -> FilterStage {
+        FilterStage::new(self.filter_type, self.cutoff_hz, sample_rate)
+    }
+
+    pub fn apply(&mut self, msg: FilterMessage) {
+        match msg {
+            FilterMessage::TypeChanged(t) => self.filter_type = t,
+            FilterMessage::CutoffChanged(v) => self.cutoff_hz = v,
+        }
+    }
+}
+
+// --- Message ---
+
+#[derive(Debug, Clone)]
+pub enum FilterMessage {
+    TypeChanged(FilterType),
+    CutoffChanged(f32),
+}
+
+// --- View ---
 
 const FILTER_TYPES: [FilterType; 2] = [FilterType::Highpass, FilterType::Lowpass];
 

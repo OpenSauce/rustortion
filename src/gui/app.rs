@@ -7,7 +7,6 @@ use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::peak_meter::PeakMeterDisplay;
 use crate::gui::components::pitch_shift_control::PitchShiftControl;
 use crate::gui::components::{control::Control, stage_list::StageList};
-use crate::gui::config::{StageConfig, StageType};
 use crate::gui::handlers::hotkey::HotkeyHandler;
 use crate::gui::handlers::midi::MidiHandler;
 use crate::gui::handlers::preset::PresetHandler;
@@ -16,6 +15,7 @@ use crate::gui::handlers::tuner::TunerHandler;
 use crate::gui::messages::{
     HotkeyMessage, Message, MidiMessage, PresetMessage, SettingsMessage, TunerMessage,
 };
+use crate::gui::stages::{StageConfig, StageType};
 use crate::i18n;
 use crate::midi::start_midi_manager;
 use crate::settings::Settings;

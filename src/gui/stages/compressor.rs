@@ -1,10 +1,72 @@
 use iced::widget::{column, container};
 use iced::{Element, Length};
+use serde::{Deserialize, Serialize};
 
+use crate::amp::stages::compressor::CompressorStage;
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
-use crate::gui::config::CompressorConfig;
-use crate::gui::messages::{CompressorMessage, Message, StageMessage};
+use crate::gui::messages::Message;
 use crate::tr;
+
+use super::StageMessage;
+
+// --- Config ---
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct CompressorConfig {
+    pub attack_ms: f32,
+    pub release_ms: f32,
+    pub threshold_db: f32,
+    pub ratio: f32,
+    pub makeup_db: f32,
+}
+
+impl Default for CompressorConfig {
+    fn default() -> Self {
+        Self {
+            attack_ms: 1.0,
+            release_ms: 100.0,
+            threshold_db: -20.0,
+            ratio: 4.0,
+            makeup_db: 0.0,
+        }
+    }
+}
+
+impl CompressorConfig {
+    pub fn to_stage(&self, sample_rate: f32) -> CompressorStage {
+        CompressorStage::new(
+            self.attack_ms,
+            self.release_ms,
+            self.threshold_db,
+            self.ratio,
+            self.makeup_db,
+            sample_rate,
+        )
+    }
+
+    pub fn apply(&mut self, msg: CompressorMessage) {
+        match msg {
+            CompressorMessage::ThresholdChanged(v) => self.threshold_db = v,
+            CompressorMessage::RatioChanged(v) => self.ratio = v,
+            CompressorMessage::AttackChanged(v) => self.attack_ms = v,
+            CompressorMessage::ReleaseChanged(v) => self.release_ms = v,
+            CompressorMessage::MakeupChanged(v) => self.makeup_db = v,
+        }
+    }
+}
+
+// --- Message ---
+
+#[derive(Debug, Clone)]
+pub enum CompressorMessage {
+    ThresholdChanged(f32),
+    RatioChanged(f32),
+    AttackChanged(f32),
+    ReleaseChanged(f32),
+    MakeupChanged(f32),
+}
+
+// --- View ---
 
 pub fn view(idx: usize, cfg: &CompressorConfig, total_stages: usize) -> Element<'_, Message> {
     let header = stage_header(tr!(stage_compressor), idx, total_stages);

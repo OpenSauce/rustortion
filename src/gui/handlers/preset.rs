@@ -5,7 +5,7 @@ use log::{debug, error};
 
 use crate::gui::Message;
 use crate::gui::components::preset_bar::PresetBar;
-use crate::gui::config::StageConfig;
+use crate::gui::stages::StageConfig;
 use crate::preset::{Manager, Preset};
 
 pub struct PresetHandler {
