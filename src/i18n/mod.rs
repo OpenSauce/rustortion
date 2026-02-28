@@ -126,6 +126,8 @@ pub struct Translations {
 
     // Control bar
     pub add_stage: &'static str,
+    pub collapse_all: &'static str,
+    pub expand_all: &'static str,
     pub stop_recording: &'static str,
     pub start_recording: &'static str,
     pub recording: &'static str,
@@ -295,6 +297,8 @@ pub static EN: Translations = Translations {
 
     // Control bar
     add_stage: "Add Stage",
+    collapse_all: "Collapse All",
+    expand_all: "Expand All",
     stop_recording: "Stop Recording",
     start_recording: "Start Recording",
     recording: "Recording...",
@@ -455,6 +459,8 @@ pub static ZH_CN: Translations = Translations {
 
     // Control bar
     add_stage: "添加级",
+    collapse_all: "全部折叠",
+    expand_all: "全部展开",
     stop_recording: "停止录音",
     start_recording: "开始录音",
     recording: "录音中...",
