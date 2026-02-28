@@ -84,10 +84,6 @@ impl Samplers {
         Ok(&mut self.downsampled_buffer[0][..downsampled_frames])
     }
 
-    pub fn downsampled_buffer(&self) -> &[f32] {
-        &self.downsampled_buffer[0]
-    }
-
     pub fn resize_buffers(&mut self, new_size: usize) -> Result<()> {
         if self.input_buffer[0].len() == new_size {
             return Ok(());

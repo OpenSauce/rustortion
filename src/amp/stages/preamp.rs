@@ -1,39 +1,22 @@
 use crate::amp::stages::Stage;
 use crate::amp::stages::clipper::ClipperType;
+use crate::amp::stages::common::DcBlocker;
 
 pub struct PreampStage {
     gain: f32, // 0..10
     bias: f32, // −1..+1
     clipper_type: ClipperType,
-
-    dc_prev_input: f32,
-    dc_prev_output: f32,
-    dc_coeff: f32,
+    dc_blocker: DcBlocker,
 }
 
 impl PreampStage {
     pub fn new(gain: f32, bias: f32, clipper: ClipperType, sample_rate: f32) -> Self {
-        const DC_CUTOFF_HZ: f32 = 15.0;
-        let dc_coeff = (-2.0 * std::f32::consts::PI * DC_CUTOFF_HZ / sample_rate).exp();
-
         Self {
             gain,
             bias: bias.clamp(-1.0, 1.0),
             clipper_type: clipper,
-            dc_prev_input: 0.0,
-            dc_prev_output: 0.0,
-            dc_coeff,
+            dc_blocker: DcBlocker::new(15.0, sample_rate),
         }
-    }
-
-    #[inline]
-    /// DC blocker: y[n] = x[n] - x[n-1] + R*y[n-1]
-    /// https://ccrma.stanford.edu/~jos/fp/DC_Blocker.html
-    fn dc_block(&mut self, input: f32) -> f32 {
-        let output = input - self.dc_prev_input + self.dc_coeff * self.dc_prev_output;
-        self.dc_prev_input = input;
-        self.dc_prev_output = output;
-        output
     }
 }
 
@@ -55,7 +38,7 @@ impl Stage for PreampStage {
             .process(pre, 1.0 + self.gain * CLIPPER_SCALE);
 
         // Remove any residual DC so next stage gets a clean, centered signal
-        self.dc_block(clipped)
+        self.dc_blocker.process(clipped)
     }
 
     fn set_parameter(&mut self, p: &str, v: f32) -> Result<(), &'static str> {

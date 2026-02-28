@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use anyhow::{Context, Result};
 use jack::{AsyncClient, Client, ClientOptions};
 use log::{error, info, warn};
+
 use std::path::Path;
 
 use crate::audio::engine::Engine;
@@ -86,65 +87,24 @@ impl Manager {
 
     /// Connect audio ports based on settings
     fn connect_ports(&mut self, settings: &AudioSettings) {
-        let client = &self.active_client.as_client();
+        let client = self.active_client.as_client();
 
-        // Connect input
-        if let Err(e) = client.connect_ports_by_name(&settings.input_port, "rustortion:in_port") {
-            warn!(
-                "Failed to connect input port '{}': {}",
-                settings.input_port, e
-            );
-        } else {
-            info!(
-                "Connected input: {} -> rustortion:in_port",
-                settings.input_port
-            );
-        }
-
-        // Connect left output
-        if let Err(e) =
-            client.connect_ports_by_name("rustortion:out_port_left", &settings.output_left_port)
-        {
-            warn!(
-                "Failed to connect left output port '{}': {}",
-                settings.output_left_port, e
-            );
-        } else {
-            info!(
-                "Connected left output: rustortion:out_port_left -> {}",
-                settings.output_left_port
-            );
-        }
-
-        // Connect right output
-        if let Err(e) =
-            client.connect_ports_by_name("rustortion:out_port_right", &settings.output_right_port)
-        {
-            warn!(
-                "Failed to connect right output port '{}': {}",
-                settings.output_right_port, e
-            );
-        } else {
-            info!(
-                "Connected right output: rustortion:out_port_right -> {}",
-                settings.output_right_port
-            );
-        }
-        // Connect metronome output port
-        if let Err(e) = client.connect_ports_by_name(
+        try_connect(client, &settings.input_port, "rustortion:in_port");
+        try_connect(
+            client,
+            "rustortion:out_port_left",
+            &settings.output_left_port,
+        );
+        try_connect(
+            client,
+            "rustortion:out_port_right",
+            &settings.output_right_port,
+        );
+        try_connect(
+            client,
             "rustortion:metronome_out_port",
             &settings.metronome_out_port,
-        ) {
-            warn!(
-                "Failed to connect metronome output port '{}': {}",
-                settings.metronome_out_port, e
-            );
-        } else {
-            info!(
-                "Connected metronome output: rustortion:metronome_out_port -> {}",
-                settings.metronome_out_port
-            );
-        }
+        );
     }
 
     pub fn engine(&self) -> &EngineHandle {
@@ -186,29 +146,10 @@ impl Manager {
     pub fn disconnect_all(&self) {
         let client = self.active_client.as_client();
 
-        // Get our ports
-        if let Some(port) = client.port_by_name("rustortion:in_port") {
-            client.disconnect(&port).unwrap_or_else(|e| {
-                error!("Failed to disconnect in_port: {e}");
-            });
-        }
-
-        if let Some(port) = client.port_by_name("rustortion:out_port_left") {
-            client.disconnect(&port).unwrap_or_else(|e| {
-                error!("Failed to disconnect out_port_left: {e}");
-            });
-        }
-
-        if let Some(port) = client.port_by_name("rustortion:out_port_right") {
-            client.disconnect(&port).unwrap_or_else(|e| {
-                error!("Failed to disconnect out_port_right: {e}");
-            });
-        }
-        if let Some(port) = client.port_by_name("rustortion:metronome_out_port") {
-            client.disconnect(&port).unwrap_or_else(|e| {
-                error!("Failed to disconnect metronome_out_port: {e}");
-            });
-        }
+        try_disconnect(client, "rustortion:in_port");
+        try_disconnect(client, "rustortion:out_port_left");
+        try_disconnect(client, "rustortion:out_port_right");
+        try_disconnect(client, "rustortion:metronome_out_port");
     }
 
     /// Get available input ports
@@ -242,5 +183,21 @@ impl Manager {
 
     pub fn buffer_size(&self) -> usize {
         self.active_client.as_client().buffer_size() as usize
+    }
+}
+
+fn try_connect(client: &Client, src: &str, dst: &str) {
+    if let Err(e) = client.connect_ports_by_name(src, dst) {
+        warn!("Failed to connect '{src}' -> '{dst}': {e}");
+    } else {
+        info!("Connected: {src} -> {dst}");
+    }
+}
+
+fn try_disconnect(client: &Client, port_name: &str) {
+    if let Some(port) = client.port_by_name(port_name) {
+        client.disconnect(&port).unwrap_or_else(|e| {
+            error!("Failed to disconnect {port_name}: {e}");
+        });
     }
 }

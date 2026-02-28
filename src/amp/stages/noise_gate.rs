@@ -1,4 +1,5 @@
 use crate::amp::stages::Stage;
+use crate::amp::stages::common::{EnvelopeFollower, calculate_coefficient, db_to_lin};
 
 /// Noise gate stage for eliminating unwanted noise when not playing
 /// Features:
@@ -15,16 +16,14 @@ pub struct NoiseGateStage {
     release_ms: f32, // Release time in milliseconds
 
     // Internal state
-    envelope: f32,       // Current envelope level
-    gate_state: f32,     // Current gate state (0 = closed, 1 = open)
-    hold_counter: usize, // Sample counter for hold time
+    envelope: EnvelopeFollower, // Input level envelope
+    gate_state: f32,            // Current gate state (0 = closed, 1 = open)
+    hold_counter: usize,        // Sample counter for hold time
     sample_rate: f32,
 
-    // Coefficients (calculated from times)
+    // Gate smoothing coefficients
     attack_coeff: f32,
     release_coeff: f32,
-    env_attack_coeff: f32,
-    env_release_coeff: f32,
 }
 
 impl NoiseGateStage {
@@ -38,14 +37,11 @@ impl NoiseGateStage {
     ) -> Self {
         let threshold = db_to_lin(threshold_db);
 
-        // Calculate filter coefficients for smooth transitions
-        // Using one-pole filter: coeff = exp(-1 / (sample_rate * time_in_seconds))
         let attack_coeff = calculate_coefficient(attack_ms, sample_rate);
         let release_coeff = calculate_coefficient(release_ms, sample_rate);
 
-        // Envelope follower coefficients (faster for tracking input)
-        let env_attack_coeff = calculate_coefficient(0.1, sample_rate); // 0.1ms for fast tracking
-        let env_release_coeff = calculate_coefficient(10.0, sample_rate); // 10ms for smoother release
+        // Envelope follower: fast attack (0.1ms), moderate release (10ms)
+        let envelope = EnvelopeFollower::from_ms(0.1, 10.0, sample_rate);
 
         Self {
             threshold,
@@ -53,14 +49,12 @@ impl NoiseGateStage {
             attack_ms,
             hold_ms,
             release_ms,
-            envelope: 0.0,
+            envelope,
             gate_state: 0.0,
             hold_counter: 0,
             sample_rate,
             attack_coeff,
             release_coeff,
-            env_attack_coeff,
-            env_release_coeff,
         }
     }
 
@@ -77,20 +71,11 @@ impl NoiseGateStage {
 impl Stage for NoiseGateStage {
     fn process(&mut self, input: f32) -> f32 {
         // Step 1: Track the input envelope
-        let input_abs = input.abs();
-
-        if input_abs > self.envelope {
-            // Attack phase - track rising signal quickly
-            self.envelope =
-                self.env_attack_coeff * self.envelope + (1.0 - self.env_attack_coeff) * input_abs;
-        } else {
-            // Release phase - track falling signal more slowly
-            self.envelope =
-                self.env_release_coeff * self.envelope + (1.0 - self.env_release_coeff) * input_abs;
-        }
+        self.envelope.process(input);
+        let env = self.envelope.value();
 
         // Step 2: Determine if gate should be open or closed
-        let should_open = self.envelope > self.threshold;
+        let should_open = env > self.threshold;
 
         // Step 3: Handle hold time
         if should_open {
@@ -117,11 +102,8 @@ impl Stage for NoiseGateStage {
         }
 
         // Step 5: Apply gating with ratio
-        // When gate is closed, apply reduction based on ratio
-        // ratio of 10:1 means -20dB reduction when closed
         let reduction = if self.gate_state < 0.999 {
             let closed_gain = 1.0 / self.ratio;
-
             closed_gain + (1.0 - closed_gain) * self.gate_state
         } else {
             1.0
@@ -174,7 +156,7 @@ impl Stage for NoiseGateStage {
                     Err("Release must be between 1 ms and 1000 ms")
                 }
             }
-            _ => Err("Unknown parameter name"),
+            _ => Err("Unknown parameter"),
         }
     }
 
@@ -185,18 +167,7 @@ impl Stage for NoiseGateStage {
             "attack" => Ok(self.attack_ms),
             "hold" => Ok(self.hold_ms),
             "release" => Ok(self.release_ms),
-            _ => Err("Unknown parameter name"),
+            _ => Err("Unknown parameter"),
         }
     }
-}
-
-// Helper functions
-#[inline]
-fn db_to_lin(db: f32) -> f32 {
-    10f32.powf(db / 20.0)
-}
-
-#[inline]
-fn calculate_coefficient(time_ms: f32, sample_rate: f32) -> f32 {
-    (-1.0 / (sample_rate * 0.001 * time_ms)).exp()
 }

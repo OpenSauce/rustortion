@@ -1,6 +1,6 @@
 use core::f32;
 use hound::WavReader;
-use log::error;
+use log::{debug, error};
 use std::fs::File;
 use std::io::BufReader;
 
@@ -27,7 +27,7 @@ impl Metronome {
         }
     }
 
-    pub fn return_bpm(&mut self) -> f32 {
+    pub fn bpm(&self) -> f32 {
         self.bpm
     }
 
@@ -39,26 +39,29 @@ impl Metronome {
                 return;
             }
         };
-        let mut reader = WavReader::new(BufReader::new(file)).unwrap();
+        let mut reader = match WavReader::new(BufReader::new(file)) {
+            Ok(r) => r,
+            Err(e) => {
+                error!("Failed to parse WAV file '{file_path}': {e}");
+                return;
+            }
+        };
         let spec = reader.spec();
-        println!("{:?}", spec);
+        debug!("Loaded WAV: {:?}", spec);
+        let samples: Vec<f32> = reader
+            .samples::<i16>()
+            .filter_map(|s| s.ok())
+            .map(|s| s as f32 / i16::MAX as f32)
+            .collect();
         if spec.sample_rate != self.sample_rate as u32 {
-            //resample
-            let samples: Vec<f32> = reader
-                .samples::<i16>()
-                .map(|s| s.unwrap() as f32 / i16::MAX as f32)
-                .collect();
             self.tick_buffer =
                 Self::resample_tick_file(&samples, spec.sample_rate, self.sample_rate as u32);
         } else {
-            self.tick_buffer = reader
-                .samples::<i16>()
-                .map(|s| s.unwrap() as f32 / i16::MAX as f32)
-                .collect();
+            self.tick_buffer = samples;
         }
     }
 
-    pub fn is_enabled(&mut self) -> bool {
+    pub fn is_enabled(&self) -> bool {
         self.enabled
     }
 

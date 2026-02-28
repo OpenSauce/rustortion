@@ -14,7 +14,7 @@ use crate::tuner::Tuner;
 pub enum EngineMessage {
     SetAmpChain(Box<AmplifierChain>),
     StartRecording(Recorder),
-    StopRecording(),
+    StopRecording,
     SetIrCabinet(Option<String>),
     SetIrBypass(bool),
     SetIrGain(f32),
@@ -188,7 +188,7 @@ impl Engine {
                     debug!("Recorder updated");
                     self.recorder = Some(recorder);
                 }
-                EngineMessage::StopRecording() => {
+                EngineMessage::StopRecording => {
                     if self.recorder.is_none() {
                         debug!("No active recorder to stop");
                         return;
@@ -234,7 +234,7 @@ impl Drop for Engine {
 impl EngineHandle {
     pub fn send(&self, message: EngineMessage) {
         self.engine_sender.try_send(message).unwrap_or_else(|e| {
-            error!("Failed to send new amplifier chain: {e}");
+            error!("Failed to send engine message: {e}");
         });
     }
 
@@ -278,7 +278,7 @@ impl EngineHandle {
     }
 
     pub fn stop_recording(&self) {
-        let update = EngineMessage::StopRecording();
+        let update = EngineMessage::StopRecording;
         self.send(update);
     }
 }

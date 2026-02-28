@@ -163,9 +163,13 @@ impl PitchShifter {
             self.frame[i] = self.input_ring[idx] * self.window[i];
         }
 
-        self.r2c
+        if self
+            .r2c
             .process_with_scratch(&mut self.frame, &mut self.spectrum, &mut self.r2c_scratch)
-            .expect("FFT failed");
+            .is_err()
+        {
+            return;
+        }
 
         for k in 0..NUM_BINS {
             let re = self.spectrum[k].re as f64;
@@ -264,13 +268,17 @@ impl PitchShifter {
         self.shifted[NUM_BINS - 1].im = 0.0;
 
         // --- Synthesis ---
-        self.c2r
+        if self
+            .c2r
             .process_with_scratch(
                 &mut self.shifted,
                 &mut self.synth_frame,
                 &mut self.c2r_scratch,
             )
-            .expect("IFFT failed");
+            .is_err()
+        {
+            return;
+        }
 
         let scale = self.output_scale;
         for i in 0..FFT_SIZE {
