@@ -1,7 +1,7 @@
 use iced::widget::{button, column, container, pick_list, row, rule, space, text};
 use iced::{Alignment, Color, Element, Length};
 
-use crate::gui::messages::Message;
+use crate::gui::messages::SettingsMessage;
 use crate::i18n::{self, LANGUAGES};
 use crate::settings::AudioSettings;
 use crate::tr;
@@ -90,7 +90,7 @@ impl SettingsDialog {
         self.temp_settings = settings;
     }
 
-    pub fn view(&self) -> Option<Element<'static, Message>> {
+    pub fn view(&self) -> Option<Element<'static, SettingsMessage>> {
         if !self.show_dialog {
             return None;
         }
@@ -110,7 +110,7 @@ impl SettingsDialog {
             pick_list(
                 LANGUAGES,
                 Some(i18n::get_language()),
-                Message::LanguageChanged
+                SettingsMessage::LanguageChanged
             )
             .width(Length::Fill),
         ]
@@ -122,7 +122,7 @@ impl SettingsDialog {
             pick_list(
                 self.available_inputs.clone(),
                 Some(self.temp_settings.input_port.clone()),
-                Message::InputPortChanged
+                SettingsMessage::InputPortChanged
             )
             .width(Length::Fill),
         ]
@@ -134,7 +134,7 @@ impl SettingsDialog {
             pick_list(
                 self.available_outputs.clone(),
                 Some(self.temp_settings.output_left_port.clone()),
-                Message::OutputLeftPortChanged
+                SettingsMessage::OutputLeftPortChanged
             )
             .width(Length::Fill),
         ]
@@ -145,7 +145,7 @@ impl SettingsDialog {
             pick_list(
                 self.available_outputs.clone(),
                 Some(self.temp_settings.output_right_port.clone()),
-                Message::OutputRightPortChanged
+                SettingsMessage::OutputRightPortChanged
             )
             .width(Length::Fill),
         ]
@@ -155,11 +155,9 @@ impl SettingsDialog {
         let buffer_sizes = vec![64u32, 128, 256, 512, 1024, 2048, 4096];
         let buffer_section = column![
             text(tr!(buffer_size_requested)).size(16),
-            pick_list(
-                buffer_sizes,
-                Some(self.temp_settings.buffer_size),
-                Message::BufferSizeChanged
-            )
+            pick_list(buffer_sizes, Some(self.temp_settings.buffer_size), |x| {
+                SettingsMessage::BufferSizeChanged(x)
+            })
             .width(Length::Fill),
         ]
         .spacing(5);
@@ -168,11 +166,9 @@ impl SettingsDialog {
         let sample_rates = vec![44100u32, 48000, 88200, 96000, 176400, 192000];
         let sample_rate_section = column![
             text(tr!(sample_rate_requested)).size(16),
-            pick_list(
-                sample_rates,
-                Some(self.temp_settings.sample_rate),
-                Message::SampleRateChanged
-            )
+            pick_list(sample_rates, Some(self.temp_settings.sample_rate), |x| {
+                SettingsMessage::SampleRateChanged(x)
+            })
             .width(Length::Fill),
         ]
         .spacing(5);
@@ -183,7 +179,7 @@ impl SettingsDialog {
             pick_list(
                 oversampling_factors,
                 Some(self.temp_settings.oversampling_factor),
-                Message::OversamplingFactorChanged
+                SettingsMessage::OversamplingFactorChanged
             )
             .width(Length::Fill),
         ]
@@ -205,11 +201,11 @@ impl SettingsDialog {
 
         // Control buttons
         let controls = row![
-            button(tr!(refresh_ports)).on_press(Message::RefreshPorts),
+            button(tr!(refresh_ports)).on_press(SettingsMessage::RefreshPorts),
             space::horizontal(),
-            button(tr!(cancel)).on_press(Message::CancelSettings),
+            button(tr!(cancel)).on_press(SettingsMessage::Cancel),
             button(tr!(apply))
-                .on_press(Message::ApplySettings)
+                .on_press(SettingsMessage::Apply)
                 .style(iced::widget::button::success),
         ]
         .spacing(10)
@@ -273,7 +269,7 @@ impl SettingsDialog {
     }
 
     /// The view containing JACK server status information
-    fn jack_status_view(&self) -> Element<'static, Message> {
+    fn jack_status_view(&self) -> Element<'static, SettingsMessage> {
         let header = text(tr!(jack_server_status))
             .size(18)
             .style(|theme: &iced::Theme| iced::widget::text::Style {

@@ -1,7 +1,7 @@
 use iced::widget::{button, column, container, row, rule, space, text};
 use iced::{Alignment, Color, Element, Length};
 
-use crate::gui::messages::Message;
+use crate::gui::messages::TunerMessage;
 use crate::tr;
 use crate::tuner::TunerInfo;
 
@@ -41,7 +41,7 @@ impl TunerDisplay {
         self.info = info;
     }
 
-    pub fn view(&self) -> Option<Element<'_, Message>> {
+    pub fn view(&self) -> Option<Element<'_, TunerMessage>> {
         if !self.show_dialog {
             return None;
         }
@@ -106,7 +106,7 @@ impl TunerDisplay {
         };
 
         let close_button = button(tr!(close))
-            .on_press(Message::ToggleTuner) // Toggles off since it's already open
+            .on_press(TunerMessage::Toggle) // Toggles off since it's already open
             .style(iced::widget::button::primary)
             .padding(10);
 
@@ -142,7 +142,7 @@ impl TunerDisplay {
         Some(centered.into())
     }
 
-    fn cents_display(&self) -> Element<'static, Message> {
+    fn cents_display(&self) -> Element<'static, TunerMessage> {
         if let Some(cents) = self.info.cents_off {
             let width: usize = 50;
             let center = width / 2;
