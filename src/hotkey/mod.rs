@@ -14,7 +14,9 @@ pub struct HotkeyMapping {
 }
 
 impl HotkeyMapping {
-    pub fn new(key: String, modifiers: Vec<String>, preset_name: String) -> Self {
+    pub fn new(key: String, mut modifiers: Vec<String>, preset_name: String) -> Self {
+        // Canonicalize modifier order so comparisons and deduping are order-insensitive
+        modifiers.sort();
         let description = format_description(&modifiers, &key);
         Self {
             key,
@@ -111,4 +113,146 @@ pub fn is_uncapturable_key(key: &Key) -> bool {
                 | iced::keyboard::key::Named::Space
         )
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use iced::keyboard::key::Named;
+
+    #[test]
+    fn test_serialize_key_named() {
+        let key = Key::Named(Named::F1);
+        assert_eq!(serialize_key(&key), Some("F1".to_string()));
+    }
+
+    #[test]
+    fn test_serialize_key_character() {
+        let key = Key::Character("a".into());
+        assert_eq!(serialize_key(&key), Some("a".to_string()));
+    }
+
+    #[test]
+    fn test_serialize_key_unidentified() {
+        assert_eq!(serialize_key(&Key::Unidentified), None);
+    }
+
+    #[test]
+    fn test_serialize_modifiers_none() {
+        assert_eq!(
+            serialize_modifiers(Modifiers::empty()),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn test_serialize_modifiers_all() {
+        let mods = Modifiers::CTRL | Modifiers::ALT | Modifiers::SHIFT | Modifiers::LOGO;
+        let result = serialize_modifiers(mods);
+        assert_eq!(result, vec!["Ctrl", "Alt", "Shift", "Super"]);
+    }
+
+    #[test]
+    fn test_mapping_matches_simple_key() {
+        let mapping = HotkeyMapping::new("F1".to_string(), vec![], "Clean".to_string());
+        let key = Key::Named(Named::F1);
+        assert!(mapping.matches(&key, Modifiers::empty()));
+    }
+
+    #[test]
+    fn test_mapping_does_not_match_wrong_key() {
+        let mapping = HotkeyMapping::new("F1".to_string(), vec![], "Clean".to_string());
+        let key = Key::Named(Named::F2);
+        assert!(!mapping.matches(&key, Modifiers::empty()));
+    }
+
+    #[test]
+    fn test_mapping_matches_with_modifiers() {
+        let mapping = HotkeyMapping::new(
+            "F1".to_string(),
+            vec!["Ctrl".to_string()],
+            "Distorted".to_string(),
+        );
+        let key = Key::Named(Named::F1);
+        assert!(mapping.matches(&key, Modifiers::CTRL));
+    }
+
+    #[test]
+    fn test_mapping_does_not_match_missing_modifier() {
+        let mapping = HotkeyMapping::new(
+            "F1".to_string(),
+            vec!["Ctrl".to_string()],
+            "Distorted".to_string(),
+        );
+        let key = Key::Named(Named::F1);
+        assert!(!mapping.matches(&key, Modifiers::empty()));
+    }
+
+    #[test]
+    fn test_mapping_does_not_match_extra_modifier() {
+        let mapping = HotkeyMapping::new("F1".to_string(), vec![], "Clean".to_string());
+        let key = Key::Named(Named::F1);
+        assert!(!mapping.matches(&key, Modifiers::CTRL));
+    }
+
+    #[test]
+    fn test_modifiers_are_canonicalized() {
+        let m1 = HotkeyMapping::new(
+            "F1".to_string(),
+            vec!["Shift".to_string(), "Ctrl".to_string()],
+            "A".to_string(),
+        );
+        let m2 = HotkeyMapping::new(
+            "F1".to_string(),
+            vec!["Ctrl".to_string(), "Shift".to_string()],
+            "B".to_string(),
+        );
+        // Both should have the same canonical modifier order
+        assert_eq!(m1.modifiers, m2.modifiers);
+    }
+
+    #[test]
+    fn test_description_no_modifiers() {
+        let mapping = HotkeyMapping::new("F1".to_string(), vec![], "Clean".to_string());
+        assert_eq!(mapping.description, "F1");
+    }
+
+    #[test]
+    fn test_description_with_modifiers() {
+        let mapping = HotkeyMapping::new(
+            "F1".to_string(),
+            vec!["Ctrl".to_string(), "Shift".to_string()],
+            "Clean".to_string(),
+        );
+        assert_eq!(mapping.description, "Ctrl+Shift+F1");
+    }
+
+    #[test]
+    fn test_is_uncapturable_key_modifiers() {
+        assert!(is_uncapturable_key(&Key::Named(Named::Shift)));
+        assert!(is_uncapturable_key(&Key::Named(Named::Control)));
+        assert!(is_uncapturable_key(&Key::Named(Named::Alt)));
+        assert!(is_uncapturable_key(&Key::Named(Named::Super)));
+    }
+
+    #[test]
+    fn test_is_uncapturable_key_reserved() {
+        assert!(is_uncapturable_key(&Key::Named(Named::Escape)));
+        assert!(is_uncapturable_key(&Key::Named(Named::Tab)));
+        assert!(is_uncapturable_key(&Key::Named(Named::Enter)));
+        assert!(is_uncapturable_key(&Key::Named(Named::Space)));
+    }
+
+    #[test]
+    fn test_is_capturable_key() {
+        assert!(!is_uncapturable_key(&Key::Named(Named::F1)));
+        assert!(!is_uncapturable_key(&Key::Character("a".into())));
+    }
+
+    #[test]
+    fn test_mapping_character_key() {
+        let mapping = HotkeyMapping::new("1".to_string(), vec![], "Clean".to_string());
+        let key = Key::Character("1".into());
+        assert!(mapping.matches(&key, Modifiers::empty()));
+    }
 }

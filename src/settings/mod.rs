@@ -70,6 +70,16 @@ pub struct MidiSettings {
     pub mappings: Vec<MidiMapping>,
 }
 
+impl std::fmt::Display for HotkeySettings {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Mappings:")?;
+        for mapping in &self.mappings {
+            writeln!(f, "  {} → {}", mapping.description, mapping.preset_name)?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct HotkeySettings {
     pub mappings: Vec<HotkeyMapping>,
@@ -99,6 +109,9 @@ impl std::fmt::Display for Settings {
 
         writeln!(f, "MIDI Settings:")?;
         writeln!(f, "{}", self.midi)?;
+
+        writeln!(f, "Hotkey Settings:")?;
+        writeln!(f, "{}", self.hotkeys)?;
 
         writeln!(f, "Settings:")?;
         writeln!(f, "Recording Directory: {}", self.recording_dir)?;
