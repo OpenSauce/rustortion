@@ -31,7 +31,13 @@ impl Control {
         self.selected_stage_type = ty;
     }
 
-    pub fn view(&self, is_recording: bool) -> Element<'_, Message> {
+    pub fn view(&self, is_recording: bool, all_collapsed: bool) -> Element<'_, Message> {
+        let collapse_label = if all_collapsed {
+            "▼ Expand All"
+        } else {
+            "▶ Collapse All"
+        };
+
         let stage_controls = row![
             pick_list(
                 STAGE_TYPES,
@@ -39,6 +45,9 @@ impl Control {
                 Message::StageTypeSelected
             ),
             button(tr!(add_stage)).on_press(Message::AddStage),
+            button(collapse_label)
+                .on_press(Message::ToggleAllStagesCollapse)
+                .style(iced::widget::button::secondary),
         ]
         .spacing(10)
         .align_y(Alignment::Center);

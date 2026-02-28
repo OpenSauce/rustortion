@@ -51,38 +51,54 @@ pub enum FilterMessage {
 
 const FILTER_TYPES: [FilterType; 2] = [FilterType::Highpass, FilterType::Lowpass];
 
-pub fn view(idx: usize, cfg: &FilterConfig, total_stages: usize) -> Element<'_, Message> {
-    let header = stage_header(tr!(stage_filter), idx, total_stages);
+pub fn view(
+    idx: usize,
+    cfg: &FilterConfig,
+    total_stages: usize,
+    is_collapsed: bool,
+) -> Element<'_, Message> {
+    let header = stage_header(tr!(stage_filter), idx, total_stages, is_collapsed);
 
-    let type_picker = row![
-        text(tr!(type_label)).width(Length::FillPortion(3)),
-        pick_list(FILTER_TYPES, Some(cfg.filter_type), move |t| {
-            Message::Stage(idx, StageMessage::Filter(FilterMessage::TypeChanged(t)))
-        })
-        .width(Length::FillPortion(7)),
-    ]
-    .spacing(10)
-    .align_y(iced::Alignment::Center);
+    let mut content = column![header].spacing(5);
 
-    let range = match cfg.filter_type {
-        FilterType::Highpass => 0.0..=1000.0,
-        FilterType::Lowpass => 5000.0..=15000.0,
-    };
+    if !is_collapsed {
+        let type_picker = row![
+            text(tr!(type_label)).width(Length::FillPortion(3)),
+            pick_list(FILTER_TYPES, Some(cfg.filter_type), move |t| {
+                Message::Stage(idx, StageMessage::Filter(FilterMessage::TypeChanged(t)))
+            })
+            .width(Length::FillPortion(7)),
+        ]
+        .spacing(10)
+        .align_y(iced::Alignment::Center);
 
-    let body = column![
-        type_picker,
-        labeled_slider(
-            tr!(cutoff),
-            range,
-            cfg.cutoff_hz,
-            move |v| Message::Stage(idx, StageMessage::Filter(FilterMessage::CutoffChanged(v))),
-            |v| format!("{v:.0} {}", tr!(hz)),
-            1.0
-        ),
-    ]
-    .spacing(5);
+        let range = match cfg.filter_type {
+            FilterType::Highpass => 0.0..=1000.0,
+            FilterType::Lowpass => 5000.0..=15000.0,
+        };
 
-    container(column![header, body].spacing(5).padding(10))
+        let body = column![
+            type_picker,
+            labeled_slider(
+                tr!(cutoff),
+                range,
+                cfg.cutoff_hz,
+                move |v| Message::Stage(
+                    idx,
+                    StageMessage::Filter(FilterMessage::CutoffChanged(v))
+                ),
+                |v| format!("{v:.0} {}", tr!(hz)),
+                1.0
+            ),
+        ]
+        .spacing(5);
+
+        content = content.push(body);
+    }
+
+    let padding = if is_collapsed { 5 } else { 10 };
+
+    container(content.padding(padding))
         .width(Length::Fill)
         .style(|theme: &iced::Theme| {
             container::Style::default()

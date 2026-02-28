@@ -36,8 +36,20 @@ pub fn icon_button<'a>(
     }
 }
 
-pub fn stage_header(stage_name: &str, idx: usize, total_stages: usize) -> Element<'_, Message> {
+pub fn stage_header(
+    stage_name: &str,
+    idx: usize,
+    total_stages: usize,
+    is_collapsed: bool,
+) -> Element<'_, Message> {
     let header_text = format!("{} {}", stage_name, idx + 1);
+
+    let collapse_icon = if is_collapsed { "▶" } else { "▼" };
+    let collapse_btn = icon_button(
+        collapse_icon,
+        Some(Message::ToggleStageCollapse(idx)),
+        iced::widget::button::secondary,
+    );
 
     let move_up_btn = if idx > 0 {
         icon_button(
@@ -65,8 +77,14 @@ pub fn stage_header(stage_name: &str, idx: usize, total_stages: usize) -> Elemen
         iced::widget::button::danger,
     );
 
-    row![move_up_btn, move_down_btn, remove_btn, text(header_text)]
-        .spacing(5)
-        .align_y(Alignment::Center)
-        .into()
+    row![
+        collapse_btn,
+        move_up_btn,
+        move_down_btn,
+        remove_btn,
+        text(header_text)
+    ]
+    .spacing(5)
+    .align_y(Alignment::Center)
+    .into()
 }

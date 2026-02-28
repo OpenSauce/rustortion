@@ -34,6 +34,7 @@ pub struct AmplifierApp {
     control_bar: Control,
     settings: Settings,
     settings_handler: SettingsHandler,
+    collapsed_stages: Vec<bool>,
     dirty_chain: bool,
     ir_cabinet_control: IrCabinetControl,
     pitch_shift_control: PitchShiftControl,
@@ -104,6 +105,8 @@ impl AmplifierApp {
 
         let hotkey_handler = HotkeyHandler::new(settings.hotkeys.clone());
 
+        let collapsed_stages = vec![false; preset.stages.len()];
+
         (
             Self {
                 audio_manager,
@@ -113,6 +116,7 @@ impl AmplifierApp {
                 control_bar,
                 settings,
                 settings_handler,
+                collapsed_stages,
                 // Set dirty chain to true to trigger initial rebuild
                 dirty_chain: true,
                 ir_cabinet_control,
@@ -150,9 +154,10 @@ impl AmplifierApp {
         let main_content = column![
             top_bar,
             self.preset_handler.view(),
-            self.stage_list.view(),
+            self.stage_list.view(&self.collapsed_stages),
             self.ir_cabinet_control.view(),
-            self.control_bar.view(self.is_recording),
+            self.control_bar
+                .view(self.is_recording, self.all_collapsed()),
         ]
         .spacing(10)
         .padding(20);
@@ -226,6 +231,7 @@ impl AmplifierApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::SetStages(stages) => {
+                self.collapsed_stages = vec![false; stages.len()];
                 self.stages = stages;
                 self.mark_stages_dirty();
             }
@@ -233,25 +239,38 @@ impl AmplifierApp {
             Message::AddStage => {
                 let new_stage = StageConfig::from(self.control_bar.selected());
                 self.stages.push(new_stage);
+                self.collapsed_stages.push(false);
                 self.mark_stages_dirty();
             }
             Message::RemoveStage(idx) => {
                 if idx < self.stages.len() {
                     self.stages.remove(idx);
+                    self.collapsed_stages.remove(idx);
                     self.mark_stages_dirty();
                 }
             }
             Message::MoveStageUp(idx) => {
                 if idx > 0 && idx < self.stages.len() {
                     self.stages.swap(idx - 1, idx);
+                    self.collapsed_stages.swap(idx - 1, idx);
                     self.mark_stages_dirty();
                 }
             }
             Message::MoveStageDown(idx) => {
                 if idx + 1 < self.stages.len() {
                     self.stages.swap(idx, idx + 1);
+                    self.collapsed_stages.swap(idx, idx + 1);
                     self.mark_stages_dirty();
                 }
+            }
+            Message::ToggleStageCollapse(idx) => {
+                if let Some(collapsed) = self.collapsed_stages.get_mut(idx) {
+                    *collapsed = !*collapsed;
+                }
+            }
+            Message::ToggleAllStagesCollapse => {
+                let any_expanded = self.collapsed_stages.iter().any(|&c| !c);
+                self.collapsed_stages.fill(any_expanded);
             }
             Message::StageTypeSelected(stage_type) => {
                 self.control_bar.set_selected_stage_type(stage_type);
@@ -414,6 +433,10 @@ impl AmplifierApp {
         }
 
         Task::none()
+    }
+
+    fn all_collapsed(&self) -> bool {
+        !self.collapsed_stages.is_empty() && self.collapsed_stages.iter().all(|&c| c)
     }
 
     fn any_dialog_visible(&self) -> bool {

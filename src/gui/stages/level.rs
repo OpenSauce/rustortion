@@ -43,20 +43,33 @@ pub enum LevelMessage {
 
 // --- View ---
 
-pub fn view(idx: usize, cfg: &LevelConfig, total_stages: usize) -> Element<'_, Message> {
-    let header = stage_header(tr!(stage_level), idx, total_stages);
+pub fn view(
+    idx: usize,
+    cfg: &LevelConfig,
+    total_stages: usize,
+    is_collapsed: bool,
+) -> Element<'_, Message> {
+    let header = stage_header(tr!(stage_level), idx, total_stages, is_collapsed);
 
-    let body = column![labeled_slider(
-        tr!(gain),
-        0.0..=2.0,
-        cfg.gain,
-        move |v| Message::Stage(idx, StageMessage::Level(LevelMessage::GainChanged(v))),
-        |v| format!("{v:.2}"),
-        0.05
-    ),]
-    .spacing(5);
+    let mut content = column![header].spacing(5);
 
-    container(column![header, body].spacing(5).padding(10))
+    if !is_collapsed {
+        let body = column![labeled_slider(
+            tr!(gain),
+            0.0..=2.0,
+            cfg.gain,
+            move |v| Message::Stage(idx, StageMessage::Level(LevelMessage::GainChanged(v))),
+            |v| format!("{v:.2}"),
+            0.05
+        ),]
+        .spacing(5);
+
+        content = content.push(body);
+    }
+
+    let padding = if is_collapsed { 5 } else { 10 };
+
+    container(content.padding(padding))
         .width(Length::Fill)
         .style(|theme: &iced::Theme| {
             container::Style::default()

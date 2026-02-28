@@ -24,6 +24,8 @@ pub enum Message {
     RemoveStage(usize),
     MoveStageUp(usize),
     MoveStageDown(usize),
+    ToggleStageCollapse(usize),
+    ToggleAllStagesCollapse,
     StageTypeSelected(StageType),
     RebuildTick,
     SetStages(Vec<StageConfig>),

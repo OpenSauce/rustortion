@@ -17,11 +17,12 @@ impl StageList {
         self.stages = stages.to_vec();
     }
 
-    pub fn view(&self) -> Element<'_, Message> {
+    pub fn view(&self, collapsed: &[bool]) -> Element<'_, Message> {
         let mut col = column![].width(Length::Fill).padding(10);
 
         for (idx, stage) in self.stages.iter().enumerate() {
-            col = col.push(stage.view(idx, self.stages.len()));
+            let is_collapsed = collapsed.get(idx).copied().unwrap_or(false);
+            col = col.push(stage.view(idx, self.stages.len(), is_collapsed));
         }
 
         scrollable(col).height(Length::FillPortion(9)).into()
