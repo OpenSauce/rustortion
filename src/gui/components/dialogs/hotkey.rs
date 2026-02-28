@@ -2,7 +2,7 @@ use iced::keyboard::{Key, Modifiers};
 use iced::widget::{button, column, container, pick_list, row, rule, scrollable, space, text};
 use iced::{Alignment, Color, Element, Length};
 
-use crate::gui::messages::Message;
+use crate::gui::messages::{HotkeyMessage, Message};
 use crate::hotkey::{HotkeyMapping, is_uncapturable_key, serialize_key, serialize_modifiers};
 use crate::tr;
 
@@ -168,7 +168,7 @@ impl HotkeyDialog {
         // Controls
         let controls = row![
             space::horizontal(),
-            button(tr!(close)).on_press(Message::HotkeyClose),
+            button(tr!(close)).on_press(Message::Hotkey(HotkeyMessage::Close)),
         ]
         .spacing(10)
         .width(Length::Fill);
@@ -198,11 +198,11 @@ impl HotkeyDialog {
 
         let add_button = if self.learning_state == LearningState::Idle {
             button(tr!(add_mapping))
-                .on_press(Message::HotkeyStartLearning)
+                .on_press(Message::Hotkey(HotkeyMessage::StartLearning))
                 .style(iced::widget::button::success)
         } else {
             button(tr!(cancel))
-                .on_press(Message::HotkeyCancelLearning)
+                .on_press(Message::Hotkey(HotkeyMessage::CancelLearning))
                 .style(iced::widget::button::danger)
         };
 
@@ -235,7 +235,7 @@ impl HotkeyDialog {
                     pick_list(
                         self.available_presets.clone(),
                         self.selected_preset_for_mapping.clone(),
-                        Message::HotkeyPresetSelected
+                        |p| Message::Hotkey(HotkeyMessage::PresetSelected(p))
                     )
                     .width(Length::Fill)
                     .placeholder(tr!(select_preset)),
@@ -245,7 +245,7 @@ impl HotkeyDialog {
 
                 let confirm_button = if self.selected_preset_for_mapping.is_some() {
                     button(tr!(confirm_mapping))
-                        .on_press(Message::HotkeyConfirmMapping)
+                        .on_press(Message::Hotkey(HotkeyMessage::ConfirmMapping))
                         .style(iced::widget::button::success)
                 } else {
                     button(tr!(confirm_mapping)).style(iced::widget::button::secondary)
@@ -282,7 +282,7 @@ impl HotkeyDialog {
                     text("→").size(14).width(Length::Fixed(30.0)),
                     text(&mapping.preset_name).size(14).width(Length::Fill),
                     button("×")
-                        .on_press(Message::HotkeyRemoveMapping(idx))
+                        .on_press(Message::Hotkey(HotkeyMessage::RemoveMapping(idx)))
                         .style(iced::widget::button::danger)
                         .width(Length::Fixed(30.0)),
                 ]

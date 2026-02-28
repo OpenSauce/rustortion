@@ -3,7 +3,6 @@ use log::{debug, error};
 
 use crate::amp::chain::AmplifierChain;
 use crate::audio::manager::Manager;
-use crate::gui::components::dialogs::hotkey::HotkeyDialog;
 use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::peak_meter::PeakMeterDisplay;
 use crate::gui::components::pitch_shift_control::PitchShiftControl;
@@ -15,8 +14,9 @@ use crate::gui::components::{
     stage_list::StageList,
 };
 use crate::gui::config::{StageConfig, StageType};
+use crate::gui::handlers::hotkey::HotkeyHandler;
 use crate::gui::handlers::preset::PresetHandler;
-use crate::gui::messages::{Message, PresetMessage};
+use crate::gui::messages::{HotkeyMessage, Message, PresetMessage};
 use crate::i18n;
 use crate::midi::{MidiEvent, MidiHandle, start_midi_manager};
 use crate::settings::{AudioSettings, Settings};
@@ -44,7 +44,7 @@ pub struct AmplifierApp {
     peak_meter_display: PeakMeterDisplay,
     midi_handle: MidiHandle,
     midi_dialog: MidiDialog,
-    hotkey_dialog: HotkeyDialog,
+    hotkey_handler: HotkeyHandler,
 }
 
 impl AmplifierApp {
@@ -106,6 +106,8 @@ impl AmplifierApp {
         // Set the global language from settings
         i18n::set_language(settings.language);
 
+        let hotkey_handler = HotkeyHandler::new(settings.hotkeys.clone());
+
         (
             Self {
                 audio_manager,
@@ -125,7 +127,7 @@ impl AmplifierApp {
                 peak_meter_display: PeakMeterDisplay::new(),
                 midi_handle,
                 midi_dialog,
-                hotkey_dialog: HotkeyDialog::new(),
+                hotkey_handler,
             },
             Task::none(),
         )
@@ -139,7 +141,7 @@ impl AmplifierApp {
             space::horizontal(),
             self.pitch_shift_control.view(),
             button(tr!(hotkeys))
-                .on_press(Message::OpenHotkeys)
+                .on_press(Message::Hotkey(HotkeyMessage::Open))
                 .style(iced::widget::button::secondary),
             button(tr!(midi))
                 .on_press(Message::OpenMidi)
@@ -167,7 +169,7 @@ impl AmplifierApp {
             tuner_dialog
         } else if let Some(midi_dialog) = self.midi_dialog.view() {
             midi_dialog
-        } else if let Some(hotkey_dialog) = self.hotkey_dialog.view() {
+        } else if let Some(hotkey_dialog) = self.hotkey_handler.view() {
             hotkey_dialog
         } else {
             container(main_content)
@@ -478,52 +480,19 @@ impl AmplifierApp {
                     }
                 }
             }
-            Message::OpenHotkeys => {
+            Message::Hotkey(msg) => {
                 let presets = self.preset_handler.get_available_presets();
-                let mappings = self.settings.hotkeys.mappings.clone();
-                self.hotkey_dialog.show(presets, mappings);
-            }
-            Message::HotkeyClose => {
-                self.hotkey_dialog.hide();
-            }
-            Message::HotkeyStartLearning => {
-                self.hotkey_dialog.start_learning();
-            }
-            Message::HotkeyCancelLearning => {
-                self.hotkey_dialog.cancel_learning();
-            }
-            Message::HotkeyPresetSelected(preset) => {
-                self.hotkey_dialog.set_preset_for_mapping(preset);
-            }
-            Message::HotkeyConfirmMapping => {
-                if let Some(_mapping) = self.hotkey_dialog.complete_mapping() {
-                    let mappings = self.hotkey_dialog.get_mappings();
-
-                    // Save to settings
-                    self.settings.hotkeys.mappings = mappings;
+                if self.hotkey_handler.handle(msg, presets) {
+                    self.settings.hotkeys = self.hotkey_handler.settings().clone();
                     if let Err(e) = self.settings.save() {
                         error!("Failed to save hotkey mappings: {e}");
                     }
-
-                    debug!("Hotkey mapping added and saved");
                 }
-            }
-            Message::HotkeyRemoveMapping(idx) => {
-                self.hotkey_dialog.remove_mapping(idx);
-                let mappings = self.hotkey_dialog.get_mappings();
-
-                // Save to settings
-                self.settings.hotkeys.mappings = mappings;
-                if let Err(e) = self.settings.save() {
-                    error!("Failed to save hotkey mappings: {e}");
-                }
-
-                debug!("Hotkey mapping removed and saved");
             }
             Message::KeyPressed(key, modifiers) => {
                 // If hotkey dialog is in learning mode, capture the key
-                if self.hotkey_dialog.is_learning() {
-                    self.hotkey_dialog.on_key_input(&key, modifiers);
+                if self.hotkey_handler.is_learning() {
+                    self.hotkey_handler.on_key_input(&key, modifiers);
                     return Task::none();
                 }
 
@@ -531,19 +500,15 @@ impl AmplifierApp {
                 if self.settings_dialog.is_visible()
                     || self.tuner_dialog.is_visible()
                     || self.midi_dialog.is_visible()
-                    || self.hotkey_dialog.is_visible()
+                    || self.hotkey_handler.is_visible()
                 {
                     return Task::none();
                 }
 
                 // Check against hotkey mappings
-                for mapping in &self.settings.hotkeys.mappings {
-                    if mapping.matches(&key, modifiers) {
-                        debug!("Hotkey triggered preset: {}", mapping.preset_name);
-                        return Task::done(Message::Preset(PresetMessage::Select(
-                            mapping.preset_name.clone(),
-                        )));
-                    }
+                if let Some(preset_name) = self.hotkey_handler.check_mapping(&key, modifiers) {
+                    debug!("Hotkey triggered preset: {}", preset_name);
+                    return Task::done(Message::Preset(PresetMessage::Select(preset_name)));
                 }
             }
             Message::PeakMeterUpdate => {
