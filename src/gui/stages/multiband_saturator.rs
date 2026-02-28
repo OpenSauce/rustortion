@@ -1,10 +1,87 @@
 use iced::widget::{column, container, row, text};
 use iced::{Element, Length};
+use serde::{Deserialize, Serialize};
 
+use crate::amp::stages::multiband_saturator::MultibandSaturatorStage;
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
-use crate::gui::config::MultibandSaturatorConfig;
-use crate::gui::messages::{Message, MultibandSaturatorMessage, StageMessage};
+use crate::gui::messages::Message;
 use crate::tr;
+
+use super::StageMessage;
+
+// --- Config ---
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct MultibandSaturatorConfig {
+    pub low_drive: f32,
+    pub mid_drive: f32,
+    pub high_drive: f32,
+    pub low_level: f32,
+    pub mid_level: f32,
+    pub high_level: f32,
+    pub low_freq: f32,
+    pub high_freq: f32,
+}
+
+impl Default for MultibandSaturatorConfig {
+    fn default() -> Self {
+        Self {
+            low_drive: 0.3,
+            mid_drive: 0.5,
+            high_drive: 0.4,
+            low_level: 1.0,
+            mid_level: 1.0,
+            high_level: 1.0,
+            low_freq: 200.0,
+            high_freq: 2500.0,
+        }
+    }
+}
+
+impl MultibandSaturatorConfig {
+    pub fn to_stage(&self, sample_rate: f32) -> MultibandSaturatorStage {
+        MultibandSaturatorStage::new(
+            self.low_drive,
+            self.mid_drive,
+            self.high_drive,
+            self.low_level,
+            self.mid_level,
+            self.high_level,
+            self.low_freq,
+            self.high_freq,
+            sample_rate,
+        )
+    }
+
+    pub fn apply(&mut self, msg: MultibandSaturatorMessage) {
+        match msg {
+            MultibandSaturatorMessage::LowDriveChanged(v) => self.low_drive = v,
+            MultibandSaturatorMessage::MidDriveChanged(v) => self.mid_drive = v,
+            MultibandSaturatorMessage::HighDriveChanged(v) => self.high_drive = v,
+            MultibandSaturatorMessage::LowLevelChanged(v) => self.low_level = v,
+            MultibandSaturatorMessage::MidLevelChanged(v) => self.mid_level = v,
+            MultibandSaturatorMessage::HighLevelChanged(v) => self.high_level = v,
+            MultibandSaturatorMessage::LowFreqChanged(v) => self.low_freq = v,
+            MultibandSaturatorMessage::HighFreqChanged(v) => self.high_freq = v,
+        }
+    }
+}
+
+// --- Message ---
+
+#[derive(Debug, Clone)]
+pub enum MultibandSaturatorMessage {
+    LowDriveChanged(f32),
+    MidDriveChanged(f32),
+    HighDriveChanged(f32),
+    LowLevelChanged(f32),
+    MidLevelChanged(f32),
+    HighLevelChanged(f32),
+    LowFreqChanged(f32),
+    HighFreqChanged(f32),
+}
+
+// --- View ---
 
 pub fn view(
     idx: usize,
@@ -13,7 +90,6 @@ pub fn view(
 ) -> Element<'_, Message> {
     let header = stage_header(tr!(stage_multiband_saturator), idx, total_stages);
 
-    // Crossover frequency controls
     let crossover_section = column![
         text(tr!(crossover)).size(14),
         labeled_slider(
@@ -41,7 +117,6 @@ pub fn view(
     ]
     .spacing(5);
 
-    // Low band controls
     let low_band_section = column![
         text(tr!(low_band)).size(14),
         labeled_slider(
@@ -69,7 +144,6 @@ pub fn view(
     ]
     .spacing(5);
 
-    // Mid band controls
     let mid_band_section = column![
         text(tr!(mid_band)).size(14),
         labeled_slider(
@@ -97,7 +171,6 @@ pub fn view(
     ]
     .spacing(5);
 
-    // High band controls
     let high_band_section = column![
         text(tr!(high_band)).size(14),
         labeled_slider(
@@ -125,7 +198,6 @@ pub fn view(
     ]
     .spacing(5);
 
-    // Layout: crossover on top, then three band sections side by side
     let bands_row = row![low_band_section, mid_band_section, high_band_section]
         .spacing(20)
         .width(Length::Fill);

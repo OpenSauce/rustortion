@@ -1,11 +1,72 @@
 use iced::widget::{column, container, pick_list, row, text};
 use iced::{Element, Length};
+use serde::{Deserialize, Serialize};
 
-use crate::amp::stages::tonestack::ToneStackModel;
+use crate::amp::stages::tonestack::{ToneStackModel, ToneStackStage};
 use crate::gui::components::widgets::common::{labeled_slider, stage_header};
-use crate::gui::config::ToneStackConfig;
-use crate::gui::messages::{Message, StageMessage, ToneStackMessage};
+use crate::gui::messages::Message;
 use crate::tr;
+
+use super::StageMessage;
+
+// --- Config ---
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct ToneStackConfig {
+    pub model: ToneStackModel,
+    pub bass: f32,
+    pub mid: f32,
+    pub treble: f32,
+    pub presence: f32,
+}
+
+impl Default for ToneStackConfig {
+    fn default() -> Self {
+        Self {
+            model: ToneStackModel::Modern,
+            bass: 0.5,
+            mid: 0.5,
+            treble: 0.5,
+            presence: 0.5,
+        }
+    }
+}
+
+impl ToneStackConfig {
+    pub fn to_stage(&self, sample_rate: f32) -> ToneStackStage {
+        ToneStackStage::new(
+            self.model,
+            self.bass,
+            self.mid,
+            self.treble,
+            self.presence,
+            sample_rate,
+        )
+    }
+
+    pub fn apply(&mut self, msg: ToneStackMessage) {
+        match msg {
+            ToneStackMessage::ModelChanged(mo) => self.model = mo,
+            ToneStackMessage::BassChanged(v) => self.bass = v,
+            ToneStackMessage::MidChanged(v) => self.mid = v,
+            ToneStackMessage::TrebleChanged(v) => self.treble = v,
+            ToneStackMessage::PresenceChanged(v) => self.presence = v,
+        }
+    }
+}
+
+// --- Message ---
+
+#[derive(Debug, Clone)]
+pub enum ToneStackMessage {
+    ModelChanged(ToneStackModel),
+    BassChanged(f32),
+    MidChanged(f32),
+    TrebleChanged(f32),
+    PresenceChanged(f32),
+}
+
+// --- View ---
 
 const TONE_STACK_MODELS: [ToneStackModel; 4] = [
     ToneStackModel::Modern,
