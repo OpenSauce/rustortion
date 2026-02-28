@@ -11,8 +11,8 @@ fn lerp_phase(ph0: f64, ph1: f64, t: f64) -> f64 {
     ph0 + d * t
 }
 
-const FFT_SIZE: usize = 1024;
-const HOP_SIZE: usize = FFT_SIZE / 8; // 87.5% overlap
+const FFT_SIZE: usize = 2048;
+const HOP_SIZE: usize = FFT_SIZE / 4; // 75% overlap
 const NUM_BINS: usize = FFT_SIZE / 2 + 1;
 const OUTPUT_SIZE: usize = FFT_SIZE * 2;
 
@@ -23,7 +23,7 @@ const OUTPUT_SIZE: usize = FFT_SIZE * 2;
 /// within each spectral peak, eliminating the "phasiness" / doubled quality
 /// of basic phase vocoders.
 ///
-/// Adds ~`FFT_SIZE / sample_rate` latency (≈21 ms at 48 kHz).
+/// Adds ~`FFT_SIZE / sample_rate` latency (≈42 ms at 48 kHz).
 pub struct PitchShifter {
     ratio: f64,
 
@@ -82,8 +82,6 @@ impl PitchShifter {
 
         // Compute the COLA (Constant Overlap-Add) normalization for Hann²
         // with the current hop size, rather than relying on a magic constant.
-        // For hop = N/8 this evaluates to 3.0, but computing it makes the code
-        // robust to future hop/window changes.
         let num_overlaps = FFT_SIZE / HOP_SIZE;
         let cola_sum: f32 = (0..HOP_SIZE)
             .map(|i| {
