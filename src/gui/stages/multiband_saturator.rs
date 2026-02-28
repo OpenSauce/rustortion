@@ -53,7 +53,7 @@ impl MultibandSaturatorConfig {
         )
     }
 
-    pub fn apply(&mut self, msg: MultibandSaturatorMessage) {
+    pub const fn apply(&mut self, msg: MultibandSaturatorMessage) {
         match msg {
             MultibandSaturatorMessage::LowDriveChanged(v) => self.low_drive = v,
             MultibandSaturatorMessage::MidDriveChanged(v) => self.mid_drive = v,

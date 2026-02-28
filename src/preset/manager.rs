@@ -39,7 +39,7 @@ impl Manager {
                 match self.load_preset_file(&path) {
                     Ok(preset) => self.presets.push(preset),
                     Err(e) => {
-                        warn!("Failed to load preset {path:?}: {e}");
+                        warn!("Failed to load preset {}: {e}", path.display());
                     }
                 }
             }
@@ -51,6 +51,7 @@ impl Manager {
         Ok(())
     }
 
+    #[allow(clippy::unused_self)]
     fn load_preset_file<P: AsRef<Path>>(&self, path: P) -> Result<Preset> {
         let content = fs::read_to_string(path.as_ref()).context("Failed to read preset file")?;
 
@@ -83,7 +84,7 @@ impl Manager {
 
             Ok(())
         } else {
-            Err(anyhow::anyhow!("Preset file not found: {}", preset_name))
+            Err(anyhow::anyhow!("Preset file not found: {preset_name}"))
         }
     }
 

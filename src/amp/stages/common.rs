@@ -39,7 +39,7 @@ impl DcBlocker {
 
     #[inline]
     pub fn process(&mut self, input: f32) -> f32 {
-        let output = input - self.x_prev + self.coeff * self.y_prev;
+        let output = self.coeff.mul_add(self.y_prev, input - self.x_prev);
         self.x_prev = input;
         self.y_prev = output;
         output
@@ -56,7 +56,7 @@ pub struct EnvelopeFollower {
 
 impl EnvelopeFollower {
     /// Create from pre-computed coefficients.
-    pub fn new(attack_coeff: f32, release_coeff: f32) -> Self {
+    pub const fn new(attack_coeff: f32, release_coeff: f32) -> Self {
         Self {
             envelope: 0.0,
             attack_coeff,
@@ -72,15 +72,15 @@ impl EnvelopeFollower {
         )
     }
 
-    pub fn set_attack_coeff(&mut self, coeff: f32) {
+    pub const fn set_attack_coeff(&mut self, coeff: f32) {
         self.attack_coeff = coeff;
     }
 
-    pub fn set_release_coeff(&mut self, coeff: f32) {
+    pub const fn set_release_coeff(&mut self, coeff: f32) {
         self.release_coeff = coeff;
     }
 
-    pub fn value(&self) -> f32 {
+    pub const fn value(&self) -> f32 {
         self.envelope
     }
 
@@ -88,11 +88,13 @@ impl EnvelopeFollower {
     pub fn process(&mut self, input: f32) -> f32 {
         let abs_input = input.abs();
         if abs_input > self.envelope {
-            self.envelope =
-                self.attack_coeff * self.envelope + (1.0 - self.attack_coeff) * abs_input;
+            self.envelope = self
+                .attack_coeff
+                .mul_add(self.envelope, (1.0 - self.attack_coeff) * abs_input);
         } else {
-            self.envelope =
-                self.release_coeff * self.envelope + (1.0 - self.release_coeff) * abs_input;
+            self.envelope = self
+                .release_coeff
+                .mul_add(self.envelope, (1.0 - self.release_coeff) * abs_input);
         }
         self.envelope
     }

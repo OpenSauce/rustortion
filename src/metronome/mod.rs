@@ -27,7 +27,7 @@ impl Metronome {
         }
     }
 
-    pub fn bpm(&self) -> f32 {
+    pub const fn bpm(&self) -> f32 {
         self.bpm
     }
 
@@ -47,7 +47,7 @@ impl Metronome {
             }
         };
         let spec = reader.spec();
-        debug!("Loaded WAV: {:?}", spec);
+        debug!("Loaded WAV: {spec:?}");
         let raw_samples: Vec<i16> = match reader.samples::<i16>().collect::<Result<Vec<_>, _>>() {
             Ok(s) => s,
             Err(e) => {
@@ -67,7 +67,7 @@ impl Metronome {
         }
     }
 
-    pub fn is_enabled(&self) -> bool {
+    pub const fn is_enabled(&self) -> bool {
         self.enabled
     }
 
@@ -99,7 +99,7 @@ impl Metronome {
             let frac = src_pos - src_idx as f64;
 
             let s = if src_idx + 1 < samples.len() {
-                samples[src_idx] * (1.0 - frac as f32) + samples[src_idx + 1] * frac as f32
+                samples[src_idx].mul_add(1.0 - frac as f32, samples[src_idx + 1] * frac as f32)
             } else if src_idx < samples.len() {
                 samples[src_idx]
             } else {
@@ -110,7 +110,7 @@ impl Metronome {
         out
     }
 
-    pub fn toggle_metronome(&mut self) {
+    pub const fn toggle_metronome(&mut self) {
         self.enabled = !self.enabled;
     }
 }

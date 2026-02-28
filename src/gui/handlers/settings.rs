@@ -93,7 +93,7 @@ impl SettingsHandler {
         self.dialog.view().map(|e| e.map(Message::Settings))
     }
 
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.dialog.is_visible()
     }
 

@@ -18,7 +18,7 @@ impl Default for PresetBar {
 }
 
 impl PresetBar {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             preset_name_input: String::new(),
             show_save_input: false,
@@ -41,7 +41,7 @@ impl PresetBar {
             PresetGuiMessage::ConfirmOverwrite => {
                 self.hide_overwrite_confirmation();
                 return Task::done(Message::Preset(PresetMessage::Save(
-                    self.preset_name_input.to_owned(),
+                    self.preset_name_input.clone(),
                 )));
             }
             PresetGuiMessage::CancelOverwrite => {
@@ -82,7 +82,7 @@ impl PresetBar {
     ) -> Element<'static, Message> {
         let preset_selector = row![
             text(tr!(preset)).width(Length::Fixed(80.0)),
-            pick_list(available_presets.clone(), selected_preset.clone(), |p| {
+            pick_list(available_presets, selected_preset.clone(), |p| {
                 PresetMessage::Select(p).into()
             })
             .width(Length::Fixed(200.0)),
@@ -126,7 +126,7 @@ impl PresetBar {
                     .on_input(|p| PresetMessage::Gui(PresetGuiMessage::NameChanged(p)).into())
                     .width(Length::Fixed(150.0)),
                 button(tr!(save))
-                    .on_press(PresetMessage::Save(self.preset_name_input.to_owned()).into()),
+                    .on_press(PresetMessage::Save(self.preset_name_input.clone()).into()),
                 button(tr!(cancel))
                     .on_press(PresetMessage::Gui(PresetGuiMessage::CancelSave).into()),
             ]

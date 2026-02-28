@@ -8,7 +8,7 @@ use crate::tr;
 const MAX_DEBUG_MESSAGES: usize = 20;
 
 /// State for the "learning" mode where we wait for a MIDI input
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LearningState {
     /// Not learning, normal operation
     Idle,
@@ -41,7 +41,7 @@ impl Default for MidiDialog {
 }
 
 impl MidiDialog {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self {
             show_dialog: false,
             available_controllers: Vec::new(),
@@ -67,7 +67,7 @@ impl MidiDialog {
         self.learning_state = LearningState::Idle;
     }
 
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.show_dialog
     }
 
@@ -101,7 +101,7 @@ impl MidiDialog {
         self.selected_preset_for_mapping = None;
     }
 
-    pub fn is_learning(&self) -> bool {
+    pub const fn is_learning(&self) -> bool {
         matches!(
             self.learning_state,
             LearningState::WaitingForInput | LearningState::InputCaptured { .. }
@@ -111,7 +111,7 @@ impl MidiDialog {
     /// Called when a MIDI input is received
     pub fn on_midi_input(&mut self, event: &MidiInputEvent) {
         // Add to debug log
-        let debug_msg = format!("{}", event);
+        let debug_msg = format!("{event}");
         self.debug_messages.insert(0, debug_msg);
         if self.debug_messages.len() > MAX_DEBUG_MESSAGES {
             self.debug_messages.pop();
@@ -122,7 +122,7 @@ impl MidiDialog {
             self.learning_state = LearningState::InputCaptured {
                 channel: event.channel,
                 control: event.control,
-                description: format!("{}", event),
+                description: format!("{event}"),
             };
         }
     }

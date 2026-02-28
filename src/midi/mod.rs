@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::thread;
 
 /// A MIDI input mapping that associates a MIDI message with a preset
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MidiMapping {
     /// The MIDI channel (0-15)
     pub channel: u8,
@@ -30,7 +30,7 @@ impl MidiMapping {
     }
 
     /// Check if this mapping matches the given MIDI message
-    pub fn matches(&self, channel: u8, control: u8) -> bool {
+    pub const fn matches(&self, channel: u8, control: u8) -> bool {
         self.channel == channel && self.control == control
     }
 }
@@ -45,7 +45,7 @@ pub struct MidiInputEvent {
     pub raw_bytes: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MidiMessageType {
     NoteOn,
     NoteOff,
@@ -57,11 +57,11 @@ pub enum MidiMessageType {
 impl std::fmt::Display for MidiMessageType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MidiMessageType::NoteOn => write!(f, "Note On"),
-            MidiMessageType::NoteOff => write!(f, "Note Off"),
-            MidiMessageType::ControlChange => write!(f, "CC"),
-            MidiMessageType::ProgramChange => write!(f, "Program"),
-            MidiMessageType::Other => write!(f, "Other"),
+            Self::NoteOn => write!(f, "Note On"),
+            Self::NoteOff => write!(f, "Note Off"),
+            Self::ControlChange => write!(f, "CC"),
+            Self::ProgramChange => write!(f, "Program"),
+            Self::Other => write!(f, "Other"),
         }
     }
 }
@@ -113,13 +113,13 @@ impl MidiHandle {
             .command_sender
             .try_send(MidiCommand::Connect(device_name.to_string()))
         {
-            error!("Failed to send connect command: {}", e);
+            error!("Failed to send connect command: {e}");
         }
     }
 
     pub fn disconnect(&self) {
         if let Err(e) = self.command_sender.try_send(MidiCommand::Disconnect) {
-            error!("Failed to send disconnect command: {}", e);
+            error!("Failed to send disconnect command: {e}");
         }
     }
 
@@ -192,7 +192,7 @@ impl MidiManager {
                 .filter_map(|p| midi_in.port_name(p).ok())
                 .collect(),
             Err(e) => {
-                error!("Failed to create MIDI input for scanning: {}", e);
+                error!("Failed to create MIDI input for scanning: {e}");
                 Vec::new()
             }
         }
@@ -230,10 +230,9 @@ impl MidiManager {
         let midi_in = match MidiInput::new("rustortion") {
             Ok(m) => m,
             Err(e) => {
-                error!("Failed to create MIDI input: {}", e);
+                error!("Failed to create MIDI input: {e}");
                 let _ = self.event_sender.try_send(MidiEvent::Error(format!(
-                    "Failed to create MIDI input: {}",
-                    e
+                    "Failed to create MIDI input: {e}"
                 )));
                 return;
             }
@@ -247,16 +246,12 @@ impl MidiManager {
                 .unwrap_or(false)
         });
 
-        let port = match port {
-            Some(p) => p,
-            None => {
-                error!("MIDI device not found: {}", device_name);
-                let _ = self.event_sender.try_send(MidiEvent::Error(format!(
-                    "Device not found: {}",
-                    device_name
-                )));
-                return;
-            }
+        let Some(port) = port else {
+            error!("MIDI device not found: {device_name}");
+            let _ = self
+                .event_sender
+                .try_send(MidiEvent::Error(format!("Device not found: {device_name}")));
+            return;
         };
 
         let sender = self.midi_event_sender.clone();
@@ -264,25 +259,25 @@ impl MidiManager {
         let connection = match midi_in.connect(
             &port,
             "rustortion-input",
-            move |_timestamp, message, _| {
+            move |_timestamp, message, ()| {
                 let Some(event) = parse_midi_message(message) else {
                     return;
                 };
 
                 if let Err(e) = sender.try_send(MidiEvent::Input(event)) {
-                    warn!("Failed to send MIDI event: {}", e);
+                    warn!("Failed to send MIDI event: {e}");
                 }
             },
             (),
         ) {
             Ok(c) => c,
             Err(e) => {
-                error!("Failed to connect to MIDI device: {}", e);
+                error!("Failed to connect to MIDI device: {e}");
                 return;
             }
         };
 
-        info!("Connected to MIDI device: {}", device_name);
+        info!("Connected to MIDI device: {device_name}");
         self.connection = Some(connection);
     }
 

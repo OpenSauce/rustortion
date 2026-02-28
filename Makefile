@@ -10,15 +10,9 @@ fmt:
 clippy:
 	cargo clippy --all-targets --all-features -- \
 		-D warnings \
-		-D clippy::all
-
-clippy-pedantic:
-	cargo clippy --all-targets --all-features -- \
-		-D warnings \
 		-D clippy::all \
 		-D clippy::pedantic \
-		-D clippy::nursery \
-		-D clippy::cargo
+		-D clippy::nursery
 
 test:
 	cargo test --all-targets --all-features

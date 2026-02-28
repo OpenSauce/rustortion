@@ -20,7 +20,7 @@ pub struct ProcessHandler {
 }
 
 impl NotificationHandler {
-    pub fn new(xrun_count: Arc<AtomicU64>) -> Self {
+    pub const fn new(xrun_count: Arc<AtomicU64>) -> Self {
         Self { xrun_count }
     }
 }
@@ -57,10 +57,10 @@ impl jack::ProcessHandler for ProcessHandler {
         let input = self.ports.get_input(ps);
 
         if let Err(e) = self.audio_engine.process(input, self.buffer.as_mut_slice()) {
-            error!("Audio processing error: {}", e);
+            error!("Audio processing error: {e}");
             self.ports.silence_output(ps);
             return jack::Control::Continue;
-        };
+        }
         if self
             .audio_engine
             .process_metronome(self.metronome_buffer.as_mut_slice())
@@ -80,7 +80,7 @@ impl jack::ProcessHandler for ProcessHandler {
         self.buffer.resize(new_size, 0.0);
 
         if let Err(e) = self.audio_engine.update_buffer_size(new_size) {
-            error!("Failed to update buffer size: {}", e);
+            error!("Failed to update buffer size: {e}");
             return jack::Control::Continue;
         }
 

@@ -56,7 +56,7 @@ impl std::fmt::Display for MidiSettings {
         )?;
         writeln!(f, "Mappings:")?;
         for mapping in &self.mappings {
-            writeln!(f, "  {:?}", mapping)?;
+            writeln!(f, "  {mapping:?}")?;
         }
         Ok(())
     }
@@ -85,6 +85,7 @@ pub struct HotkeySettings {
     pub mappings: Vec<HotkeyMapping>,
 }
 
+#[allow(clippy::unsafe_derive_deserialize)] // unsafe is only for set_var, unrelated to Deserialize
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub audio: AudioSettings,
@@ -151,13 +152,13 @@ impl Settings {
         if settings_path.exists() {
             let contents =
                 fs::read_to_string(&settings_path).context("Failed to read settings file")?;
-            let settings: Settings =
+            let settings: Self =
                 serde_json::from_str(&contents).context("Failed to parse settings")?;
-            debug!("Loaded settings from {:?}", settings_path);
+            debug!("Loaded settings from {}", settings_path.display());
             Ok(settings)
         } else {
             info!("No settings file found, using defaults");
-            let settings = Settings::default();
+            let settings = Self::default();
             // Try to save defaults, but don't fail if we can't
             let _ = settings.save();
             Ok(settings)
@@ -176,7 +177,7 @@ impl Settings {
 
         fs::write(&settings_path, json).context("Failed to write settings file")?;
 
-        debug!("Saved settings to {:?}", settings_path);
+        debug!("Saved settings to {}", settings_path.display());
         Ok(())
     }
 

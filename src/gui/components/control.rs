@@ -21,13 +21,13 @@ const STAGE_TYPES: &[StageType] = &[
 ];
 
 impl Control {
-    pub fn new(selected_stage_type: StageType) -> Self {
+    pub const fn new(selected_stage_type: StageType) -> Self {
         Self {
             selected_stage_type,
         }
     }
 
-    pub fn set_selected_stage_type(&mut self, ty: StageType) {
+    pub const fn set_selected_stage_type(&mut self, ty: StageType) {
         self.selected_stage_type = ty;
     }
 
@@ -87,7 +87,7 @@ impl Control {
             .into()
     }
 
-    pub fn selected(&self) -> StageType {
+    pub const fn selected(&self) -> StageType {
         self.selected_stage_type
     }
 }

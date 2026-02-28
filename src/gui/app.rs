@@ -94,10 +94,7 @@ impl AmplifierApp {
         // Try to connect to saved MIDI controller
         if let Some(controller_name) = &settings.midi.controller_name {
             midi_handler.connect(controller_name);
-            debug!(
-                "Attempting to reconnect to MIDI controller: {}",
-                controller_name
-            );
+            debug!("Attempting to reconnect to MIDI controller: {controller_name}");
         }
 
         // Set the global language from settings
@@ -179,7 +176,7 @@ impl AmplifierApp {
         }
     }
 
-    pub fn theme(&self) -> Theme {
+    pub const fn theme(&self) -> Theme {
         Theme::TokyoNight
     }
 
@@ -283,7 +280,7 @@ impl AmplifierApp {
                     .engine()
                     .start_recording(sample_rate, recording_dir)
                 {
-                    error!("Failed to start recording: {}", e);
+                    error!("Failed to start recording: {e}");
                 } else {
                     self.is_recording = true;
                     debug!("Recording started");
@@ -397,7 +394,7 @@ impl AmplifierApp {
 
                 // Check against hotkey mappings
                 if let Some(preset_name) = self.hotkey_handler.check_mapping(&key, modifiers) {
-                    debug!("Hotkey triggered preset: {}", preset_name);
+                    debug!("Hotkey triggered preset: {preset_name}");
                     return Task::done(Message::Preset(PresetMessage::Select(preset_name)));
                 }
             }
@@ -410,7 +407,7 @@ impl AmplifierApp {
             Message::Preset(msg) => {
                 match msg.clone() {
                     PresetMessage::Select(name) | PresetMessage::Save(name) => {
-                        self.settings.selected_preset = Some(name.clone());
+                        self.settings.selected_preset = Some(name);
                         self.save_settings();
                     }
                     PresetMessage::Delete(deleted_name) => {
@@ -439,7 +436,7 @@ impl AmplifierApp {
         !self.collapsed_stages.is_empty() && self.collapsed_stages.iter().all(|&c| c)
     }
 
-    fn any_dialog_visible(&self) -> bool {
+    const fn any_dialog_visible(&self) -> bool {
         self.settings_handler.is_visible()
             || self.tuner_handler.is_visible()
             || self.midi_handler.is_visible()

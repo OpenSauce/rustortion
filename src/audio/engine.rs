@@ -158,22 +158,22 @@ impl Engine {
                         && let Some(name) = ir_name
                     {
                         if let Err(e) = cab.select_ir(&name) {
-                            error!("Failed to set IR: {}", e);
+                            error!("Failed to set IR: {e}");
                         } else {
-                            debug!("IR Cabinet set to: {}", name);
+                            debug!("IR Cabinet set to: {name}");
                         }
                     }
                 }
                 EngineMessage::SetIrBypass(bypass) => {
                     if let Some(ref mut cab) = self.ir_cabinet {
                         cab.set_bypass(bypass);
-                        debug!("IR Cabinet bypass: {}", bypass);
+                        debug!("IR Cabinet bypass: {bypass}");
                     }
                 }
                 EngineMessage::SetIrGain(gain) => {
                     if let Some(ref mut cab) = self.ir_cabinet {
                         cab.set_gain(gain);
-                        debug!("IR Cabinet gain: {}", gain);
+                        debug!("IR Cabinet gain: {gain}");
                     }
                 }
                 EngineMessage::SetTunerEnabled(enabled) => {
@@ -209,10 +209,10 @@ impl Engine {
                         debug!("Pitch shift disabled (bypass)");
                     } else if let Some(ref mut shifter) = self.pitch_shifter {
                         shifter.set_semitones(semitones as f32);
-                        debug!("Pitch shift set to {} semitones", semitones);
+                        debug!("Pitch shift set to {semitones} semitones");
                     } else {
                         self.pitch_shifter = Some(PitchShifter::new(semitones as f32));
-                        debug!("Pitch shift set to {} semitones", semitones);
+                        debug!("Pitch shift set to {semitones} semitones");
                     }
                 }
             }

@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic, clippy::nursery)]
+
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use std::hint::black_box;
 
@@ -69,7 +71,7 @@ fn bench_engine_throughput(c: &mut Criterion) {
     for &oversample in &[1.0, 4.0, 8.0] {
         group.throughput(Throughput::Elements(BUFFER_SIZE as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}x", oversample)),
+            BenchmarkId::from_parameter(format!("{oversample}x")),
             &oversample,
             |b, &oversample| {
                 let (mut engine, _) = build_engine(oversample, BUFFER_SIZE, None);
@@ -94,7 +96,7 @@ fn bench_engine_with_ir_cabinet(c: &mut Criterion) {
 
     for &oversample in &[1.0, 4.0, 8.0] {
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{}x", oversample)),
+            BenchmarkId::from_parameter(format!("{oversample}x")),
             &oversample,
             |b, &oversample| {
                 let (tuner, _) = Tuner::new(SAMPLE_RATE);
@@ -125,7 +127,7 @@ fn bench_engine_ir_lengths(c: &mut Criterion) {
 
     for &ir_length in &[1_000, 13_000, 34_000, 87_000] {
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{} samples", ir_length)),
+            BenchmarkId::from_parameter(format!("{ir_length} samples")),
             &ir_length,
             |b, &ir_length| {
                 let (mut engine, _) = build_engine(OVERSAMPLE, BUFFER_SIZE, Some(ir_length));

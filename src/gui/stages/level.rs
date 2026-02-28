@@ -23,11 +23,11 @@ impl Default for LevelConfig {
 }
 
 impl LevelConfig {
-    pub fn to_stage(&self, _sample_rate: f32) -> LevelStage {
+    pub const fn to_stage(&self, _sample_rate: f32) -> LevelStage {
         LevelStage::new(self.gain)
     }
 
-    pub fn apply(&mut self, msg: LevelMessage) {
+    pub const fn apply(&mut self, msg: LevelMessage) {
         match msg {
             LevelMessage::GainChanged(v) => self.gain = v,
         }

@@ -29,11 +29,11 @@ impl TunerDisplay {
         self.info = TunerInfo::default();
     }
 
-    pub fn hide(&mut self) {
+    pub const fn hide(&mut self) {
         self.show_dialog = false;
     }
 
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.show_dialog
     }
 
@@ -157,9 +157,9 @@ impl TunerDisplay {
             let bar_str: String = bar.iter().collect();
 
             let cents_text = if cents >= 0.0 {
-                format!("+{:.0}¢", cents)
+                format!("+{cents:.0}¢")
             } else {
-                format!("{:.0}¢", cents)
+                format!("{cents:.0}¢")
             };
 
             let color = if cents.abs() < 5.0 {

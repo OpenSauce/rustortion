@@ -16,39 +16,39 @@ pub enum Convolver {
 
 impl Convolver {
     pub fn new_fir(max_ir_length: usize) -> Self {
-        Convolver::Fir(FirConvolver::new(max_ir_length))
+        Self::Fir(FirConvolver::new(max_ir_length))
     }
 
     pub fn new_two_stage() -> Self {
-        Convolver::TwoStage(TwoStageConvolver::new())
+        Self::TwoStage(TwoStageConvolver::new())
     }
 
     pub fn set_ir(&mut self, ir: &[f32]) -> Result<()> {
         match self {
-            Convolver::Fir(c) => c.set_ir(ir),
-            Convolver::TwoStage(c) => c.set_ir(ir),
+            Self::Fir(c) => c.set_ir(ir),
+            Self::TwoStage(c) => c.set_ir(ir),
         }
     }
 
     #[inline]
     pub fn process_sample(&mut self, input: f32) -> f32 {
         match self {
-            Convolver::Fir(c) => c.process_sample(input),
-            Convolver::TwoStage(c) => c.process_sample(input),
+            Self::Fir(c) => c.process_sample(input),
+            Self::TwoStage(c) => c.process_sample(input),
         }
     }
 
     pub fn process_block(&mut self, samples: &mut [f32]) {
         match self {
-            Convolver::Fir(c) => c.process_block(samples),
-            Convolver::TwoStage(c) => c.process_block(samples),
+            Self::Fir(c) => c.process_block(samples),
+            Self::TwoStage(c) => c.process_block(samples),
         }
     }
 
     pub fn reset(&mut self) {
         match self {
-            Convolver::Fir(c) => c.reset(),
-            Convolver::TwoStage(c) => c.reset(),
+            Self::Fir(c) => c.reset(),
+            Self::TwoStage(c) => c.reset(),
         }
     }
 }

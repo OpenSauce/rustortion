@@ -58,9 +58,9 @@ impl LR4Filter {
         let a0 = 1.0 + alpha;
 
         if self.is_highpass {
-            self.b0 = ((1.0 + cos_omega) / 2.0) / a0;
+            self.b0 = f32::midpoint(1.0, cos_omega) / a0;
             self.b1 = (-(1.0 + cos_omega)) / a0;
-            self.b2 = ((1.0 + cos_omega) / 2.0) / a0;
+            self.b2 = f32::midpoint(1.0, cos_omega) / a0;
         } else {
             self.b0 = ((1.0 - cos_omega) / 2.0) / a0;
             self.b1 = (1.0 - cos_omega) / a0;
@@ -73,18 +73,28 @@ impl LR4Filter {
     #[inline]
     fn process(&mut self, input: f32) -> f32 {
         // First biquad
-        let y1 = self.b0 * input + self.b1 * self.x1_1 + self.b2 * self.x2_1
-            - self.a1 * self.y1_1
-            - self.a2 * self.y2_1;
+        let y1 = self.a2.mul_add(
+            -self.y2_1,
+            self.a1.mul_add(
+                -self.y1_1,
+                self.b2
+                    .mul_add(self.x2_1, self.b0.mul_add(input, self.b1 * self.x1_1)),
+            ),
+        );
         self.x2_1 = self.x1_1;
         self.x1_1 = input;
         self.y2_1 = self.y1_1;
         self.y1_1 = y1;
 
         // Second biquad (cascade)
-        let y2 = self.b0 * y1 + self.b1 * self.x1_2 + self.b2 * self.x2_2
-            - self.a1 * self.y1_2
-            - self.a2 * self.y2_2;
+        let y2 = self.a2.mul_add(
+            -self.y2_2,
+            self.a1.mul_add(
+                -self.y1_2,
+                self.b2
+                    .mul_add(self.x2_2, self.b0.mul_add(y1, self.b1 * self.x1_2)),
+            ),
+        );
         self.x2_2 = self.x1_2;
         self.x1_2 = y1;
         self.y2_2 = self.y1_2;
@@ -98,7 +108,7 @@ impl LR4Filter {
 #[inline]
 fn saturate(input: f32, drive: f32) -> f32 {
     // Drive scales from 1.0 (clean) to ~10 (heavy saturation)
-    let drive_scaled = 1.0 + drive * 9.0;
+    let drive_scaled = drive.mul_add(9.0, 1.0);
     let x = input * drive_scaled;
     // Soft clipping bounded to (-1, 1)
     x / (1.0 + x.abs())
@@ -218,19 +228,19 @@ impl Stage for MultibandSaturatorStage {
         // Apply saturation with envelope-based gain compensation
         // This helps maintain consistent apparent loudness
         let low_sat = if low_env > 0.0001 {
-            saturate(low / (1.0 + low_env), self.low_drive) * (1.0 + low_env * 0.5)
+            saturate(low / (1.0 + low_env), self.low_drive) * low_env.mul_add(0.5, 1.0)
         } else {
             saturate(low, self.low_drive)
         };
 
         let mid_sat = if mid_env > 0.0001 {
-            saturate(mid / (1.0 + mid_env), self.mid_drive) * (1.0 + mid_env * 0.5)
+            saturate(mid / (1.0 + mid_env), self.mid_drive) * mid_env.mul_add(0.5, 1.0)
         } else {
             saturate(mid, self.mid_drive)
         };
 
         let high_sat = if high_env > 0.0001 {
-            saturate(high / (1.0 + high_env), self.high_drive) * (1.0 + high_env * 0.5)
+            saturate(high / (1.0 + high_env), self.high_drive) * high_env.mul_add(0.5, 1.0)
         } else {
             saturate(high, self.high_drive)
         };
@@ -457,9 +467,13 @@ mod tests {
         for i in 0..num_samples {
             let t = i as f32 / 48000.0;
             // Mix of frequencies across all bands, small amplitude
-            let input = 0.00001 * (2.0 * PI * 100.0 * t).sin() // low band
-                      + 0.00001 * (2.0 * PI * 800.0 * t).sin() // mid band
-                      + 0.00001 * (2.0 * PI * 4000.0 * t).sin(); // high band
+            let input = 0.00001f32.mul_add(
+                (2.0 * PI * 100.0 * t).sin(),
+                0.00001f32.mul_add(
+                    (2.0 * PI * 800.0 * t).sin(),
+                    0.00001 * (2.0 * PI * 4000.0 * t).sin(),
+                ),
+            ); // low + mid + high band
 
             let output = stage.process(input);
 

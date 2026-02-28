@@ -19,7 +19,7 @@ pub struct Preset {
     pub pitch_shift_semitones: i32,
 }
 
-fn default_ir_gain() -> f32 {
+const fn default_ir_gain() -> f32 {
     0.1
 }
 
@@ -38,7 +38,7 @@ impl Default for Preset {
 }
 
 impl Preset {
-    pub fn new(
+    pub const fn new(
         name: String,
         stages: Vec<StageConfig>,
         ir_name: Option<String>,

@@ -39,20 +39,20 @@ impl Recorder {
         drop(self.recorder_sender);
         self.handle
             .join()
-            .map_err(|e| anyhow::anyhow!("Writer thread panicked (join failed): {:?}", e))
+            .map_err(|e| anyhow::anyhow!("Writer thread panicked (join failed): {e:?}"))
     }
 
     /// Record block takes a slice of f32 samples and sends them to the writer thread.
     pub fn record_block(&self, samples: &[f32]) -> Result<()> {
         let mut block = AudioBlock::with_capacity(samples.len() * 2);
-        for sample in samples.iter() {
+        for sample in samples {
             let v = (sample * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
             block.push(v);
             block.push(v);
         }
         self.recorder_sender
             .send(block)
-            .map_err(|e| anyhow::anyhow!("Failed to send audio block on channel: {}", e))
+            .map_err(|e| anyhow::anyhow!("Failed to send audio block on channel: {e}"))
     }
 }
 
@@ -130,7 +130,7 @@ mod tests {
 
         let entries = std::fs::read_dir(record_dir)?;
         let wav_file = entries
-            .filter_map(|e| e.ok())
+            .filter_map(std::result::Result::ok)
             .find(|e| e.path().extension().and_then(|s| s.to_str()) == Some("wav"))
             .expect("No WAV file found");
 
@@ -153,9 +153,7 @@ mod tests {
 
         assert!(
             sample_diff < tolerance as i32,
-            "Duration mismatch: {} samples (expected within {})",
-            sample_diff,
-            tolerance
+            "Duration mismatch: {sample_diff} samples (expected within {tolerance})"
         );
 
         let mut mono_samples = Vec::with_capacity(recorded_samples);
@@ -181,8 +179,7 @@ mod tests {
         let freq_error_percent = ((measured_freq - TEST_FREQ) / TEST_FREQ * 100.0).abs();
         assert!(
             freq_error_percent < 0.5,
-            "Frequency error too large: {:.4}%",
-            freq_error_percent
+            "Frequency error too large: {freq_error_percent:.4}%"
         );
 
         let num_segments = 10;
@@ -216,8 +213,7 @@ mod tests {
 
         assert!(
             drift_percent < 0.2,
-            "Timing drift detected: {:.4}% (sample rate issue?)",
-            drift_percent
+            "Timing drift detected: {drift_percent:.4}% (sample rate issue?)"
         );
 
         let mut channel_diff = 0u64;

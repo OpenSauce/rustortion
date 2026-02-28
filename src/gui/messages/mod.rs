@@ -67,30 +67,30 @@ pub enum Message {
 
 impl From<PresetMessage> for Message {
     fn from(msg: PresetMessage) -> Self {
-        Message::Preset(msg)
+        Self::Preset(msg)
     }
 }
 
 impl From<HotkeyMessage> for Message {
     fn from(msg: HotkeyMessage) -> Self {
-        Message::Hotkey(msg)
+        Self::Hotkey(msg)
     }
 }
 
 impl From<MidiMessage> for Message {
     fn from(msg: MidiMessage) -> Self {
-        Message::Midi(msg)
+        Self::Midi(msg)
     }
 }
 
 impl From<SettingsMessage> for Message {
     fn from(msg: SettingsMessage) -> Self {
-        Message::Settings(msg)
+        Self::Settings(msg)
     }
 }
 
 impl From<TunerMessage> for Message {
     fn from(msg: TunerMessage) -> Self {
-        Message::Tuner(msg)
+        Self::Tuner(msg)
     }
 }

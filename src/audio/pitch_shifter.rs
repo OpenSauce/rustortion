@@ -8,7 +8,7 @@ use rustfft::num_complex::Complex;
 fn lerp_phase(ph0: f64, ph1: f64, t: f64) -> f64 {
     let mut d = ph1 - ph0;
     d -= (d / (2.0 * PI)).round() * 2.0 * PI;
-    ph0 + d * t
+    d.mul_add(t, ph0)
 }
 
 const FFT_SIZE: usize = 2048;
@@ -68,7 +68,7 @@ pub struct PitchShifter {
 
 impl PitchShifter {
     pub fn new(semitones: f32) -> Self {
-        let ratio = (2.0_f64).powf(semitones as f64 / 12.0);
+        let ratio = (semitones as f64 / 12.0).exp2();
 
         let mut planner = RealFftPlanner::<f32>::new();
         let r2c = planner.plan_fft_forward(FFT_SIZE);
@@ -129,7 +129,7 @@ impl PitchShifter {
 
     /// Update the pitch ratio without reallocating buffers.
     pub fn set_semitones(&mut self, semitones: f32) {
-        self.ratio = (2.0_f64).powf(semitones as f64 / 12.0);
+        self.ratio = (semitones as f64 / 12.0).exp2();
         self.last_phase.fill(0.0);
         self.accum_phase.fill(0.0);
         self.first_frame = true;
@@ -185,14 +185,14 @@ impl PitchShifter {
             let mag = re.hypot(im);
             let phase = im.atan2(re);
 
-            let mut diff = phase - self.last_phase[k] - k as f64 * expected_step;
+            let mut diff = (k as f64).mul_add(-expected_step, phase - self.last_phase[k]);
             self.last_phase[k] = phase;
 
             // Wrap to [-π, π]
             diff -= (diff / (2.0 * PI)).round() * 2.0 * PI;
 
             self.analysis_mag[k] = mag;
-            self.analysis_freq[k] = k as f64 * expected_step + diff;
+            self.analysis_freq[k] = (k as f64).mul_add(expected_step, diff);
             self.analysis_phase[k] = phase;
         }
 
@@ -209,10 +209,10 @@ impl PitchShifter {
 
             let frac = source - src_k as f64;
 
-            let mag = self.analysis_mag[src_k]
-                + (self.analysis_mag[src_k + 1] - self.analysis_mag[src_k]) * frac;
-            let freq = (self.analysis_freq[src_k]
-                + (self.analysis_freq[src_k + 1] - self.analysis_freq[src_k]) * frac)
+            let mag = (self.analysis_mag[src_k + 1] - self.analysis_mag[src_k])
+                .mul_add(frac, self.analysis_mag[src_k]);
+            let freq = (self.analysis_freq[src_k + 1] - self.analysis_freq[src_k])
+                .mul_add(frac, self.analysis_freq[src_k])
                 * self.ratio;
 
             if self.first_frame {
@@ -307,7 +307,7 @@ impl PitchShifter {
         let max_mag = self
             .shifted_mag
             .iter()
-            .cloned()
+            .copied()
             .fold(0.0_f64, f64::max)
             .max(1e-12);
         let thresh = max_mag * 0.02;

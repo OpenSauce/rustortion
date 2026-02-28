@@ -48,14 +48,14 @@ impl Manager {
         let ir_cabinet = match IrCabinet::new(Path::new(&settings.ir_dir), sample_rate) {
             Ok(cab) => Some(cab),
             Err(e) => {
-                warn!("Failed to load IR Cabinet: {}", e);
+                warn!("Failed to load IR Cabinet: {e}");
                 None
             }
         };
 
         let available_irs = ir_cabinet
             .as_ref()
-            .map(|c| c.available_ir_names())
+            .map(IrCabinet::available_ir_names)
             .unwrap_or_default();
 
         let (engine, engine_handle) =
@@ -70,7 +70,7 @@ impl Manager {
             .activate_async(notification_handler, jack_handler)
             .context("failed to activate async client")?;
 
-        let mut manager = Self {
+        let manager = Self {
             active_client,
             current_settings: settings.clone(),
             tuner_handle,
@@ -86,7 +86,7 @@ impl Manager {
     }
 
     /// Connect audio ports based on settings
-    fn connect_ports(&mut self, settings: &AudioSettings) {
+    fn connect_ports(&self, settings: &AudioSettings) {
         let client = self.active_client.as_client();
 
         try_connect(client, &settings.input_port, "rustortion:in_port");
@@ -107,15 +107,15 @@ impl Manager {
         );
     }
 
-    pub fn engine(&self) -> &EngineHandle {
+    pub const fn engine(&self) -> &EngineHandle {
         &self.engine_handle
     }
 
-    pub fn tuner(&self) -> &TunerHandle {
+    pub const fn tuner(&self) -> &TunerHandle {
         &self.tuner_handle
     }
 
-    pub fn peak_meter(&self) -> &PeakMeterHandle {
+    pub const fn peak_meter(&self) -> &PeakMeterHandle {
         &self.peak_meter_handle
     }
 

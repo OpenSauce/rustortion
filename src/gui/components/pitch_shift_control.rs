@@ -60,7 +60,7 @@ impl PitchShiftControl {
         self.semitones = semitones.clamp(-12, 12);
     }
 
-    pub fn get_semitones(&self) -> i32 {
+    pub const fn get_semitones(&self) -> i32 {
         self.semitones
     }
 

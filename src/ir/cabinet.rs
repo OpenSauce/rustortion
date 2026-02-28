@@ -7,7 +7,7 @@ use crate::ir::convolver::Convolver;
 use crate::ir::loader::IrLoader;
 
 /// Configuration for convolver type
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ConvolverType {
     #[default]
     Fir,
@@ -52,8 +52,7 @@ impl IrCabinet {
         };
 
         debug!(
-            "IrCabinet created: {:?} convolver, max {}ms ({} samples)",
-            convolver_type, max_ir_ms, max_ir_samples
+            "IrCabinet created: {convolver_type:?} convolver, max {max_ir_ms}ms ({max_ir_samples} samples)"
         );
 
         Ok(Self {
@@ -154,15 +153,15 @@ impl IrCabinet {
         }
     }
 
-    pub fn is_bypassed(&self) -> bool {
+    pub const fn is_bypassed(&self) -> bool {
         self.bypassed
     }
 
-    pub fn set_gain(&mut self, gain: f32) {
+    pub const fn set_gain(&mut self, gain: f32) {
         self.output_gain = gain.clamp(0.0, 2.0);
     }
 
-    pub fn gain(&self) -> f32 {
+    pub const fn gain(&self) -> f32 {
         self.output_gain
     }
 }

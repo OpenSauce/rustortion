@@ -44,7 +44,7 @@ impl NoiseGateConfig {
         )
     }
 
-    pub fn apply(&mut self, msg: NoiseGateMessage) {
+    pub const fn apply(&mut self, msg: NoiseGateMessage) {
         match msg {
             NoiseGateMessage::ThresholdChanged(v) => self.threshold_db = v,
             NoiseGateMessage::RatioChanged(v) => self.ratio = v,

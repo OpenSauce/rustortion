@@ -1,3 +1,5 @@
+#![allow(clippy::missing_errors_doc)]
+
 use anyhow::Result;
 use log::info;
 use rustortion::gui::start;
@@ -7,7 +9,7 @@ pub fn main() -> Result<()> {
     dotenv::dotenv().ok();
 
     let settings = Settings::load().unwrap_or_else(|e| {
-        info!("Could not load settings, using defaults: {}", e);
+        info!("Could not load settings, using defaults: {e}");
         Settings::default()
     });
 
@@ -16,19 +18,19 @@ pub fn main() -> Result<()> {
     env_logger::init();
 
     info!(
-        r#"
-__________                __                 __  .__               
-\______   \__ __  _______/  |_  ____________/  |_|__| ____   ____  
- |       _/  |  \/  ___/\   __\/  _ \_  __ \   __\  |/  _ \ /    \ 
+        r"
+__________                __                 __  .__
+\______   \__ __  _______/  |_  ____________/  |_|__| ____   ____
+ |       _/  |  \/  ___/\   __\/  _ \_  __ \   __\  |/  _ \ /    \
  |    |   \  |  /\___ \  |  | (  <_> )  | \/|  | |  (  <_> )   |  \
  |____|_  /____//____  > |__|  \____/|__|   |__| |__|\____/|___|  /
-        \/           \/                                         \/ 
-    "#
+        \/           \/                                         \/
+    "
     );
     info!("v{}", env!("CARGO_PKG_VERSION"));
-    info!("{}", settings);
+    info!("{settings}");
 
-    start(settings).map_err(|e| anyhow::anyhow!("GUI error: {}", e))?;
+    start(settings).map_err(|e| anyhow::anyhow!("GUI error: {e}"))?;
 
     Ok(())
 }

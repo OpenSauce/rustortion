@@ -34,7 +34,7 @@ impl PreampConfig {
         PreampStage::new(self.gain, self.bias, self.clipper_type, sample_rate)
     }
 
-    pub fn apply(&mut self, msg: PreampMessage) {
+    pub const fn apply(&mut self, msg: PreampMessage) {
         match msg {
             PreampMessage::GainChanged(v) => self.gain = v,
             PreampMessage::BiasChanged(v) => self.bias = v,

@@ -13,7 +13,7 @@ pub struct HotkeyHandler {
 }
 
 impl HotkeyHandler {
-    pub fn new(settings: HotkeySettings) -> Self {
+    pub const fn new(settings: HotkeySettings) -> Self {
         Self {
             dialog: HotkeyDialog::new(),
             settings,
@@ -59,11 +59,11 @@ impl HotkeyHandler {
         self.dialog.on_key_input(key, modifiers);
     }
 
-    pub fn is_learning(&self) -> bool {
+    pub const fn is_learning(&self) -> bool {
         self.dialog.is_learning()
     }
 
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.dialog.is_visible()
     }
 
@@ -76,7 +76,7 @@ impl HotkeyHandler {
             .map(|m| m.preset_name.clone())
     }
 
-    pub fn settings(&self) -> &HotkeySettings {
+    pub const fn settings(&self) -> &HotkeySettings {
         &self.settings
     }
 

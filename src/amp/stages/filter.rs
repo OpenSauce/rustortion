@@ -3,7 +3,7 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use std::f32::consts::PI;
 
-#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(ValueEnum, Copy, Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum FilterType {
     Highpass,
     Lowpass,
@@ -12,8 +12,8 @@ pub enum FilterType {
 impl std::fmt::Display for FilterType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            FilterType::Highpass => write!(f, "{}", crate::tr!(filter_highpass)),
-            FilterType::Lowpass => write!(f, "{}", crate::tr!(filter_lowpass)),
+            Self::Highpass => write!(f, "{}", crate::tr!(filter_highpass)),
+            Self::Lowpass => write!(f, "{}", crate::tr!(filter_lowpass)),
         }
     }
 }
@@ -72,7 +72,9 @@ impl Stage for FilterStage {
             }
             FilterType::Lowpass => {
                 // First-order lowpass filter
-                let output = self.prev_output + self.alpha * (input - self.prev_output);
+                let output = self
+                    .alpha
+                    .mul_add(input - self.prev_output, self.prev_output);
                 self.prev_output = output;
                 output
             }

@@ -53,7 +53,7 @@ impl Tuner {
         }
     }
 
-    pub fn is_enabled(&self) -> bool {
+    pub const fn is_enabled(&self) -> bool {
         self.enabled
     }
 
@@ -116,7 +116,7 @@ impl From<Option<f32>> for TunerInfo {
                 let (note, octave, cents) = freq_to_note(f);
                 Self {
                     frequency: Some(f),
-                    note: Some(format!("{}{}", note, octave)),
+                    note: Some(format!("{note}{octave}")),
                     cents_off: Some(cents),
                     in_tune: cents.abs() < 5.0,
                 }

@@ -49,7 +49,7 @@ impl Samplers {
         })
     }
 
-    pub fn get_oversample_factor(&self) -> f64 {
+    pub const fn get_oversample_factor(&self) -> f64 {
         self.oversample_factor
     }
 

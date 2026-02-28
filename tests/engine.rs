@@ -1,3 +1,5 @@
+#![allow(clippy::pedantic, clippy::nursery)]
+
 use anyhow::Result;
 use rustortion::amp::chain::AmplifierChain;
 use rustortion::amp::stages::level::LevelStage;
@@ -133,9 +135,7 @@ fn engine_applies_amp_chain() -> Result<()> {
     assert!(baseline_rms > 0.0, "expected non-zero baseline output");
     assert!(
         chain_rms < baseline_rms,
-        "expected 0.5x level to attenuate: baseline_rms={}, chain_rms={}",
-        baseline_rms,
-        chain_rms
+        "expected 0.5x level to attenuate: baseline_rms={baseline_rms}, chain_rms={chain_rms}"
     );
 
     Ok(())
@@ -188,9 +188,7 @@ fn samplers_preserve_tone_signal() -> Result<()> {
         let preservation_ratio = downsampled_rms / input_rms;
         assert!(
             preservation_ratio > 0.8 && preservation_ratio < 1.2,
-            "{}x oversample: signal not preserved, got ratio {:.4}",
-            oversample,
-            preservation_ratio
+            "{oversample}x oversample: signal not preserved, got ratio {preservation_ratio:.4}"
         );
     }
 

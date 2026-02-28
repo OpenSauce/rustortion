@@ -78,7 +78,7 @@ impl FirConvolver {
     }
 
     /// Returns the current IR length
-    pub fn ir_length(&self) -> usize {
+    pub const fn ir_length(&self) -> usize {
         self.coefficients.len()
     }
 }
