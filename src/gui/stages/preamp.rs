@@ -65,10 +65,11 @@ const CLIPPER_TYPES: [ClipperType; 5] = [
 pub fn view(
     idx: usize,
     cfg: &PreampConfig,
-    total_stages: usize,
     is_collapsed: bool,
+    can_move_up: bool,
+    can_move_down: bool,
 ) -> Element<'_, Message> {
-    stage_card(tr!(stage_preamp), idx, total_stages, is_collapsed, || {
+    stage_card(tr!(stage_preamp), idx, is_collapsed, can_move_up, can_move_down, || {
         let clipper_picker = row![
             text(tr!(clipper)).width(Length::FillPortion(3)),
             pick_list(CLIPPER_TYPES, Some(cfg.clipper_type), move |t| {

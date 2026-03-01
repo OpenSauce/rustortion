@@ -39,8 +39,9 @@ pub fn icon_button(
 pub fn stage_header(
     stage_name: &str,
     idx: usize,
-    total_stages: usize,
     is_collapsed: bool,
+    can_move_up: bool,
+    can_move_down: bool,
 ) -> Element<'_, Message> {
     let header_text = format!("{} {}", stage_name, idx + 1);
 
@@ -51,7 +52,7 @@ pub fn stage_header(
         iced::widget::button::secondary,
     );
 
-    let move_up_btn = if idx > 0 {
+    let move_up_btn = if can_move_up {
         icon_button(
             "↑",
             Some(Message::MoveStageUp(idx)),
@@ -61,7 +62,7 @@ pub fn stage_header(
         icon_button("↑", None, iced::widget::button::secondary)
     };
 
-    let move_down_btn = if idx < total_stages.saturating_sub(1) {
+    let move_down_btn = if can_move_down {
         icon_button(
             "↓",
             Some(Message::MoveStageDown(idx)),
@@ -92,11 +93,12 @@ pub fn stage_header(
 pub fn stage_card<'a>(
     stage_name: &'a str,
     idx: usize,
-    total_stages: usize,
     is_collapsed: bool,
+    can_move_up: bool,
+    can_move_down: bool,
     body: impl FnOnce() -> Element<'a, Message>,
 ) -> Element<'a, Message> {
-    let header = stage_header(stage_name, idx, total_stages, is_collapsed);
+    let header = stage_header(stage_name, idx, is_collapsed, can_move_up, can_move_down);
 
     let mut content = column![header].spacing(5);
 

@@ -96,9 +96,9 @@ macro_rules! stage_registry {
                 }
             }
 
-            pub fn view(&self, idx: usize, total_stages: usize, is_collapsed: bool) -> Element<'_, Message> {
+            pub fn view(&self, idx: usize, is_collapsed: bool, can_move_up: bool, can_move_down: bool) -> Element<'_, Message> {
                 match self {
-                    $( StageConfig::$Variant(cfg) => $module::view(idx, cfg, total_stages, is_collapsed), )+
+                    $( StageConfig::$Variant(cfg) => $module::view(idx, cfg, is_collapsed, can_move_up, can_move_down), )+
                 }
             }
 

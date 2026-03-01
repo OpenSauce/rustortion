@@ -78,14 +78,16 @@ const TONE_STACK_MODELS: [ToneStackModel; 4] = [
 pub fn view(
     idx: usize,
     cfg: &ToneStackConfig,
-    total_stages: usize,
     is_collapsed: bool,
+    can_move_up: bool,
+    can_move_down: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_tone_stack),
         idx,
-        total_stages,
         is_collapsed,
+        can_move_up,
+        can_move_down,
         || {
             let model_picker = row![
                 text(tr!(model)).width(Length::FillPortion(3)),

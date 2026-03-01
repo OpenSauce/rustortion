@@ -56,14 +56,16 @@ pub enum DelayMessage {
 pub fn view(
     idx: usize,
     cfg: &DelayConfig,
-    total_stages: usize,
     is_collapsed: bool,
+    can_move_up: bool,
+    can_move_down: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_delay),
         idx,
-        total_stages,
         is_collapsed,
+        can_move_up,
+        can_move_down,
         || {
             column![
                 labeled_slider(

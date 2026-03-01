@@ -171,12 +171,11 @@ fn migrate_preset(value: &mut serde_json::Value) {
 
     obj.insert(
         "stages".to_string(),
-        serde_json::to_value(non_filter_stages).unwrap(),
+        serde_json::Value::Array(non_filter_stages),
     );
-    obj.insert(
-        "input_filters".to_string(),
-        serde_json::to_value(input_filters).unwrap(),
-    );
+    if let Ok(filters_value) = serde_json::to_value(input_filters) {
+        obj.insert("input_filters".to_string(), filters_value);
+    }
 }
 
 /// Enforce stage ordering: Amp stages first, then Effect stages.

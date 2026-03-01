@@ -303,10 +303,16 @@ impl AmplifierApp {
         let collapse_toggle = self.view_collapse_toggle(category);
 
         let mut stage_col = column![].width(Length::Fill).spacing(5);
-        for &abs_idx in &category_indices {
+        for (pos, &abs_idx) in category_indices.iter().enumerate() {
             let is_collapsed = self.collapsed_stages.get(abs_idx).copied().unwrap_or(false);
-            stage_col =
-                stage_col.push(self.stages[abs_idx].view(abs_idx, total_in_category, is_collapsed));
+            let can_move_up = pos > 0;
+            let can_move_down = pos < total_in_category.saturating_sub(1);
+            stage_col = stage_col.push(self.stages[abs_idx].view(
+                abs_idx,
+                is_collapsed,
+                can_move_up,
+                can_move_down,
+            ));
         }
 
         // Add-stage picker at the bottom

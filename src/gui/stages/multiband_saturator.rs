@@ -86,14 +86,16 @@ pub enum MultibandSaturatorMessage {
 pub fn view(
     idx: usize,
     cfg: &MultibandSaturatorConfig,
-    total_stages: usize,
     is_collapsed: bool,
+    can_move_up: bool,
+    can_move_down: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_multiband_saturator),
         idx,
-        total_stages,
         is_collapsed,
+        can_move_up,
+        can_move_down,
         || {
             let crossover_section = column![
                 text(tr!(crossover)).size(14),
