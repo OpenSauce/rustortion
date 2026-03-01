@@ -9,17 +9,6 @@ pub struct Control {
     selected_stage_type: StageType,
 }
 
-const STAGE_TYPES: &[StageType] = &[
-    StageType::Filter,
-    StageType::Preamp,
-    StageType::Compressor,
-    StageType::ToneStack,
-    StageType::PowerAmp,
-    StageType::Level,
-    StageType::NoiseGate,
-    StageType::MultibandSaturator,
-];
-
 impl Control {
     pub const fn new(selected_stage_type: StageType) -> Self {
         Self {
@@ -40,7 +29,7 @@ impl Control {
 
         let stage_controls = row![
             pick_list(
-                STAGE_TYPES,
+                StageType::ALL,
                 Some(self.selected_stage_type),
                 Message::StageTypeSelected
             ),

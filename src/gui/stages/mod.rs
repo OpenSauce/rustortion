@@ -21,6 +21,12 @@ macro_rules! stage_registry {
             $( $Variant, )+
         }
 
+        impl StageType {
+            pub const ALL: &[Self] = &[
+                $( Self::$Variant, )+
+            ];
+        }
+
         impl Default for StageType {
             fn default() -> Self {
                 Self::$Default
@@ -93,4 +99,5 @@ stage_registry! {
     Level              => level,                LevelConfig,              LevelMessage,              stage_level;
     NoiseGate          => noise_gate,           NoiseGateConfig,          NoiseGateMessage,          stage_noise_gate;
     MultibandSaturator => multiband_saturator,  MultibandSaturatorConfig, MultibandSaturatorMessage, stage_multiband_saturator;
+    Delay              => delay,                DelayConfig,              DelayMessage,              stage_delay;
 }

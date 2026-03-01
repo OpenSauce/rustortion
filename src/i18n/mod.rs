@@ -160,6 +160,7 @@ pub struct Translations {
     pub stage_level: &'static str,
     pub stage_noise_gate: &'static str,
     pub stage_multiband_saturator: &'static str,
+    pub stage_delay: &'static str,
 
     // Stage parameters
     pub clipper: &'static str,
@@ -186,6 +187,9 @@ pub struct Translations {
     pub high_freq: &'static str,
     pub level: &'static str,
     pub crossover: &'static str,
+    pub delay_time: &'static str,
+    pub feedback: &'static str,
+    pub dry_wet: &'static str,
 
     // Filter types
     pub filter_highpass: &'static str,
@@ -331,6 +335,7 @@ pub static EN: Translations = Translations {
     stage_level: "Level",
     stage_noise_gate: "Noise Gate",
     stage_multiband_saturator: "Multiband Saturator",
+    stage_delay: "Delay",
 
     // Stage parameters
     clipper: "Clipper:",
@@ -357,6 +362,9 @@ pub static EN: Translations = Translations {
     high_freq: "High Crossover",
     level: "Level",
     crossover: "Crossover",
+    delay_time: "Delay Time",
+    feedback: "Feedback",
+    dry_wet: "Dry/Wet",
 
     // Filter types
     filter_highpass: "Highpass",
@@ -493,6 +501,7 @@ pub static ZH_CN: Translations = Translations {
     stage_level: "电平",
     stage_noise_gate: "噪声门",
     stage_multiband_saturator: "多段饱和器",
+    stage_delay: "延迟",
 
     // Stage parameters
     clipper: "削波器:",
@@ -519,6 +528,9 @@ pub static ZH_CN: Translations = Translations {
     high_freq: "高频分频点",
     level: "电平",
     crossover: "分频",
+    delay_time: "延迟时间",
+    feedback: "反馈",
+    dry_wet: "干/湿",
 
     // Filter types
     filter_highpass: "高通",
