@@ -102,9 +102,15 @@ impl AmplifierApp {
 
         let hotkey_handler = HotkeyHandler::new(settings.hotkeys.clone());
 
-        let preset_name = settings.selected_preset.as_deref().unwrap_or_default();
-        let collapsed_stages =
-            Self::restore_collapsed(&settings.collapsed_stages, preset_name, preset.stages.len());
+        // Sync settings with the actually loaded preset so collapse keys stay consistent
+        let mut settings = settings;
+        settings.selected_preset = Some(preset.name.clone());
+
+        let collapsed_stages = Self::restore_collapsed(
+            &settings.collapsed_stages,
+            &preset.name,
+            preset.stages.len(),
+        );
 
         (
             Self {
@@ -230,12 +236,15 @@ impl AmplifierApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::SetStages(stages) => {
-                let preset_name = self.settings.selected_preset.as_deref().unwrap_or_default();
-                self.collapsed_stages = Self::restore_collapsed(
-                    &self.settings.collapsed_stages,
-                    preset_name,
-                    stages.len(),
-                );
+                if let Some(preset_name) = self.settings.selected_preset.as_deref() {
+                    self.collapsed_stages = Self::restore_collapsed(
+                        &self.settings.collapsed_stages,
+                        preset_name,
+                        stages.len(),
+                    );
+                } else {
+                    self.collapsed_stages.resize(stages.len(), false);
+                }
                 self.stages = stages;
                 self.mark_stages_dirty();
             }
