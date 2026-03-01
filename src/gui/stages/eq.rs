@@ -2,7 +2,7 @@ use iced::widget::row;
 use iced::{Element, Length};
 use serde::{Deserialize, Serialize};
 
-use crate::amp::stages::eq::{BAND_FREQS, EqStage, NUM_BANDS};
+use crate::amp::stages::eq::{BAND_FREQS, EqStage, MAX_GAIN_DB, MIN_GAIN_DB, NUM_BANDS};
 use crate::gui::components::widgets::common::{
     labeled_vertical_slider, stage_card, SPACING_WIDE,
 };
@@ -35,11 +35,11 @@ impl EqConfig {
         match msg {
             EqMessage::GainChanged(band, value) => {
                 if band < NUM_BANDS {
-                    // Clamp to valid range (mirrors DSP-side validation)
-                    let clamped = if value < -12.0 {
-                        -12.0
-                    } else if value > 12.0 {
-                        12.0
+                    // Clamp to valid range (uses DSP-side constants)
+                    let clamped = if value < MIN_GAIN_DB {
+                        MIN_GAIN_DB
+                    } else if value > MAX_GAIN_DB {
+                        MAX_GAIN_DB
                     } else {
                         value
                     };
@@ -92,7 +92,7 @@ pub fn view(
             for (band, &freq) in BAND_FREQS.iter().enumerate() {
                 faders = faders.push(labeled_vertical_slider(
                     format_freq(freq),
-                    -12.0..=12.0,
+                    MIN_GAIN_DB..=MAX_GAIN_DB,
                     cfg.gains[band],
                     move |v| {
                         Message::Stage(idx, StageMessage::Eq(EqMessage::GainChanged(band, v)))

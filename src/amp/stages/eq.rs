@@ -7,18 +7,12 @@ pub const BAND_FREQS: [f64; NUM_BANDS] = [
     25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0, 1000.0, 1600.0, 2500.0, 4000.0, 6300.0,
     10000.0, 16000.0, 20000.0,
 ];
-const MIN_GAIN_DB: f32 = -12.0;
-const MAX_GAIN_DB: f32 = 12.0;
+pub const MIN_GAIN_DB: f32 = -12.0;
+pub const MAX_GAIN_DB: f32 = 12.0;
 const DENORMAL_THRESHOLD: f64 = 1e-20;
 
 /// Bandwidth in octaves: 10 octaves / 16 bands
 const BANDWIDTH: f64 = 10.0 / NUM_BANDS as f64;
-
-/// Calculate Q from bandwidth using the Audio EQ Cookbook formula:
-/// Q = 1 / (2 * sinh(ln(2)/2 * BW))
-fn bandwidth_to_q(bw: f64) -> f64 {
-    1.0 / (2.0 * (f64::ln(2.0) / 2.0 * bw).sinh())
-}
 
 /// Direct Form 1 biquad filter for peaking EQ.
 ///
@@ -57,7 +51,12 @@ impl Biquad {
     }
 
     /// Set coefficients for a peaking EQ band using Audio EQ Cookbook formulas.
-    fn set_peaking_eq(&mut self, freq: f64, gain_db: f64, q: f64, sample_rate: f64) {
+    ///
+    /// Uses the BW-in-octaves alpha formula so that every band maintains
+    /// constant-octave bandwidth regardless of its position relative to
+    /// the sample rate:
+    ///   `alpha = sin(w0) * sinh(ln(2)/2 * BW * w0/sin(w0))`
+    fn set_peaking_eq(&mut self, freq: f64, gain_db: f64, bw: f64, sample_rate: f64) {
         if gain_db.abs() < 1e-6 {
             // Unity passthrough — skip computation
             self.b0 = 1.0;
@@ -75,7 +74,10 @@ impl Biquad {
         let w0 = 2.0 * PI * freq / sample_rate;
         let cos_w0 = w0.cos();
         let sin_w0 = w0.sin();
-        let alpha = sin_w0 / (2.0 * q);
+
+        // Audio EQ Cookbook: alpha from BW in octaves
+        // alpha = sin(w0) * sinh(ln(2)/2 * BW * w0/sin(w0))
+        let alpha = sin_w0 * (f64::ln(2.0) / 2.0 * bw * w0 / sin_w0).sinh();
 
         let b0 = 1.0 + alpha * a;
         let b1 = -2.0 * cos_w0;
@@ -117,25 +119,22 @@ impl Biquad {
 pub struct EqStage {
     biquads: [Biquad; NUM_BANDS],
     gains_db: [f32; NUM_BANDS],
-    q: f64,
     sample_rate: f64,
 }
 
 impl EqStage {
     pub fn new(gains_db: [f32; NUM_BANDS], sample_rate: f32) -> Self {
-        let q = bandwidth_to_q(BANDWIDTH);
         let sr = f64::from(sample_rate);
         let mut biquads = std::array::from_fn(|_| Biquad::new());
 
         for (i, biquad) in biquads.iter_mut().enumerate() {
             let gain = gains_db[i].clamp(MIN_GAIN_DB, MAX_GAIN_DB);
-            biquad.set_peaking_eq(BAND_FREQS[i], f64::from(gain), q, sr);
+            biquad.set_peaking_eq(BAND_FREQS[i], f64::from(gain), BANDWIDTH, sr);
         }
 
         Self {
             biquads,
             gains_db: gains_db.map(|g| g.clamp(MIN_GAIN_DB, MAX_GAIN_DB)),
-            q,
             sample_rate: sr,
         }
     }
@@ -163,9 +162,9 @@ impl Stage for EqStage {
 
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         let idx =
-            Self::parse_band_index(name).ok_or("Unknown parameter (expected band_0..band_15)")?;
+            Self::parse_band_index(name).ok_or("Unknown parameter (expected band_0..=band_15)")?;
         if idx >= NUM_BANDS {
-            return Err("Band index out of range (0..15)");
+            return Err("Band index out of range (0..=15)");
         }
         if !(MIN_GAIN_DB..=MAX_GAIN_DB).contains(&value) {
             return Err("Gain must be between -12 dB and +12 dB");
@@ -174,7 +173,7 @@ impl Stage for EqStage {
         self.biquads[idx].set_peaking_eq(
             BAND_FREQS[idx],
             f64::from(value),
-            self.q,
+            BANDWIDTH,
             self.sample_rate,
         );
         Ok(())
@@ -182,9 +181,9 @@ impl Stage for EqStage {
 
     fn get_parameter(&self, name: &str) -> Result<f32, &'static str> {
         let idx =
-            Self::parse_band_index(name).ok_or("Unknown parameter (expected band_0..band_15)")?;
+            Self::parse_band_index(name).ok_or("Unknown parameter (expected band_0..=band_15)")?;
         if idx >= NUM_BANDS {
-            return Err("Band index out of range (0..15)");
+            return Err("Band index out of range (0..=15)");
         }
         Ok(self.gains_db[idx])
     }
@@ -435,12 +434,24 @@ mod tests {
     }
 
     #[test]
-    fn bandwidth_q_value() {
-        let q = bandwidth_to_q(BANDWIDTH);
-        // Expected ~2.28 for 0.625 octave bandwidth
-        assert!(
-            (q - 2.28).abs() < 0.1,
-            "Q should be approximately 2.28, got {q}"
-        );
+    fn per_band_alpha_is_finite() {
+        // Verify that alpha computation produces valid values for all bands
+        // at both standard and oversampled rates
+        for &sr in &[44100.0_f32, 48000.0, 44100.0 * 16.0] {
+            let mut gains = flat_gains();
+            gains[0] = 6.0; // low band
+            gains[15] = 6.0; // high band
+            let mut eq = EqStage::new(gains, sr);
+
+            // Process a few samples — if alpha was bad, output goes NaN quickly
+            for i in 0..1000 {
+                let input = (i as f32 * 0.01).sin();
+                let output = eq.process(input);
+                assert!(
+                    output.is_finite(),
+                    "Output must be finite at SR={sr}, sample {i}"
+                );
+            }
+        }
     }
 }
