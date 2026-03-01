@@ -1,0 +1,111 @@
+use iced::widget::row;
+use iced::{Element, Length};
+use serde::{Deserialize, Serialize};
+
+use crate::amp::stages::eq::{BAND_FREQS, EqStage, NUM_BANDS};
+use crate::gui::components::widgets::common::{
+    labeled_vertical_slider, stage_card, SPACING_WIDE,
+};
+use crate::gui::messages::Message;
+use crate::tr;
+
+use super::StageMessage;
+
+// --- Config ---
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub struct EqConfig {
+    pub gains: [f32; NUM_BANDS],
+}
+
+impl Default for EqConfig {
+    fn default() -> Self {
+        Self {
+            gains: [0.0; NUM_BANDS],
+        }
+    }
+}
+
+impl EqConfig {
+    pub fn to_stage(&self, sample_rate: f32) -> EqStage {
+        EqStage::new(self.gains, sample_rate)
+    }
+
+    pub const fn apply(&mut self, msg: EqMessage) {
+        match msg {
+            EqMessage::GainChanged(band, value) => {
+                if band < NUM_BANDS {
+                    // Clamp to valid range (mirrors DSP-side validation)
+                    let clamped = if value < -12.0 {
+                        -12.0
+                    } else if value > 12.0 {
+                        12.0
+                    } else {
+                        value
+                    };
+                    self.gains[band] = clamped;
+                }
+            }
+        }
+    }
+}
+
+// --- Message ---
+
+#[derive(Debug, Clone, Copy)]
+pub enum EqMessage {
+    GainChanged(usize, f32),
+}
+
+// --- Helpers ---
+
+fn format_freq(hz: f64) -> String {
+    if hz >= 1000.0 {
+        let k = hz / 1000.0;
+        if (k - k.round()).abs() < 0.01 {
+            format!("{}k", k as u32)
+        } else {
+            format!("{k:.1}k")
+        }
+    } else {
+        format!("{}", hz as u32)
+    }
+}
+
+// --- View ---
+
+pub fn view(
+    idx: usize,
+    cfg: &EqConfig,
+    is_collapsed: bool,
+    can_move_up: bool,
+    can_move_down: bool,
+) -> Element<'_, Message> {
+    stage_card(
+        tr!(stage_eq),
+        idx,
+        is_collapsed,
+        can_move_up,
+        can_move_down,
+        || {
+            let mut faders = row![].spacing(SPACING_WIDE);
+            for (band, &freq) in BAND_FREQS.iter().enumerate() {
+                faders = faders.push(labeled_vertical_slider(
+                    format_freq(freq),
+                    -12.0..=12.0,
+                    cfg.gains[band],
+                    move |v| {
+                        Message::Stage(idx, StageMessage::Eq(EqMessage::GainChanged(band, v)))
+                    },
+                    |v| format!("{v:+.1}"),
+                    0.1,
+                    150.0,
+                ));
+            }
+            iced::widget::container(faders)
+                .width(Length::Fill)
+                .center_x(Length::Fill)
+                .into()
+        },
+    )
+}

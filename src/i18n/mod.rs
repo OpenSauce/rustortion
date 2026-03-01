@@ -162,6 +162,7 @@ pub struct Translations {
     pub stage_multiband_saturator: &'static str,
     pub stage_delay: &'static str,
     pub stage_reverb: &'static str,
+    pub stage_eq: &'static str,
 
     // Stage parameters
     pub clipper: &'static str,
@@ -351,6 +352,7 @@ pub static EN: Translations = Translations {
     stage_multiband_saturator: "Multiband Saturator",
     stage_delay: "Delay",
     stage_reverb: "Reverb",
+    stage_eq: "Graphic EQ",
 
     // Stage parameters
     clipper: "Clipper:",
@@ -531,6 +533,7 @@ pub static ZH_CN: Translations = Translations {
     stage_multiband_saturator: "多段饱和器",
     stage_delay: "延迟",
     stage_reverb: "混响",
+    stage_eq: "图形均衡器",
 
     // Stage parameters
     clipper: "削波器:",
