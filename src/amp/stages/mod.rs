@@ -8,6 +8,7 @@ pub mod multiband_saturator;
 pub mod noise_gate;
 pub mod poweramp;
 pub mod preamp;
+pub mod reverb;
 pub mod tonestack;
 
 // The core trait that all processing stages must implement
