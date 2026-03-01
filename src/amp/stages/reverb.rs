@@ -44,7 +44,12 @@ impl CombFilter {
             self.filterstore = 0.0;
         }
 
-        self.buffer[self.write_pos] = self.feedback.mul_add(self.filterstore, input);
+        let write_val = self.feedback.mul_add(self.filterstore, input);
+        self.buffer[self.write_pos] = if write_val.abs() < DENORMAL_THRESHOLD {
+            0.0
+        } else {
+            write_val
+        };
 
         self.write_pos += 1;
         if self.write_pos >= self.buffer.len() {
@@ -82,7 +87,12 @@ impl AllpassFilter {
         let bufout = self.buffer[self.write_pos];
         let output = bufout - input;
 
-        self.buffer[self.write_pos] = ALLPASS_FEEDBACK.mul_add(bufout, input);
+        let write_val = ALLPASS_FEEDBACK.mul_add(bufout, input);
+        self.buffer[self.write_pos] = if write_val.abs() < DENORMAL_THRESHOLD {
+            0.0
+        } else {
+            write_val
+        };
 
         self.write_pos += 1;
         if self.write_pos >= self.buffer.len() {
