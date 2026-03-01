@@ -79,7 +79,7 @@ pub fn view(
                 ),
                 labeled_slider(
                     tr!(feedback),
-                    0.0..=1.0,
+                    0.0..=0.95,
                     cfg.feedback,
                     move |v| Message::Stage(
                         idx,
