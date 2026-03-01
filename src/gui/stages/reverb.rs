@@ -3,7 +3,7 @@ use iced::Element;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::reverb::ReverbStage;
-use crate::gui::components::widgets::common::{labeled_slider, stage_card};
+use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACING_TIGHT};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -102,7 +102,7 @@ pub fn view(
                     0.01
                 ),
             ]
-            .spacing(5)
+            .spacing(SPACING_TIGHT)
             .into()
         },
     )

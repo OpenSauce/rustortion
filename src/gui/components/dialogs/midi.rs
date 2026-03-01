@@ -1,8 +1,14 @@
-use iced::widget::{button, column, container, pick_list, row, rule, scrollable, space, text};
+use iced::widget::{button, column, pick_list, row, rule, scrollable, space, text};
 use iced::{Alignment, Color, Element, Length};
 
-use super::{
-    DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_ROW_SPACING, DIALOG_TITLE_SIZE,
+use super::common::{
+    dialog_container, dialog_section_container, dialog_title_row, input_captured_view,
+    mapping_list_view, muted_text, waiting_for_input_view,
+};
+use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING};
+use crate::gui::components::widgets::common::{
+    COLOR_SUBTLE, COLOR_SUCCESS, SPACING_NORMAL, TEXT_SIZE_INFO, TEXT_SIZE_SECTION_TITLE,
+    TEXT_SIZE_SMALL,
 };
 use crate::gui::messages::MidiMessage;
 use crate::midi::{MidiInputEvent, MidiManager, MidiMapping};
@@ -170,18 +176,7 @@ impl MidiDialog {
             return None;
         }
 
-        let title_row = row![
-            text(tr!(midi_settings))
-                .size(DIALOG_TITLE_SIZE)
-                .style(|theme: &iced::Theme| iced::widget::text::Style {
-                    color: Some(theme.palette().text),
-                }),
-            space::horizontal(),
-            button(tr!(close)).on_press(MidiMessage::Close),
-        ]
-        .spacing(DIALOG_TITLE_ROW_SPACING)
-        .align_y(Alignment::Center)
-        .width(Length::Fill);
+        let title_row = dialog_title_row(tr!(midi_settings), MidiMessage::Close);
 
         // Controller selection section
         let controller_section = self.controller_section_view();
@@ -207,34 +202,28 @@ impl MidiDialog {
         .width(Length::Fill)
         .height(Length::Fill);
 
-        let dialog = container(dialog_content).style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(10).width(2))
-        });
-
-        Some(dialog.into())
+        Some(dialog_container(dialog_content.into()))
     }
 
     fn controller_section_view(&self) -> Element<'_, MidiMessage> {
         let header =
             text(tr!(controller))
-                .size(18)
+                .size(TEXT_SIZE_SECTION_TITLE)
                 .style(|theme: &iced::Theme| iced::widget::text::Style {
                     color: Some(theme.palette().text),
                 });
 
         let status_text = if self.selected_controller.is_some() {
             text(tr!(connected))
-                .size(14)
+                .size(TEXT_SIZE_INFO)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(0.3, 1.0, 0.3)),
+                    color: Some(COLOR_SUCCESS),
                 })
         } else {
             text(tr!(not_connected))
-                .size(14)
+                .size(TEXT_SIZE_INFO)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(0.7, 0.7, 0.7)),
+                    color: Some(COLOR_SUBTLE),
                 })
         };
 
@@ -248,7 +237,7 @@ impl MidiDialog {
             .width(Length::Fill)
             .placeholder(tr!(select_midi_controller)),
         ]
-        .spacing(10)
+        .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
 
         let disconnect_button = if self.selected_controller.is_some() {
@@ -259,27 +248,21 @@ impl MidiDialog {
             button(tr!(disconnect)).style(iced::widget::button::secondary)
         };
 
-        container(
+        dialog_section_container(
             column![
                 row![header, space::horizontal(), status_text].align_y(Alignment::Center),
                 controller_picker,
                 disconnect_button,
             ]
-            .spacing(10)
-            .padding(10),
+            .spacing(SPACING_NORMAL)
+            .padding(SPACING_NORMAL)
+            .into(),
         )
-        .style(|_theme: &iced::Theme| {
-            container::Style::default()
-                .background(Color::from_rgba(0.0, 0.0, 0.0, 0.2))
-                .border(iced::Border::default().rounded(5))
-        })
-        .width(Length::Fill)
-        .into()
     }
 
     fn mappings_section_view(&self) -> Element<'_, MidiMessage> {
         let header = text(tr!(input_mappings))
-            .size(18)
+            .size(TEXT_SIZE_SECTION_TITLE)
             .style(|theme: &iced::Theme| iced::widget::text::Style {
                 color: Some(theme.palette().text),
             });
@@ -296,131 +279,56 @@ impl MidiDialog {
 
         let learning_content: Element<'_, MidiMessage> = match &self.learning_state {
             LearningState::Idle => column![].into(),
-            LearningState::WaitingForInput => container(
-                text(tr!(press_midi_device))
-                    .size(16)
-                    .style(|_: &iced::Theme| iced::widget::text::Style {
-                        color: Some(Color::from_rgb(1.0, 0.8, 0.3)),
-                    }),
-            )
-            .padding(10)
-            .style(|_: &iced::Theme| {
-                container::Style::default()
-                    .background(Color::from_rgba(1.0, 0.8, 0.0, 0.1))
-                    .border(iced::Border::default().rounded(5))
-            })
-            .width(Length::Fill)
-            .into(),
-            LearningState::InputCaptured { description, .. } => {
-                let captured_text = text(format!("{} {}", tr!(captured), description))
-                    .size(16)
-                    .style(|_: &iced::Theme| iced::widget::text::Style {
-                        color: Some(Color::from_rgb(0.3, 1.0, 0.3)),
-                    });
-
-                let preset_picker = row![
-                    text(tr!(assign_to)).width(Length::Fixed(80.0)),
-                    pick_list(
-                        self.available_presets.clone(),
-                        self.selected_preset_for_mapping.clone(),
-                        MidiMessage::PresetForMappingSelected
-                    )
-                    .width(Length::Fill)
-                    .placeholder(tr!(select_preset)),
-                ]
-                .spacing(10)
-                .align_y(Alignment::Center);
-
-                let confirm_button = if self.selected_preset_for_mapping.is_some() {
-                    button(tr!(confirm_mapping))
-                        .on_press(MidiMessage::ConfirmMapping)
-                        .style(iced::widget::button::success)
-                } else {
-                    button(tr!(confirm_mapping)).style(iced::widget::button::secondary)
-                };
-
-                container(column![captured_text, preset_picker, confirm_button,].spacing(10))
-                    .padding(10)
-                    .style(|_: &iced::Theme| {
-                        container::Style::default()
-                            .background(Color::from_rgba(0.0, 1.0, 0.0, 0.05))
-                            .border(iced::Border::default().rounded(5))
-                    })
-                    .width(Length::Fill)
-                    .into()
-            }
+            LearningState::WaitingForInput => waiting_for_input_view(tr!(press_midi_device)),
+            LearningState::InputCaptured { description, .. } => input_captured_view(
+                description,
+                &self.available_presets,
+                self.selected_preset_for_mapping.clone(),
+                MidiMessage::PresetForMappingSelected,
+                MidiMessage::ConfirmMapping,
+                self.selected_preset_for_mapping.is_some(),
+            ),
         };
 
         // Existing mappings list
-        let mappings_list: Element<'_, MidiMessage> = if self.mappings.is_empty() {
-            text(tr!(no_mappings_configured))
-                .size(14)
-                .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(0.5, 0.5, 0.5)),
-                })
-                .into()
-        } else {
-            let mut col = column![].spacing(5);
+        let mappings_list = mapping_list_view(
+            self.mappings
+                .iter()
+                .map(|m| (m.description.clone(), m.preset_name.clone()))
+                .collect(),
+            tr!(no_mappings_configured),
+            MidiMessage::RemoveMapping,
+        );
 
-            for (idx, mapping) in self.mappings.iter().enumerate() {
-                let mapping_row = row![
-                    text(&mapping.description)
-                        .size(14)
-                        .width(Length::Fixed(120.0)),
-                    text("→").size(14).width(Length::Fixed(30.0)),
-                    text(&mapping.preset_name).size(14).width(Length::Fill),
-                    button("×")
-                        .on_press(MidiMessage::RemoveMapping(idx))
-                        .style(iced::widget::button::danger)
-                        .width(Length::Fixed(30.0)),
-                ]
-                .spacing(10)
-                .align_y(Alignment::Center);
-
-                col = col.push(mapping_row);
-            }
-
-            scrollable(col).height(Length::Fixed(120.0)).into()
-        };
-
-        container(
+        dialog_section_container(
             column![
                 row![header, space::horizontal(), add_button].align_y(Alignment::Center),
                 learning_content,
                 mappings_list,
             ]
-            .spacing(10)
-            .padding(10),
+            .spacing(SPACING_NORMAL)
+            .padding(SPACING_NORMAL)
+            .into(),
         )
-        .style(|_theme: &iced::Theme| {
-            container::Style::default()
-                .background(Color::from_rgba(0.0, 0.0, 0.0, 0.2))
-                .border(iced::Border::default().rounded(5))
-        })
-        .width(Length::Fill)
-        .into()
     }
 
     fn debug_section_view(&self) -> Element<'_, MidiMessage> {
         let header =
             text(tr!(debug_log))
-                .size(18)
+                .size(TEXT_SIZE_SECTION_TITLE)
                 .style(|theme: &iced::Theme| iced::widget::text::Style {
                     color: Some(theme.palette().text),
                 });
 
         let debug_content: Element<'_, MidiMessage> = if self.debug_messages.is_empty() {
-            text(tr!(no_midi_messages))
-                .size(12)
-                .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(0.5, 0.5, 0.5)),
-                })
+            muted_text(tr!(no_midi_messages))
+                .size(TEXT_SIZE_SMALL)
                 .into()
         } else {
             let mut col = column![].spacing(2);
 
             for msg in &self.debug_messages {
-                col = col.push(text(msg).size(12).style(|_: &iced::Theme| {
+                col = col.push(text(msg).size(TEXT_SIZE_SMALL).style(|_: &iced::Theme| {
                     iced::widget::text::Style {
                         color: Some(Color::from_rgb(0.7, 0.9, 0.7)),
                     }
@@ -430,13 +338,11 @@ impl MidiDialog {
             scrollable(col).height(Length::Fixed(100.0)).into()
         };
 
-        container(column![header, debug_content,].spacing(10).padding(10))
-            .style(|_theme: &iced::Theme| {
-                container::Style::default()
-                    .background(Color::from_rgba(0.0, 0.0, 0.0, 0.3))
-                    .border(iced::Border::default().rounded(5))
-            })
-            .width(Length::Fill)
-            .into()
+        dialog_section_container(
+            column![header, debug_content,]
+                .spacing(SPACING_NORMAL)
+                .padding(SPACING_NORMAL)
+                .into(),
+        )
     }
 }

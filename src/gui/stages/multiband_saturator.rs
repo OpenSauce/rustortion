@@ -3,7 +3,9 @@ use iced::{Element, Length};
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::multiband_saturator::MultibandSaturatorStage;
-use crate::gui::components::widgets::common::{labeled_slider, stage_card};
+use crate::gui::components::widgets::common::{
+    SPACING_NORMAL, SPACING_SECTION, SPACING_TIGHT, TEXT_SIZE_INFO, labeled_slider, stage_card,
+};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -98,7 +100,7 @@ pub fn view(
         can_move_down,
         || {
             let crossover_section = column![
-                text(tr!(crossover)).size(14),
+                text(tr!(crossover)).size(TEXT_SIZE_INFO),
                 labeled_slider(
                     tr!(low_freq),
                     50.0..=500.0,
@@ -126,10 +128,10 @@ pub fn view(
                     10.0
                 ),
             ]
-            .spacing(5);
+            .spacing(SPACING_TIGHT);
 
             let low_band_section = column![
-                text(tr!(low_band)).size(14),
+                text(tr!(low_band)).size(TEXT_SIZE_INFO),
                 labeled_slider(
                     tr!(drive),
                     0.0..=1.0,
@@ -157,10 +159,10 @@ pub fn view(
                     0.01
                 ),
             ]
-            .spacing(5);
+            .spacing(SPACING_TIGHT);
 
             let mid_band_section = column![
-                text(tr!(mid_band)).size(14),
+                text(tr!(mid_band)).size(TEXT_SIZE_INFO),
                 labeled_slider(
                     tr!(drive),
                     0.0..=1.0,
@@ -188,10 +190,10 @@ pub fn view(
                     0.01
                 ),
             ]
-            .spacing(5);
+            .spacing(SPACING_TIGHT);
 
             let high_band_section = column![
-                text(tr!(high_band)).size(14),
+                text(tr!(high_band)).size(TEXT_SIZE_INFO),
                 labeled_slider(
                     tr!(drive),
                     0.0..=1.0,
@@ -219,13 +221,15 @@ pub fn view(
                     0.01
                 ),
             ]
-            .spacing(5);
+            .spacing(SPACING_TIGHT);
 
             let bands_row = row![low_band_section, mid_band_section, high_band_section]
-                .spacing(20)
+                .spacing(SPACING_SECTION)
                 .width(Length::Fill);
 
-            column![crossover_section, bands_row].spacing(10).into()
+            column![crossover_section, bands_row]
+                .spacing(SPACING_NORMAL)
+                .into()
         },
     )
 }

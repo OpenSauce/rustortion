@@ -12,6 +12,10 @@ use crate::gui::components::ir_cabinet_control::IrCabinetControl;
 use crate::gui::components::minimap;
 use crate::gui::components::peak_meter::PeakMeterDisplay;
 use crate::gui::components::pitch_shift_control::PitchShiftControl;
+use crate::gui::components::widgets::common::{
+    COLOR_ERROR, PADDING_LARGE, PADDING_NORMAL, SPACING_NORMAL, SPACING_TIGHT, TAB_BUTTON_PADDING,
+    TEXT_SIZE_TAB, section_container, section_title,
+};
 use crate::gui::handlers::hotkey::HotkeyHandler;
 use crate::gui::handlers::midi::MidiHandler;
 use crate::gui::handlers::preset::PresetHandler;
@@ -189,8 +193,8 @@ impl AmplifierApp {
             tab_content,
             footer,
         ]
-        .spacing(10)
-        .padding(20);
+        .spacing(SPACING_NORMAL)
+        .padding(PADDING_LARGE);
 
         let dialogs = [
             self.settings_handler.view(),
@@ -222,7 +226,7 @@ impl AmplifierApp {
 
         let recording_status = if self.is_recording {
             text(tr!(recording)).style(|_| iced::widget::text::Style {
-                color: Some(iced::Color::from_rgb(1.0, 0.3, 0.3)),
+                color: Some(COLOR_ERROR),
             })
         } else {
             text("").style(|theme: &iced::Theme| iced::widget::text::Style {
@@ -246,7 +250,7 @@ impl AmplifierApp {
             record_button,
             recording_status,
         ]
-        .spacing(5)
+        .spacing(SPACING_TIGHT)
         .align_y(Alignment::Center)
         .into()
     }
@@ -259,13 +263,13 @@ impl AmplifierApp {
             (Tab::Cabinet, tr!(tab_cabinet)),
         ];
 
-        let mut tab_row = row![].spacing(5);
+        let mut tab_row = row![].spacing(SPACING_TIGHT);
 
         for (tab, label) in tabs {
             let is_active = self.active_tab == tab;
-            let btn = button(text(label).size(15))
+            let btn = button(text(label).size(TEXT_SIZE_TAB))
                 .on_press(Message::TabSelected(tab))
-                .padding([8, 24])
+                .padding(TAB_BUTTON_PADDING)
                 .style(if is_active {
                     tab_button_active
                 } else {
@@ -302,7 +306,7 @@ impl AmplifierApp {
         // Collapse/expand toggle above stages
         let collapse_toggle = self.view_collapse_toggle(category);
 
-        let mut stage_col = column![].width(Length::Fill).spacing(5);
+        let mut stage_col = column![].width(Length::Fill).spacing(SPACING_TIGHT);
         for (pos, &abs_idx) in category_indices.iter().enumerate() {
             let is_collapsed = self.collapsed_stages.get(abs_idx).copied().unwrap_or(false);
             let can_move_up = pos > 0;
@@ -320,10 +324,10 @@ impl AmplifierApp {
 
         let content = column![
             collapse_toggle,
-            scrollable(stage_col.padding(10)).height(Length::Fill),
+            scrollable(stage_col.padding(PADDING_NORMAL)).height(Length::Fill),
             add_bar,
         ]
-        .spacing(5);
+        .spacing(SPACING_TIGHT);
 
         view_tab_panel(content.into())
     }
@@ -364,7 +368,7 @@ impl AmplifierApp {
             pick_list(available_types, selected, Message::StageTypeSelected),
             button(tr!(add_stage)).on_press(Message::AddStage),
         ]
-        .spacing(10)
+        .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center)
         .into()
     }
@@ -373,7 +377,7 @@ impl AmplifierApp {
         let content = scrollable(
             column![self.ir_cabinet_control.view()]
                 .width(Length::Fill)
-                .padding(10),
+                .padding(PADDING_NORMAL),
         )
         .height(Length::Fill);
 
@@ -401,10 +405,10 @@ impl AmplifierApp {
                 ))
                 .width(Length::FillPortion(2)),
             ]
-            .spacing(10)
+            .spacing(SPACING_NORMAL)
             .align_y(Alignment::Center),
         ]
-        .spacing(5);
+        .spacing(SPACING_TIGHT);
 
         let lp_section = column![
             checkbox(self.input_filter_config.lp_enabled)
@@ -426,56 +430,30 @@ impl AmplifierApp {
                 ))
                 .width(Length::FillPortion(2)),
             ]
-            .spacing(10)
+            .spacing(SPACING_NORMAL)
             .align_y(Alignment::Center),
         ]
-        .spacing(5);
+        .spacing(SPACING_TIGHT);
 
-        let input_filters_section = container(
-            column![
-                text(tr!(input_filters))
-                    .size(18)
-                    .style(|theme: &iced::Theme| iced::widget::text::Style {
-                        color: Some(theme.palette().text),
-                    }),
-                iced::widget::rule::horizontal(1),
-                hp_section,
-                lp_section,
-            ]
-            .spacing(10),
-        )
-        .width(Length::Fill)
-        .style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(5))
-        })
-        .padding(10);
+        let input_filters_section = section_container(
+            column![section_title(tr!(input_filters)), hp_section, lp_section,]
+                .spacing(SPACING_NORMAL)
+                .into(),
+        );
 
-        let pitch_section = container(
+        let pitch_section = section_container(
             column![
-                text(tr!(pitch_shift))
-                    .size(18)
-                    .style(|theme: &iced::Theme| iced::widget::text::Style {
-                        color: Some(theme.palette().text),
-                    }),
-                iced::widget::rule::horizontal(1),
+                section_title(tr!(pitch_shift)),
                 self.pitch_shift_control.view(),
             ]
-            .spacing(10),
-        )
-        .width(Length::Fill)
-        .style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(5))
-        })
-        .padding(10);
+            .spacing(SPACING_NORMAL)
+            .into(),
+        );
 
         let content = scrollable(
             column![input_filters_section, pitch_section,]
-                .spacing(10)
-                .padding(10),
+                .spacing(SPACING_NORMAL)
+                .padding(PADDING_NORMAL),
         )
         .height(Length::Fill);
 

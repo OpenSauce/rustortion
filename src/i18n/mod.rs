@@ -285,7 +285,7 @@ pub static EN: Translations = Translations {
     language: "Language:",
 
     // Tuner dialog
-    tuner_title: "TUNER",
+    tuner_title: "Tuner",
     in_tune: "IN TUNE",
     adjust: "ADJUST",
     play_a_note: "PLAY A NOTE",

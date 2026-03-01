@@ -1,9 +1,11 @@
-use iced::widget::{column, pick_list, row, text};
-use iced::{Element, Length};
+use iced::widget::column;
+use iced::Element;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::poweramp::{PowerAmpStage, PowerAmpType};
-use crate::gui::components::widgets::common::{labeled_slider, stage_card};
+use crate::gui::components::widgets::common::{
+    labeled_picker, labeled_slider, stage_card, SPACING_TIGHT,
+};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -73,18 +75,10 @@ pub fn view(
         can_move_up,
         can_move_down,
         || {
-            let type_picker = row![
-                text(tr!(type_label)).width(Length::FillPortion(3)),
-                pick_list(POWER_AMP_TYPES, Some(cfg.amp_type), move |t| {
-                    Message::Stage(idx, StageMessage::PowerAmp(PowerAmpMessage::TypeChanged(t)))
-                })
-                .width(Length::FillPortion(7)),
-            ]
-            .spacing(10)
-            .align_y(iced::Alignment::Center);
-
             column![
-                type_picker,
+                labeled_picker(tr!(type_label), POWER_AMP_TYPES, Some(cfg.amp_type), move |t| {
+                    Message::Stage(idx, StageMessage::PowerAmp(PowerAmpMessage::TypeChanged(t)))
+                }),
                 labeled_slider(
                     tr!(drive),
                     0.0..=1.0,
@@ -108,7 +102,7 @@ pub fn view(
                     0.05
                 ),
             ]
-            .spacing(5)
+            .spacing(SPACING_TIGHT)
             .into()
         },
     )

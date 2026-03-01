@@ -1,8 +1,11 @@
-use iced::widget::{button, column, container, row, rule, space, text};
+use iced::widget::{column, container, row, rule, space, text};
 use iced::{Alignment, Color, Element, Length};
 
-use super::{
-    DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_ROW_SPACING, DIALOG_TITLE_SIZE,
+use super::common::{dialog_container, dialog_title_row};
+use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING};
+use crate::gui::components::widgets::common::{
+    COLOR_ERROR, COLOR_INACTIVE, COLOR_MUTED, COLOR_SUBTLE, COLOR_SUCCESS, COLOR_WARNING,
+    SPACING_NORMAL, SPACING_TIGHT, TEXT_SIZE_INFO,
 };
 use crate::gui::messages::TunerMessage;
 use crate::tr;
@@ -49,25 +52,14 @@ impl TunerDisplay {
             return None;
         }
 
-        let title_row = row![
-            text(tr!(tuner_title))
-                .size(DIALOG_TITLE_SIZE)
-                .style(|theme: &iced::Theme| iced::widget::text::Style {
-                    color: Some(theme.palette().text),
-                }),
-            space::horizontal(),
-            button(tr!(close)).on_press(TunerMessage::Toggle),
-        ]
-        .spacing(DIALOG_TITLE_ROW_SPACING)
-        .align_y(Alignment::Center)
-        .width(Length::Fill);
+        let title_row = dialog_title_row(tr!(tuner_title), TunerMessage::Toggle);
 
         let note_display = if let Some(ref note) = self.info.note {
             text(note)
                 .size(96)
                 .style(move |_: &iced::Theme| iced::widget::text::Style {
                     color: Some(if self.info.in_tune {
-                        Color::from_rgb(0.2, 1.0, 0.2) // Bright green
+                        COLOR_SUCCESS
                     } else {
                         Color::from_rgb(0.9, 0.9, 0.9)
                     }),
@@ -76,7 +68,7 @@ impl TunerDisplay {
             text("--")
                 .size(96)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(0.4, 0.4, 0.4)),
+                    color: Some(COLOR_INACTIVE),
                 })
         };
 
@@ -90,33 +82,33 @@ impl TunerDisplay {
             text(freq_text)
                 .size(20)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(0.7, 0.7, 0.7)),
+                    color: Some(COLOR_SUBTLE),
                 });
 
         let cents_indicator = self.cents_display();
 
         let status_text = if self.info.in_tune {
-            text(format!("{} ✓", tr!(in_tune)))
+            text(format!("{} \u{2713}", tr!(in_tune)))
                 .size(24)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(0.2, 1.0, 0.2)),
+                    color: Some(COLOR_SUCCESS),
                 })
         } else if self.info.cents_off.is_some() {
             text(tr!(adjust))
                 .size(20)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(1.0, 0.7, 0.3)),
+                    color: Some(COLOR_WARNING),
                 })
         } else {
             text(tr!(play_a_note))
                 .size(20)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(0.5, 0.5, 0.5)),
+                    color: Some(COLOR_MUTED),
                 })
         };
 
         let tuner_display = column![note_display, freq_display, cents_indicator, status_text,]
-            .spacing(10)
+            .spacing(SPACING_NORMAL)
             .align_x(Alignment::Center);
 
         let tuner_centered = container(tuner_display)
@@ -131,13 +123,7 @@ impl TunerDisplay {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        let dialog = container(dialog_content).style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(10).width(2))
-        });
-
-        Some(dialog.into())
+        Some(dialog_container(dialog_content.into()))
     }
 
     fn cents_display(&self) -> Element<'static, TunerMessage> {
@@ -149,27 +135,27 @@ impl TunerDisplay {
             let marker = (center as i32 + pos).clamp(0, width as i32 - 1) as usize;
 
             let mut bar = vec![' '; width];
-            bar[center] = '│';
-            bar[marker] = '●';
+            bar[center] = '\u{2502}';
+            bar[marker] = '\u{25cf}';
 
             let bar_str: String = bar.iter().collect();
 
             let cents_text = if cents >= 0.0 {
-                format!("+{cents:.0}¢")
+                format!("+{cents:.0}\u{00a2}")
             } else {
-                format!("{cents:.0}¢")
+                format!("{cents:.0}\u{00a2}")
             };
 
             let color = if cents.abs() < 5.0 {
-                Color::from_rgb(0.2, 1.0, 0.2) // Green
+                COLOR_SUCCESS
             } else if cents.abs() < 20.0 {
                 Color::from_rgb(1.0, 0.8, 0.2) // Yellow
             } else {
-                Color::from_rgb(1.0, 0.3, 0.3) // Red
+                COLOR_ERROR
             };
 
-            let flat_label = format!("♭ {}", tr!(flat));
-            let sharp_label = format!("{} ♯", tr!(sharp));
+            let flat_label = format!("\u{266d} {}", tr!(flat));
+            let sharp_label = format!("{} \u{266f}", tr!(sharp));
 
             column![
                 text(bar_str)
@@ -178,9 +164,9 @@ impl TunerDisplay {
                     .style(move |_: &iced::Theme| iced::widget::text::Style { color: Some(color) }),
                 row![
                     text(flat_label)
-                        .size(14)
+                        .size(TEXT_SIZE_INFO)
                         .style(|_: &iced::Theme| iced::widget::text::Style {
-                            color: Some(Color::from_rgb(0.6, 0.6, 0.6)),
+                            color: Some(COLOR_MUTED),
                         }),
                     space::horizontal(),
                     text(cents_text).size(22).style(move |_: &iced::Theme| {
@@ -188,32 +174,32 @@ impl TunerDisplay {
                     }),
                     space::horizontal(),
                     text(sharp_label)
-                        .size(14)
+                        .size(TEXT_SIZE_INFO)
                         .style(|_: &iced::Theme| iced::widget::text::Style {
-                            color: Some(Color::from_rgb(0.6, 0.6, 0.6)),
+                            color: Some(COLOR_MUTED),
                         }),
                 ]
-                .spacing(10)
+                .spacing(SPACING_NORMAL)
                 .width(Length::Fill)
             ]
-            .spacing(5)
+            .spacing(SPACING_TIGHT)
             .align_x(Alignment::Center)
             .into()
         } else {
             column![
-                text("│")
+                text("\u{2502}")
                     .font(iced::Font::MONOSPACE)
                     .size(24)
                     .style(|_: &iced::Theme| iced::widget::text::Style {
                         color: Some(Color::from_rgb(0.3, 0.3, 0.3)),
                     }),
-                text("--¢")
+                text("--\u{00a2}")
                     .size(22)
                     .style(|_: &iced::Theme| iced::widget::text::Style {
-                        color: Some(Color::from_rgb(0.4, 0.4, 0.4)),
+                        color: Some(COLOR_INACTIVE),
                     }),
             ]
-            .spacing(5)
+            .spacing(SPACING_TIGHT)
             .align_x(Alignment::Center)
             .into()
         }
