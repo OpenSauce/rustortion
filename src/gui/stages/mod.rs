@@ -126,4 +126,5 @@ stage_registry! {
     MultibandSaturator => multiband_saturator,  MultibandSaturatorConfig, MultibandSaturatorMessage, stage_multiband_saturator, Amp;
     Delay              => delay,                DelayConfig,              DelayMessage,              stage_delay,              Effect;
     Reverb             => reverb,               ReverbConfig,             ReverbMessage,             stage_reverb,             Effect;
+    Eq                 => eq,                   EqConfig,                 EqMessage,                 stage_eq,                 Effect;
 }

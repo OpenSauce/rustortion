@@ -17,6 +17,7 @@ const fn stage_abbreviation(cfg: &StageConfig) -> &'static str {
         StageConfig::MultibandSaturator(_) => "MBS",
         StageConfig::Delay(_) => "Dly",
         StageConfig::Reverb(_) => "Rev",
+        StageConfig::Eq(_) => "EQ",
     }
 }
 

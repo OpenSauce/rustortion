@@ -1,5 +1,7 @@
 use crate::gui::messages::Message;
-use iced::widget::{button, column, container, pick_list, row, rule, slider, text};
+use iced::widget::{
+    button, column, container, pick_list, row, rule, slider, text, vertical_slider,
+};
 use iced::{Alignment, Color, Element, Length};
 
 // ── Text sizes ──────────────────────────────────────────────────────────────
@@ -53,6 +55,27 @@ pub fn labeled_slider<'a, F: 'a + Fn(f32) -> Message>(
     ]
     .spacing(SPACING_NORMAL)
     .align_y(Alignment::Center)
+    .into()
+}
+
+pub fn labeled_vertical_slider<'a, F: 'a + Fn(f32) -> Message>(
+    label: String,
+    range: std::ops::RangeInclusive<f32>,
+    value: f32,
+    on_change: F,
+    format: impl Fn(f32) -> String + 'a,
+    step: f32,
+    height: f32,
+) -> Element<'a, Message> {
+    column![
+        text(label).size(TEXT_SIZE_SMALL),
+        vertical_slider(range, value, on_change)
+            .height(height)
+            .step(step),
+        text(format(value)).size(TEXT_SIZE_SMALL),
+    ]
+    .spacing(SPACING_TIGHT)
+    .align_x(Alignment::Center)
     .into()
 }
 
