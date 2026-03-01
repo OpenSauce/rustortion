@@ -4,8 +4,8 @@ use iced::{Alignment, Element, Length};
 use super::common::{dialog_container, dialog_section_container, dialog_title_row};
 use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING};
 use crate::gui::components::widgets::common::{
-    COLOR_SUBTLE, COLOR_SUCCESS, COLOR_WARNING, SPACING_NORMAL, SPACING_TIGHT, TEXT_SIZE_INFO,
-    TEXT_SIZE_LABEL, TEXT_SIZE_SECTION_TITLE, TEXT_SIZE_SMALL,
+    COLOR_SUBTLE, COLOR_SUCCESS, COLOR_WARNING, PADDING_NORMAL, SPACING_NORMAL, SPACING_TIGHT,
+    TEXT_SIZE_INFO, TEXT_SIZE_LABEL, TEXT_SIZE_SECTION_TITLE, TEXT_SIZE_SMALL,
 };
 use crate::gui::messages::SettingsMessage;
 use crate::i18n::{self, LANGUAGES};
@@ -329,8 +329,8 @@ impl SettingsDialog {
 
         dialog_section_container(
             column![header, sample_rate_row, buffer_size_row, warning,]
-                .spacing(8)
-                .padding(SPACING_NORMAL)
+                .spacing(SPACING_NORMAL)
+                .padding(PADDING_NORMAL)
                 .into(),
         )
     }

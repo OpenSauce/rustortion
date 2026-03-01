@@ -79,13 +79,14 @@ pub fn input_captured_view<'a, M: Clone + 'a>(
     selected_preset: Option<String>,
     on_select: impl Fn(String) -> M + 'a,
     confirm_msg: M,
-    has_preset: bool,
 ) -> Element<'a, M> {
     let captured_text = text(format!("{} {}", tr!(captured), description))
         .size(TEXT_SIZE_LABEL)
         .style(|_: &iced::Theme| iced::widget::text::Style {
             color: Some(COLOR_SUCCESS),
         });
+
+    let has_preset = selected_preset.is_some();
 
     let preset_picker = row![
         text(tr!(assign_to)).width(Length::Fixed(80.0)),

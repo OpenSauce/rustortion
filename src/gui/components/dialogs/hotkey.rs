@@ -202,7 +202,6 @@ impl HotkeyDialog {
                 self.selected_preset_for_mapping.clone(),
                 HotkeyMessage::PresetSelected,
                 HotkeyMessage::ConfirmMapping,
-                self.selected_preset_for_mapping.is_some(),
             ),
         };
 

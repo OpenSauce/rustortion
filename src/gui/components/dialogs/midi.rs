@@ -286,7 +286,6 @@ impl MidiDialog {
                 self.selected_preset_for_mapping.clone(),
                 MidiMessage::PresetForMappingSelected,
                 MidiMessage::ConfirmMapping,
-                self.selected_preset_for_mapping.is_some(),
             ),
         };
 
