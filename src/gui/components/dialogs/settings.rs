@@ -1,7 +1,9 @@
 use iced::widget::{button, column, container, pick_list, row, rule, space, text};
 use iced::{Alignment, Color, Element, Length};
 
-use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_SIZE};
+use super::{
+    DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_ROW_SPACING, DIALOG_TITLE_SIZE,
+};
 use crate::gui::messages::SettingsMessage;
 use crate::i18n::{self, LANGUAGES};
 use crate::settings::AudioSettings;
@@ -103,9 +105,9 @@ impl SettingsDialog {
                     color: Some(theme.palette().text),
                 }),
             space::horizontal(),
-            button(tr!(close)).on_press(SettingsMessage::Cancel),
+            button(tr!(close)).on_press(SettingsMessage::Close),
         ]
-        .spacing(10)
+        .spacing(DIALOG_TITLE_ROW_SPACING)
         .align_y(Alignment::Center)
         .width(Length::Fill);
 
@@ -255,24 +257,13 @@ impl SettingsDialog {
         .width(Length::Fill)
         .height(Length::Fill);
 
-        // Create a modal overlay
         let dialog = container(dialog_content).style(|theme: &iced::Theme| {
             container::Style::default()
                 .background(theme.palette().background)
                 .border(iced::Border::default().rounded(10).width(2))
         });
 
-        // Center the dialog
-        let centered = container(dialog)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .style(|_theme: &iced::Theme| {
-                container::Style::default().background(Color::from_rgba(0.0, 0.0, 0.0, 0.7))
-            });
-
-        Some(centered.into())
+        Some(dialog.into())
     }
 
     /// The view containing JACK server status information

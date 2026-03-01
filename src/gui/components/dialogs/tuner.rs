@@ -1,7 +1,9 @@
 use iced::widget::{button, column, container, row, rule, space, text};
 use iced::{Alignment, Color, Element, Length};
 
-use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_SIZE};
+use super::{
+    DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_ROW_SPACING, DIALOG_TITLE_SIZE,
+};
 use crate::gui::messages::TunerMessage;
 use crate::tr;
 use crate::tuner::TunerInfo;
@@ -56,7 +58,7 @@ impl TunerDisplay {
             space::horizontal(),
             button(tr!(close)).on_press(TunerMessage::Toggle),
         ]
-        .spacing(10)
+        .spacing(DIALOG_TITLE_ROW_SPACING)
         .align_y(Alignment::Center)
         .width(Length::Fill);
 
@@ -114,7 +116,7 @@ impl TunerDisplay {
         };
 
         let tuner_display = column![note_display, freq_display, cents_indicator, status_text,]
-            .spacing(DIALOG_CONTENT_SPACING)
+            .spacing(10)
             .align_x(Alignment::Center);
 
         let tuner_centered = container(tuner_display)

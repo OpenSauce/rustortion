@@ -2,7 +2,9 @@ use iced::keyboard::{Key, Modifiers};
 use iced::widget::{button, column, container, pick_list, row, rule, scrollable, space, text};
 use iced::{Alignment, Color, Element, Length};
 
-use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_SIZE};
+use super::{
+    DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_ROW_SPACING, DIALOG_TITLE_SIZE,
+};
 use crate::gui::messages::HotkeyMessage;
 use crate::hotkey::{HotkeyMapping, is_uncapturable_key, serialize_key, serialize_modifiers};
 use crate::tr;
@@ -166,7 +168,7 @@ impl HotkeyDialog {
             space::horizontal(),
             button(tr!(close)).on_press(HotkeyMessage::Close),
         ]
-        .spacing(10)
+        .spacing(DIALOG_TITLE_ROW_SPACING)
         .align_y(Alignment::Center)
         .width(Length::Fill);
 

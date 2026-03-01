@@ -1,7 +1,9 @@
 use iced::widget::{button, column, container, pick_list, row, rule, scrollable, space, text};
 use iced::{Alignment, Color, Element, Length};
 
-use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_SIZE};
+use super::{
+    DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_ROW_SPACING, DIALOG_TITLE_SIZE,
+};
 use crate::gui::messages::MidiMessage;
 use crate::midi::{MidiInputEvent, MidiManager, MidiMapping};
 use crate::tr;
@@ -177,7 +179,7 @@ impl MidiDialog {
             space::horizontal(),
             button(tr!(close)).on_press(MidiMessage::Close),
         ]
-        .spacing(10)
+        .spacing(DIALOG_TITLE_ROW_SPACING)
         .align_y(Alignment::Center)
         .width(Length::Fill);
 
@@ -190,12 +192,6 @@ impl MidiDialog {
         // Debug section
         let debug_section = self.debug_section_view();
 
-        // Controls
-        let controls =
-            row![button(tr!(refresh_controllers)).on_press(MidiMessage::RefreshControllers),]
-                .spacing(10)
-                .width(Length::Fill);
-
         let dialog_content = column![
             title_row,
             rule::horizontal(1),
@@ -204,7 +200,7 @@ impl MidiDialog {
             mappings_section,
             rule::horizontal(1),
             debug_section,
-            controls,
+            button(tr!(refresh_controllers)).on_press(MidiMessage::RefreshControllers),
         ]
         .spacing(DIALOG_CONTENT_SPACING)
         .padding(DIALOG_CONTENT_PADDING)
