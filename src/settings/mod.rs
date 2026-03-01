@@ -2,6 +2,7 @@
 use anyhow::{Context, Result};
 use log::{debug, info};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -99,6 +100,8 @@ pub struct Settings {
     pub language: Language,
     #[serde(default)]
     pub hotkeys: HotkeySettings,
+    #[serde(default)]
+    pub collapsed_stages: HashMap<String, Vec<bool>>,
 }
 
 impl std::fmt::Display for Settings {
@@ -141,6 +144,7 @@ impl Default for Settings {
             selected_preset: None,
             language: Language::default(),
             hotkeys: HotkeySettings::default(),
+            collapsed_stages: HashMap::new(),
         }
     }
 }

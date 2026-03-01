@@ -102,7 +102,15 @@ impl AmplifierApp {
 
         let hotkey_handler = HotkeyHandler::new(settings.hotkeys.clone());
 
-        let collapsed_stages = vec![false; preset.stages.len()];
+        // Sync settings with the actually loaded preset so collapse keys stay consistent
+        let mut settings = settings;
+        settings.selected_preset = Some(preset.name.clone());
+
+        let collapsed_stages = Self::restore_collapsed(
+            &settings.collapsed_stages,
+            &preset.name,
+            preset.stages.len(),
+        );
 
         (
             Self {
@@ -228,7 +236,15 @@ impl AmplifierApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::SetStages(stages) => {
-                self.collapsed_stages = vec![false; stages.len()];
+                if let Some(preset_name) = self.settings.selected_preset.as_deref() {
+                    self.collapsed_stages = Self::restore_collapsed(
+                        &self.settings.collapsed_stages,
+                        preset_name,
+                        stages.len(),
+                    );
+                } else {
+                    self.collapsed_stages.resize(stages.len(), false);
+                }
                 self.stages = stages;
                 self.mark_stages_dirty();
             }
@@ -238,12 +254,14 @@ impl AmplifierApp {
                 self.stages.push(new_stage);
                 self.collapsed_stages.push(false);
                 self.mark_stages_dirty();
+                self.persist_collapse_state();
             }
             Message::RemoveStage(idx) => {
                 if idx < self.stages.len() {
                     self.stages.remove(idx);
                     self.collapsed_stages.remove(idx);
                     self.mark_stages_dirty();
+                    self.persist_collapse_state();
                 }
             }
             Message::MoveStageUp(idx) => {
@@ -251,6 +269,7 @@ impl AmplifierApp {
                     self.stages.swap(idx - 1, idx);
                     self.collapsed_stages.swap(idx - 1, idx);
                     self.mark_stages_dirty();
+                    self.persist_collapse_state();
                 }
             }
             Message::MoveStageDown(idx) => {
@@ -258,16 +277,19 @@ impl AmplifierApp {
                     self.stages.swap(idx, idx + 1);
                     self.collapsed_stages.swap(idx, idx + 1);
                     self.mark_stages_dirty();
+                    self.persist_collapse_state();
                 }
             }
             Message::ToggleStageCollapse(idx) => {
                 if let Some(collapsed) = self.collapsed_stages.get_mut(idx) {
                     *collapsed = !*collapsed;
                 }
+                self.persist_collapse_state();
             }
             Message::ToggleAllStagesCollapse => {
                 let any_expanded = self.collapsed_stages.iter().any(|&c| !c);
                 self.collapsed_stages.fill(any_expanded);
+                self.persist_collapse_state();
             }
             Message::StageTypeSelected(stage_type) => {
                 self.control_bar.set_selected_stage_type(stage_type);
@@ -411,6 +433,7 @@ impl AmplifierApp {
                         self.save_settings();
                     }
                     PresetMessage::Delete(deleted_name) => {
+                        self.settings.collapsed_stages.remove(&deleted_name);
                         if self.settings.selected_preset == Some(deleted_name) {
                             self.settings.selected_preset = None;
                         }
@@ -441,6 +464,29 @@ impl AmplifierApp {
             || self.tuner_handler.is_visible()
             || self.midi_handler.is_visible()
             || self.hotkey_handler.is_visible()
+    }
+
+    fn persist_collapse_state(&mut self) {
+        let Some(key) = self.settings.selected_preset.clone() else {
+            return;
+        };
+        let saved = self.settings.collapsed_stages.get(&key);
+        if saved != Some(&self.collapsed_stages) {
+            self.settings
+                .collapsed_stages
+                .insert(key, self.collapsed_stages.clone());
+            self.save_settings();
+        }
+    }
+
+    fn restore_collapsed(
+        saved: &std::collections::HashMap<String, Vec<bool>>,
+        preset_name: &str,
+        stage_count: usize,
+    ) -> Vec<bool> {
+        let mut result = saved.get(preset_name).cloned().unwrap_or_default();
+        result.resize(stage_count, false);
+        result
     }
 
     fn save_settings(&self) {
