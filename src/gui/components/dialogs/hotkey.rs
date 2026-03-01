@@ -2,6 +2,7 @@ use iced::keyboard::{Key, Modifiers};
 use iced::widget::{button, column, container, pick_list, row, rule, scrollable, space, text};
 use iced::{Alignment, Color, Element, Length};
 
+use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_SIZE};
 use crate::gui::messages::HotkeyMessage;
 use crate::hotkey::{HotkeyMapping, is_uncapturable_key, serialize_key, serialize_modifiers};
 use crate::tr;
@@ -156,26 +157,25 @@ impl HotkeyDialog {
             return None;
         }
 
-        let title = text(tr!(hotkey_settings))
-            .size(24)
-            .style(|theme: &iced::Theme| iced::widget::text::Style {
-                color: Some(theme.palette().text),
-            });
-
-        // Mappings section
-        let mappings_section = self.mappings_section_view();
-
-        // Controls
-        let controls = row![
+        let title_row = row![
+            text(tr!(hotkey_settings))
+                .size(DIALOG_TITLE_SIZE)
+                .style(|theme: &iced::Theme| iced::widget::text::Style {
+                    color: Some(theme.palette().text),
+                }),
             space::horizontal(),
             button(tr!(close)).on_press(HotkeyMessage::Close),
         ]
         .spacing(10)
+        .align_y(Alignment::Center)
         .width(Length::Fill);
 
-        let dialog_content = column![title, rule::horizontal(1), mappings_section, controls,]
-            .spacing(15)
-            .padding(20)
+        // Mappings section
+        let mappings_section = self.mappings_section_view();
+
+        let dialog_content = column![title_row, rule::horizontal(1), mappings_section,]
+            .spacing(DIALOG_CONTENT_SPACING)
+            .padding(DIALOG_CONTENT_PADDING)
             .width(Length::Fill)
             .height(Length::Fill);
 

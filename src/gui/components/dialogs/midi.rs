@@ -1,6 +1,7 @@
 use iced::widget::{button, column, container, pick_list, row, rule, scrollable, space, text};
 use iced::{Alignment, Color, Element, Length};
 
+use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_SIZE};
 use crate::gui::messages::MidiMessage;
 use crate::midi::{MidiInputEvent, MidiManager, MidiMapping};
 use crate::tr;
@@ -167,11 +168,18 @@ impl MidiDialog {
             return None;
         }
 
-        let title = text(tr!(midi_settings))
-            .size(24)
-            .style(|theme: &iced::Theme| iced::widget::text::Style {
-                color: Some(theme.palette().text),
-            });
+        let title_row = row![
+            text(tr!(midi_settings))
+                .size(DIALOG_TITLE_SIZE)
+                .style(|theme: &iced::Theme| iced::widget::text::Style {
+                    color: Some(theme.palette().text),
+                }),
+            space::horizontal(),
+            button(tr!(close)).on_press(MidiMessage::Close),
+        ]
+        .spacing(10)
+        .align_y(Alignment::Center)
+        .width(Length::Fill);
 
         // Controller selection section
         let controller_section = self.controller_section_view();
@@ -183,16 +191,13 @@ impl MidiDialog {
         let debug_section = self.debug_section_view();
 
         // Controls
-        let controls = row![
-            button(tr!(refresh_controllers)).on_press(MidiMessage::RefreshControllers),
-            space::horizontal(),
-            button(tr!(close)).on_press(MidiMessage::Close),
-        ]
-        .spacing(10)
-        .width(Length::Fill);
+        let controls =
+            row![button(tr!(refresh_controllers)).on_press(MidiMessage::RefreshControllers),]
+                .spacing(10)
+                .width(Length::Fill);
 
         let dialog_content = column![
-            title,
+            title_row,
             rule::horizontal(1),
             controller_section,
             rule::horizontal(1),
@@ -201,8 +206,8 @@ impl MidiDialog {
             debug_section,
             controls,
         ]
-        .spacing(15)
-        .padding(20)
+        .spacing(DIALOG_CONTENT_SPACING)
+        .padding(DIALOG_CONTENT_PADDING)
         .width(Length::Fill)
         .height(Length::Fill);
 
