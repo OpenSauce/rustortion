@@ -513,6 +513,7 @@ impl AmplifierApp {
         match message {
             Message::TabSelected(tab) => {
                 self.active_tab = tab;
+                self.sync_stage_type_with_tab(tab);
             }
             Message::SetStages(stages) => {
                 if let Some(preset_name) = self.settings.selected_preset.as_deref() {
@@ -604,13 +605,7 @@ impl AmplifierApp {
             }
             Message::ToggleAllStagesCollapse => {
                 // Only affect stages of the current tab's category
-                let category = match self.active_tab {
-                    Tab::Amp => Some(StageCategory::Amp),
-                    Tab::Effects => Some(StageCategory::Effect),
-                    _ => None,
-                };
-
-                if let Some(cat) = category {
+                if let Some(cat) = self.active_tab.stage_category() {
                     let category_indices: Vec<usize> = self
                         .stages
                         .iter()
@@ -803,6 +798,25 @@ impl AmplifierApp {
         }
 
         Task::none()
+    }
+
+    /// Reset `selected_stage_type` to the first stage of the new tab's category.
+    fn sync_stage_type_with_tab(&mut self, tab: Tab) {
+        let Some(category) = tab.stage_category() else {
+            return;
+        };
+
+        if self.selected_stage_type.category() == category {
+            return;
+        }
+
+        if let Some(first) = StageType::ALL
+            .iter()
+            .copied()
+            .find(|s| s.category() == category)
+        {
+            self.selected_stage_type = first;
+        }
     }
 
     /// Find the index after the last stage of the given category.
