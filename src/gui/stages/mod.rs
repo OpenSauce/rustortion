@@ -100,4 +100,5 @@ stage_registry! {
     NoiseGate          => noise_gate,           NoiseGateConfig,          NoiseGateMessage,          stage_noise_gate;
     MultibandSaturator => multiband_saturator,  MultibandSaturatorConfig, MultibandSaturatorMessage, stage_multiband_saturator;
     Delay              => delay,                DelayConfig,              DelayMessage,              stage_delay;
+    Reverb             => reverb,               ReverbConfig,             ReverbMessage,             stage_reverb;
 }

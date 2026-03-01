@@ -161,6 +161,7 @@ pub struct Translations {
     pub stage_noise_gate: &'static str,
     pub stage_multiband_saturator: &'static str,
     pub stage_delay: &'static str,
+    pub stage_reverb: &'static str,
 
     // Stage parameters
     pub clipper: &'static str,
@@ -190,6 +191,8 @@ pub struct Translations {
     pub delay_time: &'static str,
     pub feedback: &'static str,
     pub dry_wet: &'static str,
+    pub room_size: &'static str,
+    pub damping: &'static str,
 
     // Filter types
     pub filter_highpass: &'static str,
@@ -336,6 +339,7 @@ pub static EN: Translations = Translations {
     stage_noise_gate: "Noise Gate",
     stage_multiband_saturator: "Multiband Saturator",
     stage_delay: "Delay",
+    stage_reverb: "Reverb",
 
     // Stage parameters
     clipper: "Clipper:",
@@ -365,6 +369,8 @@ pub static EN: Translations = Translations {
     delay_time: "Delay Time",
     feedback: "Feedback",
     dry_wet: "Dry/Wet",
+    room_size: "Room Size",
+    damping: "Damping",
 
     // Filter types
     filter_highpass: "Highpass",
@@ -502,6 +508,7 @@ pub static ZH_CN: Translations = Translations {
     stage_noise_gate: "噪声门",
     stage_multiband_saturator: "多段饱和器",
     stage_delay: "延迟",
+    stage_reverb: "混响",
 
     // Stage parameters
     clipper: "削波器:",
@@ -531,6 +538,8 @@ pub static ZH_CN: Translations = Translations {
     delay_time: "延迟时间",
     feedback: "反馈",
     dry_wet: "干/湿",
+    room_size: "房间大小",
+    damping: "阻尼",
 
     // Filter types
     filter_highpass: "高通",
