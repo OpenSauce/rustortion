@@ -1,6 +1,7 @@
 use iced::widget::{pick_list, row, text};
 use iced::{Alignment, Element};
 
+use crate::gui::components::widgets::common::{SPACING_TIGHT, TEXT_SIZE_INFO};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -66,14 +67,14 @@ impl PitchShiftControl {
 
     pub fn view(&self) -> Element<'static, Message> {
         row![
-            text(format!("{}:", tr!(pitch_shift))).size(14),
+            text(format!("{}:", tr!(pitch_shift))).size(TEXT_SIZE_INFO),
             pick_list(
                 &SEMITONE_OPTIONS[..],
                 Some(SemitoneOption(self.semitones)),
                 |opt| Message::PitchShiftChanged(opt.0)
             ),
         ]
-        .spacing(5)
+        .spacing(SPACING_TIGHT)
         .align_y(Alignment::Center)
         .into()
     }

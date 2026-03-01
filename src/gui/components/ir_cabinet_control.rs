@@ -1,6 +1,10 @@
-use iced::widget::{checkbox, column, container, pick_list, row, rule, slider, text};
+use iced::widget::{checkbox, column, pick_list, row, slider, text};
 use iced::{Alignment, Element, Length};
 
+use crate::gui::components::widgets::common::{
+    COLOR_SUBTLE, COLOR_SUCCESS, COLOR_WARNING, SPACING_NORMAL, TEXT_SIZE_INFO, section_container,
+    section_title,
+};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -60,13 +64,6 @@ impl IrCabinetControl {
     }
 
     pub fn view(&self) -> Element<'static, Message> {
-        let header =
-            text(tr!(cabinet_ir))
-                .size(18)
-                .style(|theme: &iced::Theme| iced::widget::text::Style {
-                    color: Some(theme.palette().text),
-                });
-
         let ir_selector = row![
             text(tr!(ir)).width(Length::Fixed(80.0)),
             pick_list(
@@ -76,7 +73,7 @@ impl IrCabinetControl {
             )
             .width(Length::Fill),
         ]
-        .spacing(10)
+        .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
 
         let bypass_control = checkbox(self.bypassed)
@@ -91,47 +88,39 @@ impl IrCabinetControl {
                 .step(0.01),
             text(format!("{:.0}%", self.gain * 100.0)).width(Length::FillPortion(2)),
         ]
-        .spacing(10)
+        .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
 
         let status = if self.bypassed {
             let bypassed_status = format!("({})", tr!(bypassed));
             text(bypassed_status)
-                .size(14)
+                .size(TEXT_SIZE_INFO)
                 .style(|_| iced::widget::text::Style {
-                    color: Some(iced::Color::from_rgb(0.7, 0.7, 0.7)),
+                    color: Some(COLOR_SUBTLE),
                 })
         } else if let Some(ref ir_name) = self.selected_ir {
             text(format!("{} {}", tr!(active), ir_name))
-                .size(14)
+                .size(TEXT_SIZE_INFO)
                 .style(|_| iced::widget::text::Style {
-                    color: Some(iced::Color::from_rgb(0.3, 1.0, 0.3)),
+                    color: Some(COLOR_SUCCESS),
                 })
         } else {
             text(tr!(no_ir_loaded))
-                .size(14)
+                .size(TEXT_SIZE_INFO)
                 .style(|_| iced::widget::text::Style {
-                    color: Some(iced::Color::from_rgb(1.0, 0.7, 0.3)),
+                    color: Some(COLOR_WARNING),
                 })
         };
 
         let content = column![
-            header,
-            rule::horizontal(1),
+            section_title(tr!(cabinet_ir)),
             ir_selector,
             gain_control,
             bypass_control,
             status,
         ]
-        .spacing(10);
+        .spacing(SPACING_NORMAL);
 
-        container(content)
-            .width(Length::Fill)
-            .style(|theme: &iced::Theme| {
-                container::Style::default()
-                    .background(theme.palette().background)
-                    .border(iced::Border::default().rounded(5))
-            })
-            .into()
+        section_container(content.into())
     }
 }

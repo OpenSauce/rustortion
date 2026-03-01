@@ -2,6 +2,9 @@ use iced::widget::{container, row, space, text};
 use iced::{Color, Element, Length};
 
 use crate::audio::peak_meter::PeakMeterInfo;
+use crate::gui::components::widgets::common::{
+    COLOR_ERROR, COLOR_INACTIVE, SPACING_NORMAL, TEXT_SIZE_INFO,
+};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -40,13 +43,13 @@ impl PeakMeterDisplay {
         let level_width = METER_WIDTH * level_pct;
 
         let color = if self.info.is_clipping {
-            Color::from_rgb(1.0, 0.0, 0.0)
+            Color::from_rgb(1.0, 0.0, 0.0) // bright red clip
         } else if self.info.peak_db > -6.0 {
-            Color::from_rgb(1.0, 0.7, 0.0)
+            Color::from_rgb(1.0, 0.7, 0.0) // orange-yellow warning
         } else if self.info.peak_db > -20.0 {
-            Color::from_rgb(0.0, 1.0, 0.0)
+            Color::from_rgb(0.0, 1.0, 0.0) // bright green
         } else {
-            Color::from_rgb(0.0, 0.5, 0.0)
+            Color::from_rgb(0.0, 0.5, 0.0) // dim green
         };
 
         let db_text = if self.info.peak_db > -100.0 {
@@ -57,13 +60,13 @@ impl PeakMeterDisplay {
 
         let status_text = if self.info.is_clipping {
             text("CLIP!")
-                .size(14)
+                .size(TEXT_SIZE_INFO)
                 .style(move |_: &iced::Theme| iced::widget::text::Style {
                     color: Some(Color::from_rgb(1.0, 0.0, 0.0)),
                 })
         } else {
             text("")
-                .size(14)
+                .size(TEXT_SIZE_INFO)
                 .style(|theme: &iced::Theme| iced::widget::text::Style {
                     color: Some(theme.palette().text),
                 })
@@ -85,21 +88,21 @@ impl PeakMeterDisplay {
             text(tr!(output)).width(Length::Fixed(75.0)),
             meter,
             text(db_text)
-                .size(14)
+                .size(TEXT_SIZE_INFO)
                 .width(Length::Fixed(80.0))
                 .style(move |_: &iced::Theme| iced::widget::text::Style { color: Some(color) }),
             status_text.width(Length::Fixed(50.0)),
         ]
-        .spacing(10)
+        .spacing(SPACING_NORMAL)
         .align_y(iced::Alignment::Center)
         .into()
     }
 
     pub fn view_status(&self) -> Element<'_, Message> {
         let xrun_color = if self.xrun_count > 0 {
-            Color::from_rgb(1.0, 0.3, 0.3)
+            COLOR_ERROR
         } else {
-            Color::from_rgb(0.4, 0.4, 0.4)
+            COLOR_INACTIVE
         };
 
         let cpu_color = if self.cpu_load > 80.0 {
@@ -107,7 +110,7 @@ impl PeakMeterDisplay {
         } else if self.cpu_load > 50.0 {
             Color::from_rgb(1.0, 0.7, 0.0)
         } else {
-            Color::from_rgb(0.4, 0.4, 0.4)
+            COLOR_INACTIVE
         };
 
         let xrun_count = self.xrun_count;
@@ -125,7 +128,7 @@ impl PeakMeterDisplay {
                     color: Some(cpu_color),
                 }),
         ]
-        .spacing(10)
+        .spacing(SPACING_NORMAL)
         .align_y(iced::Alignment::Center)
         .into()
     }

@@ -1,16 +1,16 @@
-use iced::widget::{button, column, container, pick_list, row, rule, space, text};
-use iced::{Alignment, Color, Element, Length};
+use iced::widget::{button, column, pick_list, row, rule, space, text};
+use iced::{Alignment, Element, Length};
 
-use super::{
-    DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_ROW_SPACING, DIALOG_TITLE_SIZE,
+use super::common::{dialog_container, dialog_section_container, dialog_title_row};
+use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING};
+use crate::gui::components::widgets::common::{
+    COLOR_SUBTLE, COLOR_SUCCESS, COLOR_WARNING, PADDING_NORMAL, SPACING_NORMAL, SPACING_TIGHT,
+    TEXT_SIZE_INFO, TEXT_SIZE_LABEL, TEXT_SIZE_SECTION_TITLE, TEXT_SIZE_SMALL,
 };
 use crate::gui::messages::SettingsMessage;
 use crate::i18n::{self, LANGUAGES};
 use crate::settings::AudioSettings;
 use crate::tr;
-
-const GREEN: Color = Color::from_rgb(0.3, 1.0, 0.3);
-const ORANGE: Color = Color::from_rgb(1.0, 0.5, 0.3);
 
 /// Actual JACK settings as reported by the server
 #[derive(Debug, Clone, Default)]
@@ -98,25 +98,14 @@ impl SettingsDialog {
             return None;
         }
 
-        let title_row = row![
-            text(tr!(audio_settings))
-                .size(DIALOG_TITLE_SIZE)
-                .style(|theme: &iced::Theme| iced::widget::text::Style {
-                    color: Some(theme.palette().text),
-                }),
-            space::horizontal(),
-            button(tr!(close)).on_press(SettingsMessage::Close),
-        ]
-        .spacing(DIALOG_TITLE_ROW_SPACING)
-        .align_y(Alignment::Center)
-        .width(Length::Fill);
+        let title_row = dialog_title_row(tr!(audio_settings), SettingsMessage::Close);
 
         // JACK Status section - show actual values from JACK server
         let jack_status_section = self.jack_status_view();
 
         // Language selection
         let language_section = column![
-            text(tr!(language)).size(16),
+            text(tr!(language)).size(TEXT_SIZE_LABEL),
             pick_list(
                 LANGUAGES,
                 Some(i18n::get_language()),
@@ -124,11 +113,11 @@ impl SettingsDialog {
             )
             .width(Length::Fill),
         ]
-        .spacing(5);
+        .spacing(SPACING_TIGHT);
 
         // Input port selection
         let input_section = column![
-            text(tr!(input_port)).size(16),
+            text(tr!(input_port)).size(TEXT_SIZE_LABEL),
             pick_list(
                 self.available_inputs.clone(),
                 Some(self.temp_settings.input_port.clone()),
@@ -136,11 +125,11 @@ impl SettingsDialog {
             )
             .width(Length::Fill),
         ]
-        .spacing(5);
+        .spacing(SPACING_TIGHT);
 
         // Output port selections
         let output_left_section = column![
-            text(tr!(output_left_port)).size(16),
+            text(tr!(output_left_port)).size(TEXT_SIZE_LABEL),
             pick_list(
                 self.available_outputs.clone(),
                 Some(self.temp_settings.output_left_port.clone()),
@@ -148,10 +137,10 @@ impl SettingsDialog {
             )
             .width(Length::Fill),
         ]
-        .spacing(5);
+        .spacing(SPACING_TIGHT);
 
         let output_right_section = column![
-            text(tr!(output_right_port)).size(16),
+            text(tr!(output_right_port)).size(TEXT_SIZE_LABEL),
             pick_list(
                 self.available_outputs.clone(),
                 Some(self.temp_settings.output_right_port.clone()),
@@ -159,33 +148,33 @@ impl SettingsDialog {
             )
             .width(Length::Fill),
         ]
-        .spacing(5);
+        .spacing(SPACING_TIGHT);
 
         // Buffer size selection
         let buffer_sizes = vec![64u32, 128, 256, 512, 1024, 2048, 4096];
         let buffer_section = column![
-            text(tr!(buffer_size_requested)).size(16),
+            text(tr!(buffer_size_requested)).size(TEXT_SIZE_LABEL),
             pick_list(buffer_sizes, Some(self.temp_settings.buffer_size), |x| {
                 SettingsMessage::BufferSizeChanged(x)
             })
             .width(Length::Fill),
         ]
-        .spacing(5);
+        .spacing(SPACING_TIGHT);
 
         // Sample rate selection
         let sample_rates = vec![44100u32, 48000, 88200, 96000, 176_400, 192_000];
         let sample_rate_section = column![
-            text(tr!(sample_rate_requested)).size(16),
+            text(tr!(sample_rate_requested)).size(TEXT_SIZE_LABEL),
             pick_list(sample_rates, Some(self.temp_settings.sample_rate), |x| {
                 SettingsMessage::SampleRateChanged(x)
             })
             .width(Length::Fill),
         ]
-        .spacing(5);
+        .spacing(SPACING_TIGHT);
 
         let oversampling_factors = vec![1u32, 2, 4, 8, 16];
         let oversampling_section = column![
-            text(tr!(oversampling_factor)).size(16),
+            text(tr!(oversampling_factor)).size(TEXT_SIZE_LABEL),
             pick_list(
                 oversampling_factors,
                 Some(self.temp_settings.oversampling_factor),
@@ -193,7 +182,7 @@ impl SettingsDialog {
             )
             .width(Length::Fill),
         ]
-        .spacing(5);
+        .spacing(SPACING_TIGHT);
 
         // Latency display (based on actual JACK values)
         let latency =
@@ -204,9 +193,9 @@ impl SettingsDialog {
             latency,
             tr!(ms)
         ))
-        .size(14)
+        .size(TEXT_SIZE_INFO)
         .style(|_theme: &iced::Theme| iced::widget::text::Style {
-            color: Some(Color::from_rgb(0.7, 0.7, 0.7)),
+            color: Some(COLOR_SUBTLE),
         });
 
         // Control buttons
@@ -217,7 +206,7 @@ impl SettingsDialog {
                 .on_press(SettingsMessage::Apply)
                 .style(iced::widget::button::success),
         ]
-        .spacing(10)
+        .spacing(SPACING_NORMAL)
         .width(Length::Fill);
 
         let dialog_content = column![
@@ -232,24 +221,24 @@ impl SettingsDialog {
                     output_left_section,
                     output_right_section,
                 ]
-                .spacing(10)
-                .padding(5),
+                .spacing(SPACING_NORMAL)
+                .padding(SPACING_TIGHT),
                 column![
                     buffer_section,
                     sample_rate_section,
                     oversampling_section,
                     latency_text,
                     text(tr!(changes_require_restart))
-                        .size(12)
+                        .size(TEXT_SIZE_SMALL)
                         .style(|_: &iced::Theme| iced::widget::text::Style {
-                            color: Some(Color::from_rgb(1.0, 0.7, 0.3)),
+                            color: Some(COLOR_WARNING),
                         }),
                 ]
-                .spacing(10)
-                .padding(5),
+                .spacing(SPACING_NORMAL)
+                .padding(SPACING_TIGHT),
             ]
-            .spacing(10)
-            .padding(5),
+            .spacing(SPACING_NORMAL)
+            .padding(SPACING_TIGHT),
             controls,
         ]
         .spacing(DIALOG_CONTENT_SPACING)
@@ -257,19 +246,13 @@ impl SettingsDialog {
         .width(Length::Fill)
         .height(Length::Fill);
 
-        let dialog = container(dialog_content).style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(10).width(2))
-        });
-
-        Some(dialog.into())
+        Some(dialog_container(dialog_content.into()))
     }
 
     /// The view containing JACK server status information
     fn jack_status_view(&self) -> Element<'static, SettingsMessage> {
         let header = text(tr!(jack_server_status))
-            .size(18)
+            .size(TEXT_SIZE_SECTION_TITLE)
             .style(|theme: &iced::Theme| iced::widget::text::Style {
                 color: Some(theme.palette().text),
             });
@@ -280,9 +263,17 @@ impl SettingsDialog {
         let buffer_size_match =
             self.jack_status.buffer_size == self.temp_settings.buffer_size as usize;
 
-        let sample_rate_color = if sample_rate_match { GREEN } else { ORANGE };
+        let sample_rate_color = if sample_rate_match {
+            COLOR_SUCCESS
+        } else {
+            COLOR_WARNING
+        };
 
-        let buffer_size_color = if buffer_size_match { GREEN } else { ORANGE };
+        let buffer_size_color = if buffer_size_match {
+            COLOR_SUCCESS
+        } else {
+            COLOR_WARNING
+        };
 
         let sample_rate_text = if sample_rate_match {
             format!("{} {}", self.jack_status.sample_rate, tr!(hz))
@@ -314,7 +305,7 @@ impl SettingsDialog {
                 color: Some(sample_rate_color),
             }),
         ]
-        .spacing(10)
+        .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
 
         let buffer_size_row = row![
@@ -323,30 +314,24 @@ impl SettingsDialog {
                 color: Some(buffer_size_color),
             }),
         ]
-        .spacing(10)
+        .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
 
         let warning = if !sample_rate_match || !buffer_size_match {
             text(tr!(jack_different_settings))
-                .size(12)
+                .size(TEXT_SIZE_SMALL)
                 .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(1.0, 0.7, 0.3)),
+                    color: Some(COLOR_WARNING),
                 })
         } else {
             text("")
         };
 
-        container(
+        dialog_section_container(
             column![header, sample_rate_row, buffer_size_row, warning,]
-                .spacing(8)
-                .padding(10),
+                .spacing(SPACING_NORMAL)
+                .padding(PADDING_NORMAL)
+                .into(),
         )
-        .style(|_theme: &iced::Theme| {
-            container::Style::default()
-                .background(Color::from_rgba(0.0, 0.0, 0.0, 0.2))
-                .border(iced::Border::default().rounded(5))
-        })
-        .width(Length::Fill)
-        .into()
     }
 }

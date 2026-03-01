@@ -1,10 +1,13 @@
 use iced::keyboard::{Key, Modifiers};
-use iced::widget::{button, column, container, pick_list, row, rule, scrollable, space, text};
-use iced::{Alignment, Color, Element, Length};
+use iced::widget::{button, column, row, rule, space};
+use iced::{Alignment, Element, Length};
 
-use super::{
-    DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_ROW_SPACING, DIALOG_TITLE_SIZE,
+use super::common::{
+    dialog_container, dialog_section_container, dialog_title_row, input_captured_view,
+    mapping_list_view, waiting_for_input_view,
 };
+use super::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING};
+use crate::gui::components::widgets::common::{SPACING_NORMAL, TEXT_SIZE_SECTION_TITLE};
 use crate::gui::messages::HotkeyMessage;
 use crate::hotkey::{HotkeyMapping, is_uncapturable_key, serialize_key, serialize_modifiers};
 use crate::tr;
@@ -159,18 +162,7 @@ impl HotkeyDialog {
             return None;
         }
 
-        let title_row = row![
-            text(tr!(hotkey_settings))
-                .size(DIALOG_TITLE_SIZE)
-                .style(|theme: &iced::Theme| iced::widget::text::Style {
-                    color: Some(theme.palette().text),
-                }),
-            space::horizontal(),
-            button(tr!(close)).on_press(HotkeyMessage::Close),
-        ]
-        .spacing(DIALOG_TITLE_ROW_SPACING)
-        .align_y(Alignment::Center)
-        .width(Length::Fill);
+        let title_row = dialog_title_row(tr!(hotkey_settings), HotkeyMessage::Close);
 
         // Mappings section
         let mappings_section = self.mappings_section_view();
@@ -181,22 +173,15 @@ impl HotkeyDialog {
             .width(Length::Fill)
             .height(Length::Fill);
 
-        let dialog = container(dialog_content).style(|theme: &iced::Theme| {
-            container::Style::default()
-                .background(theme.palette().background)
-                .border(iced::Border::default().rounded(10).width(2))
-        });
-
-        Some(dialog.into())
+        Some(dialog_container(dialog_content.into()))
     }
 
     fn mappings_section_view(&self) -> Element<'_, HotkeyMessage> {
-        let header =
-            text(tr!(hotkeys))
-                .size(18)
-                .style(|theme: &iced::Theme| iced::widget::text::Style {
-                    color: Some(theme.palette().text),
-                });
+        let header = iced::widget::text(tr!(hotkeys))
+            .size(TEXT_SIZE_SECTION_TITLE)
+            .style(|theme: &iced::Theme| iced::widget::text::Style {
+                color: Some(theme.palette().text),
+            });
 
         let add_button = if self.learning_state == LearningState::Idle {
             button(tr!(add_mapping))
@@ -210,108 +195,35 @@ impl HotkeyDialog {
 
         let learning_content: Element<'_, HotkeyMessage> = match &self.learning_state {
             LearningState::Idle => column![].into(),
-            LearningState::WaitingForInput => {
-                container(text(tr!(press_any_key)).size(16).style(|_: &iced::Theme| {
-                    iced::widget::text::Style {
-                        color: Some(Color::from_rgb(1.0, 0.8, 0.3)),
-                    }
-                }))
-                .padding(10)
-                .style(|_: &iced::Theme| {
-                    container::Style::default()
-                        .background(Color::from_rgba(1.0, 0.8, 0.0, 0.1))
-                        .border(iced::Border::default().rounded(5))
-                })
-                .width(Length::Fill)
-                .into()
-            }
-            LearningState::InputCaptured { description, .. } => {
-                let captured_text = text(format!("{} {}", tr!(captured), description))
-                    .size(16)
-                    .style(|_: &iced::Theme| iced::widget::text::Style {
-                        color: Some(Color::from_rgb(0.3, 1.0, 0.3)),
-                    });
-
-                let preset_picker = row![
-                    text(tr!(assign_to)).width(Length::Fixed(80.0)),
-                    pick_list(
-                        self.available_presets.clone(),
-                        self.selected_preset_for_mapping.clone(),
-                        HotkeyMessage::PresetSelected
-                    )
-                    .width(Length::Fill)
-                    .placeholder(tr!(select_preset)),
-                ]
-                .spacing(10)
-                .align_y(Alignment::Center);
-
-                let confirm_button = if self.selected_preset_for_mapping.is_some() {
-                    button(tr!(confirm_mapping))
-                        .on_press(HotkeyMessage::ConfirmMapping)
-                        .style(iced::widget::button::success)
-                } else {
-                    button(tr!(confirm_mapping)).style(iced::widget::button::secondary)
-                };
-
-                container(column![captured_text, preset_picker, confirm_button,].spacing(10))
-                    .padding(10)
-                    .style(|_: &iced::Theme| {
-                        container::Style::default()
-                            .background(Color::from_rgba(0.0, 1.0, 0.0, 0.05))
-                            .border(iced::Border::default().rounded(5))
-                    })
-                    .width(Length::Fill)
-                    .into()
-            }
+            LearningState::WaitingForInput => waiting_for_input_view(tr!(press_any_key)),
+            LearningState::InputCaptured { description, .. } => input_captured_view(
+                description,
+                &self.available_presets,
+                self.selected_preset_for_mapping.clone(),
+                HotkeyMessage::PresetSelected,
+                HotkeyMessage::ConfirmMapping,
+            ),
         };
 
         // Existing mappings list
-        let mappings_list: Element<'_, HotkeyMessage> = if self.mappings.is_empty() {
-            text(tr!(no_mappings_configured))
-                .size(14)
-                .style(|_: &iced::Theme| iced::widget::text::Style {
-                    color: Some(Color::from_rgb(0.5, 0.5, 0.5)),
-                })
-                .into()
-        } else {
-            let mut col = column![].spacing(5);
+        let mappings_list = mapping_list_view(
+            self.mappings
+                .iter()
+                .map(|m| (m.description.clone(), m.preset_name.clone()))
+                .collect(),
+            tr!(no_mappings_configured),
+            HotkeyMessage::RemoveMapping,
+        );
 
-            for (idx, mapping) in self.mappings.iter().enumerate() {
-                let mapping_row = row![
-                    text(&mapping.description)
-                        .size(14)
-                        .width(Length::Fixed(120.0)),
-                    text("→").size(14).width(Length::Fixed(30.0)),
-                    text(&mapping.preset_name).size(14).width(Length::Fill),
-                    button("×")
-                        .on_press(HotkeyMessage::RemoveMapping(idx))
-                        .style(iced::widget::button::danger)
-                        .width(Length::Fixed(30.0)),
-                ]
-                .spacing(10)
-                .align_y(Alignment::Center);
-
-                col = col.push(mapping_row);
-            }
-
-            scrollable(col).height(Length::Fixed(120.0)).into()
-        };
-
-        container(
+        dialog_section_container(
             column![
                 row![header, space::horizontal(), add_button].align_y(Alignment::Center),
                 learning_content,
                 mappings_list,
             ]
-            .spacing(10)
-            .padding(10),
+            .spacing(SPACING_NORMAL)
+            .padding(SPACING_NORMAL)
+            .into(),
         )
-        .style(|_theme: &iced::Theme| {
-            container::Style::default()
-                .background(Color::from_rgba(0.0, 0.0, 0.0, 0.2))
-                .border(iced::Border::default().rounded(5))
-        })
-        .width(Length::Fill)
-        .into()
     }
 }

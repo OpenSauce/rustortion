@@ -1,9 +1,11 @@
-use iced::widget::{column, pick_list, row, text};
-use iced::{Element, Length};
+use iced::widget::column;
+use iced::Element;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::tonestack::{ToneStackModel, ToneStackStage};
-use crate::gui::components::widgets::common::{labeled_slider, stage_card};
+use crate::gui::components::widgets::common::{
+    labeled_picker, labeled_slider, stage_card, SPACING_TIGHT,
+};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -89,21 +91,13 @@ pub fn view(
         can_move_up,
         can_move_down,
         || {
-            let model_picker = row![
-                text(tr!(model)).width(Length::FillPortion(3)),
-                pick_list(TONE_STACK_MODELS, Some(cfg.model), move |m| {
+            column![
+                labeled_picker(tr!(model), TONE_STACK_MODELS, Some(cfg.model), move |m| {
                     Message::Stage(
                         idx,
                         StageMessage::ToneStack(ToneStackMessage::ModelChanged(m)),
                     )
-                })
-                .width(Length::FillPortion(7)),
-            ]
-            .spacing(10)
-            .align_y(iced::Alignment::Center);
-
-            column![
-                model_picker,
+                }),
                 labeled_slider(
                     tr!(bass),
                     0.0..=2.0,
@@ -149,7 +143,7 @@ pub fn view(
                     0.05
                 ),
             ]
-            .spacing(5)
+            .spacing(SPACING_TIGHT)
             .into()
         },
     )

@@ -1,6 +1,9 @@
 use iced::widget::{button, container, pick_list, row, space, text, text_input};
 use iced::{Alignment, Element, Length, Task};
 
+use crate::gui::components::widgets::common::{
+    BORDER_RADIUS_CARD, PADDING_NORMAL, SPACING_NORMAL, SPACING_TIGHT,
+};
 use crate::gui::messages::{Message, PresetGuiMessage, PresetMessage};
 use crate::tr;
 
@@ -87,7 +90,7 @@ impl PresetBar {
             })
             .width(Length::Fixed(200.0)),
         ]
-        .spacing(10)
+        .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
 
         if self.show_overwrite_confirmation {
@@ -102,20 +105,20 @@ impl PresetBar {
                 button(tr!(no))
                     .on_press(PresetMessage::Gui(PresetGuiMessage::CancelOverwrite).into()),
             ]
-            .spacing(5)
+            .spacing(SPACING_TIGHT)
             .align_y(Alignment::Center);
 
             return container(
                 row![preset_selector, space::horizontal(), confirmation_controls,]
-                    .spacing(10)
+                    .spacing(SPACING_NORMAL)
                     .align_y(Alignment::Center)
                     .width(Length::Fill),
             )
-            .padding(10)
+            .padding(PADDING_NORMAL)
             .style(|theme: &iced::Theme| {
                 container::Style::default()
                     .background(theme.palette().background)
-                    .border(iced::Border::default().rounded(5))
+                    .border(iced::Border::default().rounded(BORDER_RADIUS_CARD))
             })
             .into();
         }
@@ -130,7 +133,7 @@ impl PresetBar {
                 button(tr!(cancel))
                     .on_press(PresetMessage::Gui(PresetGuiMessage::CancelSave).into()),
             ]
-            .spacing(5)
+            .spacing(SPACING_TIGHT)
             .align_y(Alignment::Center)
         } else {
             let mut controls = row![
@@ -148,19 +151,19 @@ impl PresetBar {
                     );
             }
 
-            controls.spacing(5).align_y(Alignment::Center)
+            controls.spacing(SPACING_TIGHT).align_y(Alignment::Center)
         };
 
         container(
             row![preset_selector, space::horizontal(), save_controls,]
-                .spacing(10)
+                .spacing(SPACING_NORMAL)
                 .align_y(Alignment::Center)
                 .width(Length::Fill),
         )
         .style(|theme: &iced::Theme| {
             container::Style::default()
                 .background(theme.palette().background)
-                .border(iced::Border::default().rounded(5))
+                .border(iced::Border::default().rounded(BORDER_RADIUS_CARD))
         })
         .into()
     }
