@@ -57,14 +57,35 @@ impl Biquad {
     /// the sample rate:
     ///   `alpha = sin(w0) * sinh(ln(2)/2 * BW * w0/sin(w0))`
     fn set_peaking_eq(&mut self, freq: f64, gain_db: f64, bw: f64, sample_rate: f64) {
+        let was_unity = self.b1 == 0.0 && self.a1 == 0.0;
+
         if gain_db.abs() < 1e-6 {
-            // Unity passthrough — skip computation
+            // Unity passthrough — skip computation.
+            // Reset state: values from the old filter shape are meaningless
+            // to a passthrough and would cause a transient on the next
+            // non-zero coefficient update.
             self.b0 = 1.0;
             self.b1 = 0.0;
             self.b2 = 0.0;
             self.a1 = 0.0;
             self.a2 = 0.0;
+            self.x1 = 0.0;
+            self.x2 = 0.0;
+            self.y1 = 0.0;
+            self.y2 = 0.0;
             return;
+        }
+
+        // Reset state when transitioning from unity passthrough — the stored
+        // state (all zeros from passthrough) is trivially compatible, but when
+        // transitioning from a *different* active filter shape through unity
+        // and back, we want a clean slate. For gain-to-gain changes, DF1
+        // state remains meaningful and transitions smoothly by design.
+        if was_unity {
+            self.x1 = 0.0;
+            self.x2 = 0.0;
+            self.y1 = 0.0;
+            self.y2 = 0.0;
         }
 
         // Nyquist guard
