@@ -114,12 +114,12 @@ impl PeakMeterDisplay {
         let cpu_load = self.cpu_load;
 
         row![
-            text(format!("XR {xrun_count}"))
+            text(format!("{} {xrun_count}", tr!(xruns)))
                 .size(11)
                 .style(move |_: &iced::Theme| iced::widget::text::Style {
                     color: Some(xrun_color),
                 }),
-            text(format!("CPU {cpu_load:.0}%"))
+            text(format!("{} {cpu_load:.0}%", tr!(cpu)))
                 .size(11)
                 .style(move |_: &iced::Theme| iced::widget::text::Style {
                     color: Some(cpu_color),

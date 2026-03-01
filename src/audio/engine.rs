@@ -90,8 +90,11 @@ impl Engine {
             return Ok(());
         }
 
-        // Apply input filters in-place via output buffer to avoid allocation
-        output[..input.len()].copy_from_slice(input);
+        // Apply input filters in-place via output buffer to avoid allocation.
+        // Skip copy when input and output alias (same base pointer).
+        if !std::ptr::eq(input.as_ptr(), output.as_ptr()) {
+            output[..input.len()].copy_from_slice(input);
+        }
         self.apply_input_filters(&mut output[..input.len()]);
 
         if self.samplers.get_oversample_factor() == 1.0 {

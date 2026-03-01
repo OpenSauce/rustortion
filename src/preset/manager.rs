@@ -130,8 +130,10 @@ fn migrate_preset(value: &mut serde_json::Value) {
         return;
     };
 
-    let mut hp_cutoff: Option<f32> = None;
-    let mut lp_cutoff: Option<f32> = None;
+    let mut hp_found = false;
+    let mut lp_found = false;
+    let mut hp_cutoff = 100.0_f32;
+    let mut lp_cutoff = 8000.0_f32;
     let mut non_filter_stages = Vec::new();
 
     for stage in &stages {
@@ -140,17 +142,25 @@ fn migrate_preset(value: &mut serde_json::Value) {
                 .get("filter_type")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            let cutoff = filter_obj
-                .get("cutoff_hz")
-                .and_then(serde_json::Value::as_f64)
-                .map(|v| v as f32);
 
             match filter_type {
-                "Highpass" if hp_cutoff.is_none() => {
-                    hp_cutoff = cutoff;
+                "Highpass" if !hp_found => {
+                    hp_found = true;
+                    if let Some(v) = filter_obj
+                        .get("cutoff_hz")
+                        .and_then(serde_json::Value::as_f64)
+                    {
+                        hp_cutoff = v as f32;
+                    }
                 }
-                "Lowpass" if lp_cutoff.is_none() => {
-                    lp_cutoff = cutoff;
+                "Lowpass" if !lp_found => {
+                    lp_found = true;
+                    if let Some(v) = filter_obj
+                        .get("cutoff_hz")
+                        .and_then(serde_json::Value::as_f64)
+                    {
+                        lp_cutoff = v as f32;
+                    }
                 }
                 _ => {
                     // Drop additional/duplicate filter stages
@@ -161,12 +171,12 @@ fn migrate_preset(value: &mut serde_json::Value) {
         }
     }
 
-    // Build input_filters
+    // Build input_filters — enabled tracks stage presence, cutoff defaults if missing
     let input_filters = InputFilterConfig {
-        hp_enabled: hp_cutoff.is_some(),
-        hp_cutoff: hp_cutoff.unwrap_or(100.0),
-        lp_enabled: lp_cutoff.is_some(),
-        lp_cutoff: lp_cutoff.unwrap_or(8000.0),
+        hp_enabled: hp_found,
+        hp_cutoff,
+        lp_enabled: lp_found,
+        lp_cutoff,
     };
 
     obj.insert(
@@ -262,5 +272,30 @@ mod tests {
 
         let stages = value["stages"].as_array().unwrap();
         assert_eq!(stages.len(), 1);
+    }
+
+    #[test]
+    fn test_migrate_preset_filter_without_cutoff() {
+        let mut value: serde_json::Value = serde_json::from_str(
+            r#"{
+                "name": "Test",
+                "stages": [
+                    {"Filter": {"filter_type": "Highpass"}},
+                    {"Preamp": {"gain": 1.0, "bias": 0.0, "clipper_type": "ClassA"}}
+                ],
+                "ir_name": null,
+                "ir_gain": 0.1,
+                "pitch_shift_semitones": 0
+            }"#,
+        )
+        .unwrap();
+
+        migrate_preset(&mut value);
+
+        let filters: InputFilterConfig =
+            serde_json::from_value(value["input_filters"].clone()).unwrap();
+        assert!(filters.hp_enabled);
+        assert!((filters.hp_cutoff - 100.0).abs() < f32::EPSILON); // default cutoff
+        assert!(!filters.lp_enabled);
     }
 }
