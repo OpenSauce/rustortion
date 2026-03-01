@@ -1,5 +1,5 @@
 {
-  "name": "Djent",
+  "name": "Djent Eb",
   "description": null,
   "author": null,
   "stages": [
@@ -63,8 +63,8 @@
     }
   ],
   "ir_name": "Science Amplification/4x12/G12H-150/SM57 Brighter.wav",
-  "ir_gain": 0.14999999,
-  "pitch_shift_semitones": 0,
+  "ir_gain": 0.17999999,
+  "pitch_shift_semitones": -1,
   "input_filters": {
     "hp_enabled": true,
     "hp_cutoff": 133.0,

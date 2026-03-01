@@ -4,13 +4,6 @@
   "author": null,
   "stages": [
     {
-      "Filter": {
-        "filter_type": "Highpass",
-        "cutoff_hz": 150.0,
-        "resonance": 0.1
-      }
-    },
-    {
       "Compressor": {
         "attack_ms": 1.0,
         "release_ms": 100.0,
@@ -22,7 +15,7 @@
     {
       "Preamp": {
         "gain": 6.0,
-        "bias": 1.4901161e-8,
+        "bias": 1.4901161e-08,
         "clipper_type": "Medium"
       }
     },
@@ -40,5 +33,11 @@
         "gain": 1.5
       }
     }
-  ]
+  ],
+  "input_filters": {
+    "hp_enabled": true,
+    "hp_cutoff": 150.0,
+    "lp_enabled": false,
+    "lp_cutoff": 8000.0
+  }
 }

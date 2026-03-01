@@ -4,23 +4,9 @@
   "author": null,
   "stages": [
     {
-      "Filter": {
-        "filter_type": "Highpass",
-        "cutoff_hz": 131.0,
-        "resonance": 0.2
-      }
-    },
-    {
-      "Filter": {
-        "filter_type": "Lowpass",
-        "cutoff_hz": 3295.0,
-        "resonance": 0.65000004
-      }
-    },
-    {
       "Preamp": {
         "gain": 5.3,
-        "bias": 1.4901161e-8,
+        "bias": 1.4901161e-08,
         "clipper_type": "ClassA"
       }
     },
@@ -65,5 +51,11 @@
     }
   ],
   "ir_name": "Jesterdyne/Engl/sm57-right-01.wav",
-  "ir_gain": 0.16
+  "ir_gain": 0.16,
+  "input_filters": {
+    "hp_enabled": true,
+    "hp_cutoff": 131.0,
+    "lp_enabled": true,
+    "lp_cutoff": 3295.0
+  }
 }

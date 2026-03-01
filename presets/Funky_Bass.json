@@ -4,18 +4,6 @@
   "author": null,
   "stages": [
     {
-      "Filter": {
-        "filter_type": "Highpass",
-        "cutoff_hz": 25.0
-      }
-    },
-    {
-      "Filter": {
-        "filter_type": "Lowpass",
-        "cutoff_hz": 7341.0
-      }
-    },
-    {
       "Compressor": {
         "attack_ms": 1.0,
         "release_ms": 100.0,
@@ -47,5 +35,11 @@
     }
   ],
   "ir_name": "Science Amplification/Bass/6x10/Science 6x10 SC10 SM57.wav",
-  "ir_gain": 0.17
+  "ir_gain": 0.17,
+  "input_filters": {
+    "hp_enabled": true,
+    "hp_cutoff": 25.0,
+    "lp_enabled": true,
+    "lp_cutoff": 7341.0
+  }
 }

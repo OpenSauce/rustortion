@@ -40,13 +40,13 @@ impl PeakMeterDisplay {
         let level_width = METER_WIDTH * level_pct;
 
         let color = if self.info.is_clipping {
-            Color::from_rgb(1.0, 0.0, 0.0) // Red for clipping
+            Color::from_rgb(1.0, 0.0, 0.0)
         } else if self.info.peak_db > -6.0 {
-            Color::from_rgb(1.0, 0.7, 0.0) // Orange/yellow for hot
+            Color::from_rgb(1.0, 0.7, 0.0)
         } else if self.info.peak_db > -20.0 {
-            Color::from_rgb(0.0, 1.0, 0.0) // Green for normal
+            Color::from_rgb(0.0, 1.0, 0.0)
         } else {
-            Color::from_rgb(0.0, 0.5, 0.0) // Dark green for quiet
+            Color::from_rgb(0.0, 0.5, 0.0)
         };
 
         let db_text = if self.info.peak_db > -100.0 {
@@ -81,23 +81,6 @@ impl PeakMeterDisplay {
                 .border(iced::Border::default().width(1).rounded(3))
         });
 
-        let xrun_color = if self.xrun_count > 0 {
-            Color::from_rgb(1.0, 0.3, 0.3)
-        } else {
-            Color::from_rgb(0.5, 0.5, 0.5)
-        };
-
-        let cpu_color = if self.cpu_load > 80.0 {
-            Color::from_rgb(1.0, 0.0, 0.0)
-        } else if self.cpu_load > 50.0 {
-            Color::from_rgb(1.0, 0.7, 0.0)
-        } else {
-            Color::from_rgb(0.5, 0.5, 0.5)
-        };
-
-        let xrun_count = self.xrun_count;
-        let cpu_load = self.cpu_load;
-
         row![
             text(tr!(output)).width(Length::Fixed(75.0)),
             meter,
@@ -106,15 +89,38 @@ impl PeakMeterDisplay {
                 .width(Length::Fixed(80.0))
                 .style(move |_: &iced::Theme| iced::widget::text::Style { color: Some(color) }),
             status_text.width(Length::Fixed(50.0)),
-            text(format!("{}: {xrun_count}", tr!(xruns)))
-                .size(14)
-                .width(Length::Fixed(80.0))
+        ]
+        .spacing(10)
+        .align_y(iced::Alignment::Center)
+        .into()
+    }
+
+    pub fn view_status(&self) -> Element<'_, Message> {
+        let xrun_color = if self.xrun_count > 0 {
+            Color::from_rgb(1.0, 0.3, 0.3)
+        } else {
+            Color::from_rgb(0.4, 0.4, 0.4)
+        };
+
+        let cpu_color = if self.cpu_load > 80.0 {
+            Color::from_rgb(1.0, 0.0, 0.0)
+        } else if self.cpu_load > 50.0 {
+            Color::from_rgb(1.0, 0.7, 0.0)
+        } else {
+            Color::from_rgb(0.4, 0.4, 0.4)
+        };
+
+        let xrun_count = self.xrun_count;
+        let cpu_load = self.cpu_load;
+
+        row![
+            text(format!("XR {xrun_count}"))
+                .size(11)
                 .style(move |_: &iced::Theme| iced::widget::text::Style {
                     color: Some(xrun_color),
                 }),
-            text(format!("{}: {cpu_load:.0}%", tr!(cpu)))
-                .size(14)
-                .width(Length::Fixed(80.0))
+            text(format!("CPU {cpu_load:.0}%"))
+                .size(11)
                 .style(move |_: &iced::Theme| iced::widget::text::Style {
                     color: Some(cpu_color),
                 }),

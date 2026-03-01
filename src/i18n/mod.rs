@@ -234,6 +234,17 @@ pub struct Translations {
     pub hotkeys: &'static str,
     pub press_any_key: &'static str,
 
+    // Tabs
+    pub tab_amp: &'static str,
+    pub tab_effects: &'static str,
+    pub tab_cabinet: &'static str,
+    pub tab_io: &'static str,
+
+    // Input filters
+    pub input_filters: &'static str,
+    pub highpass: &'static str,
+    pub lowpass: &'static str,
+
     // Peak meter / status
     pub xruns: &'static str,
     pub cpu: &'static str,
@@ -412,6 +423,17 @@ pub static EN: Translations = Translations {
     hotkeys: "Hotkeys",
     press_any_key: "Press any key...",
 
+    // Tabs
+    tab_amp: "AMP",
+    tab_effects: "EFFECTS",
+    tab_cabinet: "CABINET",
+    tab_io: "INPUT",
+
+    // Input filters
+    input_filters: "Input Filters",
+    highpass: "Highpass",
+    lowpass: "Lowpass",
+
     // Peak meter / status
     xruns: "xruns",
     cpu: "CPU",
@@ -580,6 +602,17 @@ pub static ZH_CN: Translations = Translations {
     hotkey_settings: "快捷键设置",
     hotkeys: "快捷键",
     press_any_key: "请按任意键...",
+
+    // Tabs
+    tab_amp: "音箱",
+    tab_effects: "效果",
+    tab_cabinet: "箱体",
+    tab_io: "输入",
+
+    // Input filters
+    input_filters: "输入滤波器",
+    highpass: "高通",
+    lowpass: "低通",
 
     // Peak meter / status
     xruns: "欠载",
