@@ -3,6 +3,7 @@ use crossbeam::channel::{Receiver, Sender, bounded};
 use log::{debug, error};
 
 use crate::amp::chain::AmplifierChain;
+use crate::amp::stages::Stage;
 use crate::audio::peak_meter::PeakMeter;
 use crate::audio::pitch_shifter::PitchShifter;
 use crate::audio::recorder::Recorder;
@@ -13,6 +14,7 @@ use crate::tuner::Tuner;
 
 pub enum EngineMessage {
     SetAmpChain(Box<AmplifierChain>),
+    SetInputFilters(Option<Box<dyn Stage>>, Option<Box<dyn Stage>>),
     StartRecording(Recorder),
     StopRecording,
     SetIrCabinet(Option<String>),
@@ -35,6 +37,8 @@ pub struct Engine {
     peak_meter: PeakMeter,
     metronome: Metronome,
     pitch_shifter: Option<PitchShifter>,
+    input_highpass: Option<Box<dyn Stage>>,
+    input_lowpass: Option<Box<dyn Stage>>,
 }
 
 pub struct EngineHandle {
@@ -62,12 +66,22 @@ impl Engine {
                 peak_meter,
                 metronome,
                 pitch_shifter: None,
+                input_highpass: None,
+                input_lowpass: None,
             },
             EngineHandle { engine_sender },
         ))
     }
 
     pub fn process(&mut self, input: &[f32], output: &mut [f32]) -> Result<()> {
+        if input.len() != output.len() {
+            return Err(anyhow::anyhow!(
+                "input and output buffer size mismatch: input {}, output {}",
+                input.len(),
+                output.len()
+            ));
+        }
+
         self.handle_messages();
 
         if self.tuner.is_enabled() {
@@ -76,10 +90,17 @@ impl Engine {
             return Ok(());
         }
 
+        // Apply input filters in-place via output buffer to avoid allocation.
+        // Skip copy when input and output alias (same base pointer).
+        if !std::ptr::eq(input.as_ptr(), output.as_ptr()) {
+            output[..input.len()].copy_from_slice(input);
+        }
+        self.apply_input_filters(&mut output[..input.len()]);
+
         if self.samplers.get_oversample_factor() == 1.0 {
-            self.process_without_upsampling(input, output)?;
+            self.process_without_upsampling(output)?;
         } else {
-            self.process_with_upsampling(input, output)?;
+            self.process_with_upsampling(output)?;
         }
 
         if let Some(ref mut shifter) = self.pitch_shifter {
@@ -99,25 +120,30 @@ impl Engine {
         Ok(())
     }
 
-    fn process_without_upsampling(&mut self, input: &[f32], output: &mut [f32]) -> Result<()> {
-        if input.len() != output.len() {
-            return Err(anyhow::anyhow!(
-                "input and output buffer size mismatch: input {}, output {}",
-                input.len(),
-                output.len()
-            ));
+    fn apply_input_filters(&mut self, buf: &mut [f32]) {
+        if let Some(ref mut hp) = self.input_highpass {
+            for s in buf.iter_mut() {
+                *s = hp.process(*s);
+            }
         }
+        if let Some(ref mut lp) = self.input_lowpass {
+            for s in buf.iter_mut() {
+                *s = lp.process(*s);
+            }
+        }
+    }
 
+    fn process_without_upsampling(&mut self, output: &mut [f32]) -> Result<()> {
         let chain = self.chain.as_mut();
-        for (i, &sample) in input.iter().enumerate() {
-            output[i] = chain.process(sample);
+        for s in output.iter_mut() {
+            *s = chain.process(*s);
         }
 
         Ok(())
     }
 
-    fn process_with_upsampling(&mut self, input: &[f32], output: &mut [f32]) -> Result<()> {
-        self.samplers.copy_input(input)?;
+    fn process_with_upsampling(&mut self, output: &mut [f32]) -> Result<()> {
+        self.samplers.copy_input(output)?;
 
         let upsampled = self.samplers.upsample()?;
 
@@ -152,6 +178,11 @@ impl Engine {
                 EngineMessage::SetAmpChain(chain) => {
                     self.chain = chain;
                     debug!("Received new amplifier chain");
+                }
+                EngineMessage::SetInputFilters(hp, lp) => {
+                    self.input_highpass = hp;
+                    self.input_lowpass = lp;
+                    debug!("Updated input filters");
                 }
                 EngineMessage::SetIrCabinet(ir_name) => {
                     if let Some(ref mut cab) = self.ir_cabinet
@@ -265,6 +296,11 @@ impl EngineHandle {
 
     pub fn set_pitch_shift(&self, semitones: i32) {
         let update = EngineMessage::SetPitchShift(semitones);
+        self.send(update);
+    }
+
+    pub fn set_input_filters(&self, hp: Option<Box<dyn Stage>>, lp: Option<Box<dyn Stage>>) {
+        let update = EngineMessage::SetInputFilters(hp, lp);
         self.send(update);
     }
 

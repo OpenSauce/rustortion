@@ -35,7 +35,7 @@ impl SettingsHandler {
                 self.dialog
                     .show(&settings.audio, inputs, outputs, jack_status);
             }
-            SettingsMessage::Cancel => {
+            SettingsMessage::Close => {
                 self.dialog.hide();
             }
             SettingsMessage::Apply => {

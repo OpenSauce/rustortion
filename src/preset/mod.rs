@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::gui::components::input_filter_control::InputFilterConfig;
 use crate::gui::stages::StageConfig;
 
 pub mod manager;
@@ -17,6 +18,8 @@ pub struct Preset {
     pub ir_gain: f32,
     #[serde(default)]
     pub pitch_shift_semitones: i32,
+    #[serde(default)]
+    pub input_filters: InputFilterConfig,
 }
 
 const fn default_ir_gain() -> f32 {
@@ -33,6 +36,7 @@ impl Default for Preset {
             ir_name: None,
             ir_gain: 0.1,
             pitch_shift_semitones: 0,
+            input_filters: InputFilterConfig::default(),
         }
     }
 }
@@ -44,6 +48,7 @@ impl Preset {
         ir_name: Option<String>,
         ir_gain: f32,
         pitch_shift_semitones: i32,
+        input_filters: InputFilterConfig,
     ) -> Self {
         Self {
             name,
@@ -53,6 +58,7 @@ impl Preset {
             ir_name,
             ir_gain,
             pitch_shift_semitones,
+            input_filters,
         }
     }
 

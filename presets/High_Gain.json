@@ -4,20 +4,6 @@
   "author": null,
   "stages": [
     {
-      "Filter": {
-        "filter_type": "Highpass",
-        "cutoff_hz": 187.0,
-        "resonance": 0.2
-      }
-    },
-    {
-      "Filter": {
-        "filter_type": "Lowpass",
-        "cutoff_hz": 9913.0,
-        "resonance": 0.15
-      }
-    },
-    {
       "Preamp": {
         "gain": 6.7000003,
         "bias": 0.0,
@@ -45,7 +31,7 @@
     {
       "Preamp": {
         "gain": 6.8,
-        "bias": 1.4901161e-8,
+        "bias": 1.4901161e-08,
         "clipper_type": "Hard"
       }
     },
@@ -67,21 +53,13 @@
       "Level": {
         "gain": 1.0
       }
-    },
-    {
-      "Filter": {
-        "filter_type": "Highpass",
-        "cutoff_hz": 310.0,
-        "resonance": 0.0
-      }
-    },
-    {
-      "Filter": {
-        "filter_type": "Lowpass",
-        "cutoff_hz": 7835.0,
-        "resonance": 0.0
-      }
     }
   ],
-  "ir_name": "Jesterdyne/Engl/sc450-left-01.wav"
+  "ir_name": "Jesterdyne/Engl/sc450-left-01.wav",
+  "input_filters": {
+    "hp_enabled": true,
+    "hp_cutoff": 187.0,
+    "lp_enabled": true,
+    "lp_cutoff": 9913.0
+  }
 }

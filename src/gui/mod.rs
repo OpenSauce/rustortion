@@ -3,6 +3,7 @@ pub mod components;
 pub mod handlers;
 pub mod messages;
 pub mod stages;
+pub mod tabs;
 
 pub use app::AmplifierApp;
 pub use messages::Message;

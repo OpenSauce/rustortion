@@ -4,6 +4,7 @@ use iced::Task;
 use log::{debug, error};
 
 use crate::gui::Message;
+use crate::gui::components::input_filter_control::InputFilterConfig;
 use crate::gui::components::preset_bar::PresetBar;
 use crate::gui::stages::StageConfig;
 use crate::preset::{Manager, Preset};
@@ -38,6 +39,7 @@ impl PresetHandler {
         ir_name: Option<String>,
         ir_gain: f32,
         pitch_shift_semitones: i32,
+        input_filters: InputFilterConfig,
     ) -> Task<Message> {
         use crate::gui::messages::PresetMessage;
 
@@ -55,12 +57,26 @@ impl PresetHandler {
             PresetMessage::Save(name) => {
                 debug!("Saving preset... {name}");
                 if !name.trim().is_empty() {
-                    self.save_preset_named(&name, stages, ir_name, ir_gain, pitch_shift_semitones);
+                    self.save_preset_named(
+                        &name,
+                        stages,
+                        ir_name,
+                        ir_gain,
+                        pitch_shift_semitones,
+                        input_filters,
+                    );
                 }
             }
             PresetMessage::Update => {
                 if let Some(name) = self.selected_preset.clone() {
-                    self.save_preset_named(&name, stages, ir_name, ir_gain, pitch_shift_semitones);
+                    self.save_preset_named(
+                        &name,
+                        stages,
+                        ir_name,
+                        ir_gain,
+                        pitch_shift_semitones,
+                        input_filters,
+                    );
                 }
             }
             PresetMessage::Delete(preset_name) => {
@@ -125,6 +141,7 @@ impl PresetHandler {
         ir_name: Option<String>,
         ir_gain: f32,
         pitch_shift_semitones: i32,
+        input_filters: InputFilterConfig,
     ) {
         let preset = Preset::new(
             name.to_owned(),
@@ -132,6 +149,7 @@ impl PresetHandler {
             ir_name,
             ir_gain,
             pitch_shift_semitones,
+            input_filters,
         );
         match self.preset_manager.save_preset(&preset) {
             Ok(()) => {
@@ -162,11 +180,13 @@ fn build_preset_load_tasks(preset: Preset) -> Task<Message> {
     };
     let set_ir_gain_task = Task::done(Message::IrGainChanged(preset.ir_gain));
     let set_pitch_shift_task = Task::done(Message::PitchShiftChanged(preset.pitch_shift_semitones));
+    let set_input_filters_task = Task::done(Message::SetInputFilters(preset.input_filters));
 
     Task::batch(vec![
         set_stage_task,
         set_ir_task,
         set_ir_gain_task,
         set_pitch_shift_task,
+        set_input_filters_task,
     ])
 }

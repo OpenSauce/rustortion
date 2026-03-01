@@ -4,18 +4,6 @@
   "author": null,
   "stages": [
     {
-      "Filter": {
-        "filter_type": "Highpass",
-        "cutoff_hz": 117.0
-      }
-    },
-    {
-      "Filter": {
-        "filter_type": "Lowpass",
-        "cutoff_hz": 7174.0
-      }
-    },
-    {
       "Compressor": {
         "attack_ms": 1.0,
         "release_ms": 100.0,
@@ -27,7 +15,7 @@
     {
       "Preamp": {
         "gain": 1.1,
-        "bias": 1.4901161e-8,
+        "bias": 1.4901161e-08,
         "clipper_type": "ClassA"
       }
     },
@@ -56,8 +44,22 @@
       "Level": {
         "gain": 0.90000004
       }
+    },
+    {
+      "Delay": {
+        "delay_ms": 300.0,
+        "feedback": 0.3,
+        "mix": 0.26
+      }
     }
   ],
   "ir_name": "Science Amplification/4x12/G12H-150/MD 421-U Brighter.wav",
-  "ir_gain": 0.1
+  "ir_gain": 0.1,
+  "pitch_shift_semitones": 0,
+  "input_filters": {
+    "hp_enabled": true,
+    "hp_cutoff": 117.0,
+    "lp_enabled": true,
+    "lp_cutoff": 7174.0
+  }
 }

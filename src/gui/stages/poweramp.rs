@@ -62,14 +62,16 @@ const POWER_AMP_TYPES: [PowerAmpType; 3] = [
 pub fn view(
     idx: usize,
     cfg: &PowerAmpConfig,
-    total_stages: usize,
     is_collapsed: bool,
+    can_move_up: bool,
+    can_move_down: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_power_amp),
         idx,
-        total_stages,
         is_collapsed,
+        can_move_up,
+        can_move_down,
         || {
             let type_picker = row![
                 text(tr!(type_label)).width(Length::FillPortion(3)),

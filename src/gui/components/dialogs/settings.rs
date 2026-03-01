@@ -1,6 +1,9 @@
 use iced::widget::{button, column, container, pick_list, row, rule, space, text};
 use iced::{Alignment, Color, Element, Length};
 
+use super::{
+    DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_ROW_SPACING, DIALOG_TITLE_SIZE,
+};
 use crate::gui::messages::SettingsMessage;
 use crate::i18n::{self, LANGUAGES};
 use crate::settings::AudioSettings;
@@ -95,11 +98,18 @@ impl SettingsDialog {
             return None;
         }
 
-        let title = text(tr!(audio_settings))
-            .size(24)
-            .style(|theme: &iced::Theme| iced::widget::text::Style {
-                color: Some(theme.palette().text),
-            });
+        let title_row = row![
+            text(tr!(audio_settings))
+                .size(DIALOG_TITLE_SIZE)
+                .style(|theme: &iced::Theme| iced::widget::text::Style {
+                    color: Some(theme.palette().text),
+                }),
+            space::horizontal(),
+            button(tr!(close)).on_press(SettingsMessage::Close),
+        ]
+        .spacing(DIALOG_TITLE_ROW_SPACING)
+        .align_y(Alignment::Center)
+        .width(Length::Fill);
 
         // JACK Status section - show actual values from JACK server
         let jack_status_section = self.jack_status_view();
@@ -203,7 +213,6 @@ impl SettingsDialog {
         let controls = row![
             button(tr!(refresh_ports)).on_press(SettingsMessage::RefreshPorts),
             space::horizontal(),
-            button(tr!(cancel)).on_press(SettingsMessage::Cancel),
             button(tr!(apply))
                 .on_press(SettingsMessage::Apply)
                 .style(iced::widget::button::success),
@@ -212,7 +221,7 @@ impl SettingsDialog {
         .width(Length::Fill);
 
         let dialog_content = column![
-            title,
+            title_row,
             rule::horizontal(1),
             jack_status_section,
             rule::horizontal(1),
@@ -243,29 +252,18 @@ impl SettingsDialog {
             .padding(5),
             controls,
         ]
-        .spacing(15)
-        .padding(20)
+        .spacing(DIALOG_CONTENT_SPACING)
+        .padding(DIALOG_CONTENT_PADDING)
         .width(Length::Fill)
         .height(Length::Fill);
 
-        // Create a modal overlay
         let dialog = container(dialog_content).style(|theme: &iced::Theme| {
             container::Style::default()
                 .background(theme.palette().background)
                 .border(iced::Border::default().rounded(10).width(2))
         });
 
-        // Center the dialog
-        let centered = container(dialog)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .style(|_theme: &iced::Theme| {
-                container::Style::default().background(Color::from_rgba(0.0, 0.0, 0.0, 0.7))
-            });
-
-        Some(centered.into())
+        Some(dialog.into())
     }
 
     /// The view containing JACK server status information

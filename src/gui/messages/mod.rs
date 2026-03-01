@@ -1,4 +1,6 @@
+use crate::gui::components::input_filter_control::InputFilterConfig;
 use crate::gui::stages::{StageConfig, StageType};
+use crate::gui::tabs::Tab;
 
 pub mod hotkey;
 pub mod midi;
@@ -13,12 +15,15 @@ pub use settings::*;
 pub use tuner::*;
 
 pub use crate::gui::stages::{
-    CompressorMessage, FilterMessage, LevelMessage, MultibandSaturatorMessage, NoiseGateMessage,
-    PowerAmpMessage, PreampMessage, StageMessage, ToneStackMessage,
+    CompressorMessage, LevelMessage, MultibandSaturatorMessage, NoiseGateMessage, PowerAmpMessage,
+    PreampMessage, StageMessage, ToneStackMessage,
 };
 
 #[derive(Debug, Clone)]
 pub enum Message {
+    // Tab navigation
+    TabSelected(Tab),
+
     // App-level messages
     AddStage,
     RemoveStage(usize),
@@ -29,6 +34,13 @@ pub enum Message {
     StageTypeSelected(StageType),
     RebuildTick,
     SetStages(Vec<StageConfig>),
+
+    // Input filter messages
+    InputFilterHighpassToggle(bool),
+    InputFilterHighpassCutoff(f32),
+    InputFilterLowpassToggle(bool),
+    InputFilterLowpassCutoff(f32),
+    SetInputFilters(InputFilterConfig),
 
     // Preset settings
     Preset(PresetMessage),

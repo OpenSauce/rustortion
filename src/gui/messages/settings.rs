@@ -3,7 +3,7 @@ use crate::i18n::Language;
 #[derive(Debug, Clone)]
 pub enum SettingsMessage {
     Open,
-    Cancel,
+    Close,
     Apply,
     RefreshPorts,
     InputPortChanged(String),

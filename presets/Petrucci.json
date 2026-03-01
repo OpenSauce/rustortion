@@ -4,20 +4,6 @@
   "author": null,
   "stages": [
     {
-      "Filter": {
-        "filter_type": "Highpass",
-        "cutoff_hz": 187.0,
-        "resonance": 0.2
-      }
-    },
-    {
-      "Filter": {
-        "filter_type": "Lowpass",
-        "cutoff_hz": 7469.0,
-        "resonance": 0.15
-      }
-    },
-    {
       "Preamp": {
         "gain": 2.3,
         "bias": 0.0,
@@ -59,25 +45,17 @@
       }
     },
     {
-      "Filter": {
-        "filter_type": "Highpass",
-        "cutoff_hz": 129.0,
-        "resonance": 0.0
-      }
-    },
-    {
-      "Filter": {
-        "filter_type": "Lowpass",
-        "cutoff_hz": 7835.0,
-        "resonance": 0.0
-      }
-    },
-    {
       "Level": {
         "gain": 0.4
       }
     }
   ],
   "ir_name": "Science Amplification/4x12/G12H-150/SM57 Brighter.wav",
-  "ir_gain": 0.17
+  "ir_gain": 0.17,
+  "input_filters": {
+    "hp_enabled": true,
+    "hp_cutoff": 187.0,
+    "lp_enabled": true,
+    "lp_cutoff": 7469.0
+  }
 }

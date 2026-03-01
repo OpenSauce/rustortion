@@ -4,20 +4,6 @@
   "author": null,
   "stages": [
     {
-      "Filter": {
-        "filter_type": "Highpass",
-        "cutoff_hz": 197.0,
-        "resonance": 0.0
-      }
-    },
-    {
-      "Filter": {
-        "filter_type": "Lowpass",
-        "cutoff_hz": 7625.0,
-        "resonance": 0.0
-      }
-    },
-    {
       "Compressor": {
         "attack_ms": 1.0,
         "release_ms": 100.0,
@@ -62,5 +48,11 @@
       }
     }
   ],
-  "ir_name": "Jesterdyne/AX1500g/4x12-classic.wav"
+  "ir_name": "Jesterdyne/AX1500g/4x12-classic.wav",
+  "input_filters": {
+    "hp_enabled": true,
+    "hp_cutoff": 197.0,
+    "lp_enabled": true,
+    "lp_cutoff": 7625.0
+  }
 }

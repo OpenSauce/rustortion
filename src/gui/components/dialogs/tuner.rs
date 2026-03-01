@@ -1,6 +1,9 @@
 use iced::widget::{button, column, container, row, rule, space, text};
 use iced::{Alignment, Color, Element, Length};
 
+use super::{
+    DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING, DIALOG_TITLE_ROW_SPACING, DIALOG_TITLE_SIZE,
+};
 use crate::gui::messages::TunerMessage;
 use crate::tr;
 use crate::tuner::TunerInfo;
@@ -46,11 +49,18 @@ impl TunerDisplay {
             return None;
         }
 
-        let title = text(tr!(tuner_title))
-            .size(28)
-            .style(|theme: &iced::Theme| iced::widget::text::Style {
-                color: Some(theme.palette().text),
-            });
+        let title_row = row![
+            text(tr!(tuner_title))
+                .size(DIALOG_TITLE_SIZE)
+                .style(|theme: &iced::Theme| iced::widget::text::Style {
+                    color: Some(theme.palette().text),
+                }),
+            space::horizontal(),
+            button(tr!(close)).on_press(TunerMessage::Toggle),
+        ]
+        .spacing(DIALOG_TITLE_ROW_SPACING)
+        .align_y(Alignment::Center)
+        .width(Length::Fill);
 
         let note_display = if let Some(ref note) = self.info.note {
             text(note)
@@ -105,24 +115,21 @@ impl TunerDisplay {
                 })
         };
 
-        let close_button = button(tr!(close))
-            .on_press(TunerMessage::Toggle) // Toggles off since it's already open
-            .style(iced::widget::button::primary)
-            .padding(10);
+        let tuner_display = column![note_display, freq_display, cents_indicator, status_text,]
+            .spacing(10)
+            .align_x(Alignment::Center);
 
-        let dialog_content = column![
-            title,
-            rule::horizontal(1),
-            note_display,
-            freq_display,
-            cents_indicator,
-            status_text,
-            close_button,
-        ]
-        .spacing(10)
-        .padding(40)
-        .width(Length::Fixed(800.0))
-        .align_x(Alignment::Center);
+        let tuner_centered = container(tuner_display)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x(Length::Fill)
+            .center_y(Length::Fill);
+
+        let dialog_content = column![title_row, rule::horizontal(1), tuner_centered,]
+            .spacing(DIALOG_CONTENT_SPACING)
+            .padding(DIALOG_CONTENT_PADDING)
+            .width(Length::Fill)
+            .height(Length::Fill);
 
         let dialog = container(dialog_content).style(|theme: &iced::Theme| {
             container::Style::default()
@@ -130,16 +137,7 @@ impl TunerDisplay {
                 .border(iced::Border::default().rounded(10).width(2))
         });
 
-        let centered = container(dialog)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .style(|_theme: &iced::Theme| {
-                container::Style::default().background(iced::Color::from_rgba(0.0, 0.0, 0.0, 0.7))
-            });
-
-        Some(centered.into())
+        Some(dialog.into())
     }
 
     fn cents_display(&self) -> Element<'static, TunerMessage> {
