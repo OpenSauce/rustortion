@@ -58,7 +58,7 @@ pub struct OnePoleLP {
 
 impl OnePoleLP {
     pub fn new(cutoff_hz: f32, sample_rate: f32) -> Self {
-        let coeff = (2.0 * PI * cutoff_hz / sample_rate).min(1.0);
+        let coeff = 1.0 - (-2.0 * PI * cutoff_hz / sample_rate).exp();
         Self { y_prev: 0.0, coeff }
     }
 
