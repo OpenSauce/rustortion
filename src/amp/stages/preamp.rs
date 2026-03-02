@@ -1,11 +1,12 @@
 use crate::amp::stages::Stage;
 use crate::amp::stages::clipper::ClipperType;
-use crate::amp::stages::common::DcBlocker;
+use crate::amp::stages::common::{DcBlocker, OnePoleLP};
 
 pub struct PreampStage {
     gain: f32, // 0..10
     bias: f32, // −1..+1
     clipper_type: ClipperType,
+    interstage_lp: OnePoleLP,
     dc_blocker: DcBlocker,
 }
 
@@ -15,6 +16,7 @@ impl PreampStage {
             gain,
             bias: bias.clamp(-1.0, 1.0),
             clipper_type: clipper,
+            interstage_lp: OnePoleLP::new(10_000.0, sample_rate),
             dc_blocker: DcBlocker::new(15.0, sample_rate),
         }
     }
@@ -32,10 +34,15 @@ impl Stage for PreampStage {
         // Instead of adding DC to the input, shift the tanh curve and recenter:
         let pre = drive.mul_add(input, self.bias).tanh() - self.bias.tanh();
 
+        // Inter-stage lowpass: models plate load capacitance rolling off upper
+        // harmonics before they reach the next nonlinearity. Without this,
+        // cascaded waveshapers re-distort the full harmonic spectrum, producing fizz.
+        let filtered = self.interstage_lp.process(pre);
+
         // Main clipper expects roughly zero-centered signal; keep threshold tied to gain
         let clipped = self
             .clipper_type
-            .process(pre, self.gain.mul_add(CLIPPER_SCALE, 1.0));
+            .process(filtered, self.gain.mul_add(CLIPPER_SCALE, 1.0));
 
         // Remove any residual DC so next stage gets a clean, centered signal
         self.dc_blocker.process(clipped)
