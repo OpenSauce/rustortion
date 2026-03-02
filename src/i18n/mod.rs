@@ -205,6 +205,7 @@ pub struct Translations {
     pub clipper_hard: &'static str,
     pub clipper_asymmetric: &'static str,
     pub clipper_class_a: &'static str,
+    pub clipper_triode: &'static str,
 
     // Power amp types
     pub poweramp_class_a: &'static str,
@@ -395,6 +396,7 @@ pub static EN: Translations = Translations {
     clipper_hard: "Hard Clipping",
     clipper_asymmetric: "Asymmetric Clipping",
     clipper_class_a: "Class A Tube Preamp",
+    clipper_triode: "12AX7 Triode",
 
     // Power amp types
     poweramp_class_a: "Class A",
@@ -576,6 +578,7 @@ pub static ZH_CN: Translations = Translations {
     clipper_hard: "硬削波",
     clipper_asymmetric: "非对称削波",
     clipper_class_a: "A类电子管前级",
+    clipper_triode: "12AX7 三极管",
 
     // Power amp types
     poweramp_class_a: "A类",

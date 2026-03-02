@@ -56,12 +56,13 @@ pub enum PreampMessage {
 
 // --- View ---
 
-const CLIPPER_TYPES: [ClipperType; 5] = [
+const CLIPPER_TYPES: [ClipperType; 6] = [
     ClipperType::Soft,
     ClipperType::Medium,
     ClipperType::Hard,
     ClipperType::Asymmetric,
     ClipperType::ClassA,
+    ClipperType::Triode,
 ];
 
 pub fn view(

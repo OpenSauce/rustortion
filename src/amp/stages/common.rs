@@ -46,6 +46,29 @@ impl DcBlocker {
     }
 }
 
+/// One-pole low-pass filter.
+///
+/// Models reactive elements like plate load capacitance.
+/// `y[n] = y[n-1] + coeff * (x[n] - y[n-1])`
+#[derive(Clone)]
+pub struct OnePoleLP {
+    y_prev: f32,
+    coeff: f32,
+}
+
+impl OnePoleLP {
+    pub fn new(cutoff_hz: f32, sample_rate: f32) -> Self {
+        let coeff = (2.0 * PI * cutoff_hz / sample_rate).min(1.0);
+        Self { y_prev: 0.0, coeff }
+    }
+
+    #[inline]
+    pub fn process(&mut self, input: f32) -> f32 {
+        self.y_prev = self.coeff.mul_add(input - self.y_prev, self.y_prev);
+        self.y_prev
+    }
+}
+
 /// One-pole envelope follower with configurable attack and release coefficients.
 #[derive(Clone)]
 pub struct EnvelopeFollower {
