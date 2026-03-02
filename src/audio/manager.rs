@@ -7,6 +7,7 @@ use log::{error, info, warn};
 
 use std::path::Path;
 
+use crate::amp::stages::clipper;
 use crate::audio::engine::Engine;
 use crate::audio::engine::EngineHandle;
 use crate::audio::jack::{NotificationHandler, ProcessHandler};
@@ -29,6 +30,8 @@ pub struct Manager {
 
 impl Manager {
     pub fn new(settings: Settings) -> Result<Self> {
+        clipper::init();
+
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
             .context("failed to create JACK client")?;
 

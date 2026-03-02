@@ -27,6 +27,7 @@ impl std::fmt::Display for ClipperType {
 }
 
 impl ClipperType {
+    #[inline]
     pub fn process(&self, input: f32, drive: f32) -> f32 {
         let driven = input * drive;
 
@@ -76,36 +77,47 @@ impl ClipperType {
     }
 }
 
+/// Pre-computed transfer curve for a 12AX7 triode using the Koren model.
+///
+/// The table is filled at init time from the Koren plate current equation
+/// (Norman Koren, "Improved Vacuum Tube Models for SPICE Simulations")
+/// and looked up at runtime via cubic Hermite (Catmull-Rom) interpolation.
 struct TubeTable {
-    table: Vec<f32>,
+    table: [f32; Self::SIZE],
     input_min: f32,
     input_max: f32,
 }
 
 impl TubeTable {
+    const SIZE: usize = 256;
+}
+
+impl TubeTable {
     fn new() -> Self {
-        const TABLE_SIZE: usize = 256;
-        const MU: f64 = 100.0;
-        const KP: f64 = 600.0;
-        const KVB: f64 = 300.0;
-        const KG1: f64 = 1060.0;
-        const EX: f64 = 1.4;
-        const VP: f64 = 250.0;
-        const VG_SCALE: f64 = 4.0;
+        // Koren 12AX7 triode parameters:
+        const MU: f64 = 100.0; // amplification factor
+        const KP: f64 = 600.0; // plate current coefficient
+        const KVB: f64 = 300.0; // knee voltage coefficient
+        const KG1: f64 = 1060.0; // grid current scaling
+        const EX: f64 = 1.4; // plate current exponent
+        const VP: f64 = 250.0; // plate voltage (operating point)
+        const VG_SCALE: f64 = 4.0; // maps normalized input to grid voltage range
 
         let input_min: f64 = -5.0;
         let input_max: f64 = 5.0;
 
-        let mut raw = vec![0.0f64; TABLE_SIZE];
+        let mut raw = [0.0f64; Self::SIZE];
         for (idx, sample) in raw.iter_mut().enumerate() {
-            let t = idx as f64 / (TABLE_SIZE - 1) as f64;
+            let t = idx as f64 / (Self::SIZE - 1) as f64;
             let input = t.mul_add(input_max - input_min, input_min);
             let vg = input * VG_SCALE;
 
+            // Koren equation: E1 = (Vp/Kp) * ln(1 + exp(Kp * (1/mu + Vg/sqrt(Kvb + Vp²))))
             let inner = KP * (1.0 / MU + vg / VP.mul_add(VP, KVB).sqrt());
             let inner_clamped = inner.min(80.0);
             let e1 = inner_clamped.exp().ln_1p() * VP / KP;
             let e1_safe = e1.max(0.0);
+            // Plate current: Ip = E1^Ex / Kg1
             *sample = e1_safe.powf(EX) / KG1;
         }
 
@@ -113,16 +125,14 @@ impl TubeTable {
         let ip_max = raw.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         let range = ip_max - ip_min;
 
-        let table: Vec<f32> = raw
-            .iter()
-            .map(|&ip| {
-                if range > 0.0 {
-                    (2.0 * (ip - ip_min) / range - 1.0) as f32
-                } else {
-                    0.0
-                }
-            })
-            .collect();
+        let mut table = [0.0f32; Self::SIZE];
+        for (i, &ip) in raw.iter().enumerate() {
+            table[i] = if range > 0.0 {
+                (2.0 * (ip - ip_min) / range - 1.0) as f32
+            } else {
+                0.0
+            };
+        }
 
         Self {
             table,
@@ -131,6 +141,7 @@ impl TubeTable {
         }
     }
 
+    #[inline]
     fn process(&self, input: f32) -> f32 {
         let clamped = input.clamp(self.input_min, self.input_max);
         let normalized = (clamped - self.input_min) / (self.input_max - self.input_min);
@@ -155,6 +166,12 @@ impl TubeTable {
 }
 
 static TRIODE_TABLE: LazyLock<TubeTable> = LazyLock::new(TubeTable::new);
+
+/// Force initialization of the triode lookup table.
+/// Call during app startup to avoid lazy init on the RT audio thread.
+pub fn init() {
+    LazyLock::force(&TRIODE_TABLE);
+}
 
 #[cfg(test)]
 mod tests {
