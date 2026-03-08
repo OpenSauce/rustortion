@@ -1,3 +1,33 @@
+## [0.2.0] - 2026-03-08
+
+### 🚀 Features
+
+- Display number of x-runs and show CPU usage (#195)
+- Add hotkeys, allow active preset to be changed by keypress (#196)
+- Add collapsible stage cards with per-stage and global toggle (#201)
+- Add delay stage (#203)
+- Persist per-preset stage collapse state (#204)
+- Add reverb stage (#206)
+- UI overhaul — input filters, tabs, minimap, dialog standardization (#207)
+- Add 16-band graphic EQ stage (#209)
+- Add 12AX7 triode clipper and inter-stage filtering (#211)
+
+### 🐛 Bug Fixes
+
+- Increase fft size in pitch shifter to improve sound quality (#194)
+- Reset selected stage type when switching tabs (#210)
+
+### 🚜 Refactor
+
+- Move components from app to handlers (#197)
+- Extract DSP utilities, remove dead code, fix RT safety and minor issues (#198)
+- Consolidate per-stage GUI files into src/gui/stages/ (#199)
+- Deduplicate preset handler and add stage_registry! macro (#200)
+- Extract shared UI constants, colors, and dialog helpers (#208)
+
+### ⚙️ Miscellaneous Tasks
+
+- Enable clippy pedantic+nursery lints, fix select categories (#202)
 ## [0.1.7] - 2026-02-21
 
 ### 🚀 Features
