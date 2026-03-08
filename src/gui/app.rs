@@ -224,17 +224,7 @@ impl AmplifierApp {
                 .style(iced::widget::button::success)
         };
 
-        let recording_status = if self.is_recording {
-            text(tr!(recording)).style(|_| iced::widget::text::Style {
-                color: Some(COLOR_ERROR),
-            })
-        } else {
-            text("").style(|theme: &iced::Theme| iced::widget::text::Style {
-                color: Some(theme.palette().text),
-            })
-        };
-
-        row![
+        let mut header_row = row![
             self.peak_meter_display.view(),
             space::horizontal(),
             button(tr!(hotkeys))
@@ -248,11 +238,19 @@ impl AmplifierApp {
                 .style(iced::widget::button::secondary),
             button(tr!(settings)).on_press(Message::Settings(SettingsMessage::Open)),
             record_button,
-            recording_status,
         ]
         .spacing(SPACING_TIGHT)
-        .align_y(Alignment::Center)
-        .into()
+        .align_y(Alignment::Center);
+
+        if self.is_recording {
+            header_row = header_row.push(
+                text(tr!(recording)).style(|_| iced::widget::text::Style {
+                    color: Some(COLOR_ERROR),
+                }),
+            );
+        }
+
+        header_row.into()
     }
 
     fn view_tab_bar(&self) -> Element<'_, Message> {
