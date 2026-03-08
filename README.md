@@ -11,14 +11,15 @@ A guitar amp simulator built in Rust using JACK.
 
 ## Features
 
-- Low-latency audio processing with configurable oversampling
-- Multiple amp simulation stages (preamp, compressor, tone stack, power amp, etc.)
+- Low-latency audio processing with configurable oversampling (1x–16x)
+- 10 DSP stages: preamp (with 12AX7 triode clipper), compressor, tone stack, power amp, noise gate, level, multi-band saturator, delay, reverb, and 16-band graphic EQ
 - Impulse response cabinet simulation for both guitar and bass
-- Saving and loading presets
+- Saving and loading presets with keyboard hotkey switching
 - Real-time recording capability
 - Built-in tuner
-- Basic MIDI controller support
-- GUI using [Iced](https://github.com/iced-rs/iced)
+- FFT-based pitch shifting for alternate tunings without retuning your instrument
+- MIDI controller support
+- Tabbed GUI with minimap, collapsible stage cards, and input filter controls - built with [Iced](https://github.com/iced-rs/iced)
 
 ## Requirements
 
