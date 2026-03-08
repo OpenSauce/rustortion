@@ -5,15 +5,15 @@ use anyhow::{Context, Result};
 use jack::{AsyncClient, Client, ClientOptions};
 use log::{error, info, warn};
 
-use std::path::Path;
-
 use crate::amp::stages::clipper;
 use crate::audio::engine::Engine;
 use crate::audio::engine::EngineHandle;
 use crate::audio::jack::{NotificationHandler, ProcessHandler};
 use crate::audio::peak_meter::{PeakMeter, PeakMeterHandle};
 use crate::audio::samplers::Samplers;
-use crate::ir::cabinet::IrCabinet;
+use crate::ir::cabinet::{ConvolverType, DEFAULT_MAX_IR_MS, IrCabinet};
+use crate::ir::load_service::{self, IrLoadHandle};
+use crate::ir::loader::IrLoader;
 use crate::metronome::Metronome;
 use crate::settings::{AudioSettings, Settings};
 use crate::tuner::{Tuner, TunerHandle};
@@ -26,6 +26,7 @@ pub struct Manager {
     peak_meter_handle: PeakMeterHandle,
     xrun_count: Arc<AtomicU64>,
     available_irs: Vec<String>,
+    ir_load_handle: Option<IrLoadHandle>,
 }
 
 impl Manager {
@@ -48,21 +49,36 @@ impl Manager {
         let mut metronome = Metronome::new(120.0, sample_rate);
         metronome.load_wav_file("click.wav");
 
-        let ir_cabinet = match IrCabinet::new(Path::new(&settings.ir_dir), sample_rate) {
-            Ok(cab) => Some(cab),
-            Err(e) => {
-                warn!("Failed to load IR Cabinet: {e}");
-                None
-            }
-        };
+        let convolver_type = ConvolverType::default();
+        let max_ir_samples = (sample_rate * DEFAULT_MAX_IR_MS) / 1000;
 
-        let available_irs = ir_cabinet
-            .as_ref()
-            .map(IrCabinet::available_ir_names)
-            .unwrap_or_default();
+        let (ir_loader, available_irs) =
+            match IrLoader::new(std::path::Path::new(&settings.ir_dir), sample_rate) {
+                Ok(loader) => {
+                    let names = loader.available_ir_names();
+                    (Some(loader), names)
+                }
+                Err(e) => {
+                    warn!("Failed to load IR directory: {e}");
+                    (None, Vec::new())
+                }
+            };
+
+        let ir_cabinet = Some(IrCabinet::new(convolver_type, max_ir_samples));
 
         let (engine, engine_handle) =
             Engine::new(tuner, samplers, ir_cabinet, peak_meter, metronome)?;
+
+        let ir_load_handle = ir_loader.map(|loader| {
+            load_service::spawn(
+                loader,
+                engine_handle.clone(),
+                sample_rate,
+                DEFAULT_MAX_IR_MS,
+                convolver_type,
+            )
+        });
+
         let jack_handler =
             ProcessHandler::new(&client, engine).context("failed to create process handler")?;
 
@@ -81,6 +97,7 @@ impl Manager {
             peak_meter_handle,
             xrun_count,
             available_irs,
+            ir_load_handle,
         };
 
         manager.connect_ports(&settings.audio);
@@ -178,6 +195,24 @@ impl Manager {
     // Get available IR paths
     pub fn get_available_irs(&self) -> Vec<String> {
         self.available_irs.clone()
+    }
+
+    pub fn request_ir_load(&self, name: &str) {
+        if let Some(ref handle) = self.ir_load_handle {
+            handle.request_load(name);
+        }
+    }
+
+    pub fn clear_ir(&self) {
+        self.engine_handle.clear_ir();
+    }
+
+    pub fn preload_irs(&self, names: &[String]) {
+        if let Some(ref handle) = self.ir_load_handle {
+            for name in names {
+                handle.preload(name);
+            }
+        }
     }
 
     pub fn sample_rate(&self) -> usize {
