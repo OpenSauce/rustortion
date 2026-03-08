@@ -243,11 +243,10 @@ impl AmplifierApp {
         .align_y(Alignment::Center);
 
         if self.is_recording {
-            header_row = header_row.push(
-                text(tr!(recording)).style(|_| iced::widget::text::Style {
+            header_row =
+                header_row.push(text(tr!(recording)).style(|_| iced::widget::text::Style {
                     color: Some(COLOR_ERROR),
-                }),
-            );
+                }));
         }
 
         header_row.into()
