@@ -6,6 +6,7 @@ use rustortion::amp::stages::level::LevelStage;
 use rustortion::audio::engine::Engine;
 use rustortion::audio::peak_meter::PeakMeter;
 use rustortion::audio::samplers::Samplers;
+use rustortion::ir::load_service::ConvolverDropHandle;
 use rustortion::metronome::Metronome;
 use rustortion::tuner::Tuner;
 
@@ -19,7 +20,14 @@ fn engine_processes_non_zero_signal() -> Result<()> {
     let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
-    let (mut engine, _) = Engine::new(tuner, samplers, None, peak_meter, metronome)?;
+    let (mut engine, _) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        ConvolverDropHandle::new().0,
+    )?;
 
     let input = vec![0.5f32; BUFFER_SIZE];
     let mut output = vec![0.0f32; BUFFER_SIZE];
@@ -42,7 +50,14 @@ fn engine_handles_buffer_size_change() -> Result<()> {
     let samplers = Samplers::new(INITIAL_BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
-    let (mut engine, _) = Engine::new(tuner, samplers, None, peak_meter, metronome)?;
+    let (mut engine, _) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        ConvolverDropHandle::new().0,
+    )?;
 
     let input = vec![0.5f32; INITIAL_BUFFER_SIZE];
     let mut output = vec![0.0f32; INITIAL_BUFFER_SIZE];
@@ -84,7 +99,14 @@ fn engine_rejects_mismatched_buffer_sizes() -> Result<()> {
     let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
-    let (mut engine, _) = Engine::new(tuner, samplers, None, peak_meter, metronome)?;
+    let (mut engine, _) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        ConvolverDropHandle::new().0,
+    )?;
 
     let small_input = vec![0.5f32; BUFFER_SIZE / 2];
     let mut small_output = vec![0.0f32; BUFFER_SIZE / 2];
@@ -113,7 +135,14 @@ fn engine_applies_amp_chain() -> Result<()> {
     let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
-    let (mut engine, handle) = Engine::new(tuner, samplers, None, peak_meter, metronome)?;
+    let (mut engine, handle) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        ConvolverDropHandle::new().0,
+    )?;
 
     let input = vec![1.0f32; BUFFER_SIZE];
     let mut output = vec![0.0f32; BUFFER_SIZE];
@@ -205,7 +234,14 @@ fn engine_tuner_enabled_no_output() -> Result<()> {
     let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
-    let (mut engine, _) = Engine::new(tuner, samplers, None, peak_meter, metronome)?;
+    let (mut engine, _) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        ConvolverDropHandle::new().0,
+    )?;
 
     let input = vec![0.0f32; BUFFER_SIZE];
     let mut output = vec![0.0f32; BUFFER_SIZE];

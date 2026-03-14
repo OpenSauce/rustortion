@@ -37,8 +37,8 @@ impl IrCabinet {
         }
     }
 
-    pub fn swap_convolver(&mut self, convolver: Convolver) {
-        self.convolver = convolver;
+    pub const fn swap_convolver(&mut self, convolver: Convolver) -> Convolver {
+        std::mem::replace(&mut self.convolver, convolver)
     }
 
     pub fn clear_convolver(&mut self) {

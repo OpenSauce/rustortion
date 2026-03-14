@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::thread;
 
-use crossbeam::channel::{Sender, unbounded};
+use crossbeam::channel::{Receiver, Sender, unbounded};
 use log::{debug, error, info};
 
 use crate::audio::engine::{EngineHandle, PreparedIr};
@@ -49,6 +49,41 @@ impl Drop for IrLoadHandle {
     }
 }
 
+/// Handle for sending old convolvers off the RT thread for deallocation.
+///
+/// Held by the `Engine` (RT side). The load service background thread
+/// receives and drops these convolvers, keeping deallocations off the
+/// RT thread.
+pub struct ConvolverDropHandle {
+    drop_tx: Sender<Convolver>,
+}
+
+/// Receiving end of the convolver drop channel, held by the load service thread.
+pub struct ConvolverDropReceiver {
+    drop_rx: Receiver<Convolver>,
+}
+
+impl ConvolverDropHandle {
+    /// Create a paired handle and receiver for RT-safe convolver disposal.
+    pub fn new() -> (Self, ConvolverDropReceiver) {
+        let (drop_tx, drop_rx) = unbounded();
+        (Self { drop_tx }, ConvolverDropReceiver { drop_rx })
+    }
+
+    /// Send an old convolver to be dropped on a background thread.
+    /// Uses `try_send` to never block the RT thread.
+    pub fn retire(&self, convolver: Convolver) {
+        let _ = self.drop_tx.try_send(convolver);
+    }
+}
+
+impl ConvolverDropReceiver {
+    /// Drain and drop all old convolvers waiting in the channel.
+    pub fn drain(&self) {
+        while self.drop_rx.try_recv().is_ok() {}
+    }
+}
+
 /// Trim leading and trailing silence from IR samples.
 fn trim_silence(ir: &[f32]) -> &[f32] {
     let start = ir.iter().position(|&x| x.abs() > 1e-6).unwrap_or(0);
@@ -92,12 +127,16 @@ fn build_convolver(
 /// The service receives IR load requests, loads/resamples WAV files via `IrLoader`,
 /// caches the coefficients, builds a `Convolver`, and sends it to the engine as an
 /// `EngineMessage::SwapIrConvolver`.
+///
+/// `convolver_drop_rx` receives old convolvers from the engine's RT thread for
+/// deallocation on this background thread.
 pub fn spawn(
     ir_loader: IrLoader,
     engine_handle: EngineHandle,
     sample_rate: usize,
     max_ir_ms: usize,
     convolver_type: ConvolverType,
+    convolver_drop_rx: ConvolverDropReceiver,
 ) -> IrLoadHandle {
     let (request_tx, request_rx) = unbounded::<IrRequest>();
     let max_ir_samples = (sample_rate * max_ir_ms) / 1000;
@@ -108,24 +147,26 @@ pub fn spawn(
             let mut cache: HashMap<String, Vec<f32>> = HashMap::new();
 
             while let Ok(request) = request_rx.recv() {
+                // Drop any old convolvers sent back from the RT thread.
+                convolver_drop_rx.drain();
+
                 match request {
                     IrRequest::Load(name) => {
-                        let coefficients = match cache.get(&name) {
-                            Some(cached) => cached.clone(),
-                            None => match load_and_cache(
+                        if !cache.contains_key(&name)
+                            && !load_and_cache(
                                 &ir_loader,
                                 &name,
                                 max_ir_samples,
                                 sample_rate,
                                 &mut cache,
-                            ) {
-                                Some(c) => c,
-                                None => continue,
-                            },
-                        };
+                            )
+                        {
+                            continue;
+                        }
 
+                        let coefficients = cache.get(&name).unwrap();
                         let convolver =
-                            build_convolver(&coefficients, convolver_type, max_ir_samples);
+                            build_convolver(coefficients, convolver_type, max_ir_samples);
                         let prepared = PreparedIr {
                             name: name.clone(),
                             convolver,
@@ -149,6 +190,9 @@ pub fn spawn(
                     }
                 }
             }
+
+            // Final drain before thread exits.
+            convolver_drop_rx.drain();
         })
         .expect("Failed to spawn IR load service thread");
 
@@ -159,14 +203,14 @@ pub fn spawn(
 }
 
 /// Load an IR by name, process it (truncate, trim silence), and insert into the cache.
-/// Returns the processed coefficients on success.
+/// Returns `true` on success.
 fn load_and_cache(
     loader: &IrLoader,
     name: &str,
     max_ir_samples: usize,
     sample_rate: usize,
     cache: &mut HashMap<String, Vec<f32>>,
-) -> Option<Vec<f32>> {
+) -> bool {
     match loader.load_by_name(name) {
         Ok(mut samples) => {
             let original_len = samples.len();
@@ -189,13 +233,12 @@ fn load_and_cache(
                 trimmed.len() as f32 / sample_rate as f32 * 1000.0
             );
 
-            let coefficients = trimmed.to_vec();
-            cache.insert(name.to_owned(), coefficients.clone());
-            Some(coefficients)
+            cache.insert(name.to_owned(), trimmed.to_vec());
+            true
         }
         Err(e) => {
             error!("Failed to load IR '{name}': {e}");
-            None
+            false
         }
     }
 }

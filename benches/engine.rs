@@ -8,6 +8,7 @@ use rustortion::amp::stages::level::LevelStage;
 use rustortion::audio::engine::{Engine, EngineHandle};
 use rustortion::audio::peak_meter::PeakMeter;
 use rustortion::audio::samplers::Samplers;
+use rustortion::ir::load_service::ConvolverDropHandle;
 use rustortion::metronome::Metronome;
 use rustortion::tuner::Tuner;
 
@@ -28,7 +29,15 @@ pub fn build_engine(
     let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
     let samplers = Samplers::new(buffer_size, oversample, SAMPLE_RATE).unwrap();
     let metronome = Metronome::new(120.0, SAMPLE_RATE);
-    let (engine, handle) = Engine::new(tuner, samplers, ir_cabinet, peak_meter, metronome).unwrap();
+    let (engine, handle) = Engine::new(
+        tuner,
+        samplers,
+        ir_cabinet,
+        peak_meter,
+        metronome,
+        ConvolverDropHandle::new().0,
+    )
+    .unwrap();
     (engine, handle)
 }
 
@@ -104,8 +113,15 @@ fn bench_engine_with_ir_cabinet(c: &mut Criterion) {
                 let ir_cabinet = Some(create_test_cabinet(20000, SAMPLE_RATE));
                 let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
                 let metronome = Metronome::new(120.0, SAMPLE_RATE);
-                let (mut engine, _) =
-                    Engine::new(tuner, samplers, ir_cabinet, peak_meter, metronome).unwrap();
+                let (mut engine, _) = Engine::new(
+                    tuner,
+                    samplers,
+                    ir_cabinet,
+                    peak_meter,
+                    metronome,
+                    ConvolverDropHandle::new().0,
+                )
+                .unwrap();
 
                 let input = vec![0.5f32; BUFFER_SIZE];
                 let mut output = vec![0.0f32; BUFFER_SIZE];
