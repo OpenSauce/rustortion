@@ -9,6 +9,10 @@ pub struct RtDropHandle {
 }
 
 /// Receiving end of the RT drop channel.
+///
+/// Objects received through this channel are deallocated (dropped) on the
+/// background thread that owns this receiver, keeping those deallocations
+/// off the real-time audio thread.
 pub struct RtDropReceiver {
     drop_rx: Receiver<Box<dyn Send>>,
 }
@@ -28,13 +32,14 @@ impl RtDropHandle {
 }
 
 impl RtDropReceiver {
-    /// Drain and drop all objects waiting in the channel.
+    /// Drain and deallocate all objects waiting in the channel.
     pub fn drain(&self) {
         while self.drop_rx.try_recv().is_ok() {}
     }
 
-    /// Block until one value arrives, then drain any remaining.
-    /// Returns `false` when the channel is disconnected (shutdown).
+    /// Block until one object arrives, deallocate it and any others
+    /// queued behind it. Returns `false` when the channel disconnects
+    /// (i.e. the `RtDropHandle` was dropped, signalling shutdown).
     pub fn recv_and_drain(&self) -> bool {
         if self.drop_rx.recv().is_ok() {
             self.drain();
