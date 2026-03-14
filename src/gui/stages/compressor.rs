@@ -7,7 +7,7 @@ use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACIN
 use crate::gui::messages::Message;
 use crate::tr;
 
-use super::StageMessage;
+use super::{ParamUpdate, StageMessage};
 
 // --- Config ---
 
@@ -44,13 +44,13 @@ impl CompressorConfig {
         )
     }
 
-    pub const fn apply(&mut self, msg: CompressorMessage) {
+    pub const fn apply(&mut self, msg: CompressorMessage) -> Option<ParamUpdate> {
         match msg {
-            CompressorMessage::ThresholdChanged(v) => self.threshold_db = v,
-            CompressorMessage::RatioChanged(v) => self.ratio = v,
-            CompressorMessage::AttackChanged(v) => self.attack_ms = v,
-            CompressorMessage::ReleaseChanged(v) => self.release_ms = v,
-            CompressorMessage::MakeupChanged(v) => self.makeup_db = v,
+            CompressorMessage::ThresholdChanged(v) => { self.threshold_db = v; Some(ParamUpdate::Changed("threshold", v)) }
+            CompressorMessage::RatioChanged(v) => { self.ratio = v; Some(ParamUpdate::Changed("ratio", v)) }
+            CompressorMessage::AttackChanged(v) => { self.attack_ms = v; Some(ParamUpdate::Changed("attack", v)) }
+            CompressorMessage::ReleaseChanged(v) => { self.release_ms = v; Some(ParamUpdate::Changed("release", v)) }
+            CompressorMessage::MakeupChanged(v) => { self.makeup_db = v; Some(ParamUpdate::Changed("makeup", v)) }
         }
     }
 }

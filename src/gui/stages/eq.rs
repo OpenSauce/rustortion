@@ -9,7 +9,14 @@ use crate::gui::components::widgets::common::{
 use crate::gui::messages::Message;
 use crate::tr;
 
-use super::StageMessage;
+use super::{ParamUpdate, StageMessage};
+
+const BAND_NAMES: [&str; 16] = [
+    "band_0", "band_1", "band_2", "band_3",
+    "band_4", "band_5", "band_6", "band_7",
+    "band_8", "band_9", "band_10", "band_11",
+    "band_12", "band_13", "band_14", "band_15",
+];
 
 // --- Config ---
 
@@ -31,11 +38,10 @@ impl EqConfig {
         EqStage::new(self.gains, sample_rate)
     }
 
-    pub const fn apply(&mut self, msg: EqMessage) {
+    pub const fn apply(&mut self, msg: EqMessage) -> Option<ParamUpdate> {
         match msg {
             EqMessage::GainChanged(band, value) => {
                 if band < NUM_BANDS {
-                    // Clamp to valid range (uses DSP-side constants)
                     let clamped = if value < MIN_GAIN_DB {
                         MIN_GAIN_DB
                     } else if value > MAX_GAIN_DB {
@@ -44,6 +50,9 @@ impl EqConfig {
                         value
                     };
                     self.gains[band] = clamped;
+                    Some(ParamUpdate::Changed(BAND_NAMES[band], clamped))
+                } else {
+                    None
                 }
             }
         }

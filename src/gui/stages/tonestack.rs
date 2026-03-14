@@ -9,7 +9,7 @@ use crate::gui::components::widgets::common::{
 use crate::gui::messages::Message;
 use crate::tr;
 
-use super::StageMessage;
+use super::{ParamUpdate, StageMessage};
 
 // --- Config ---
 
@@ -46,13 +46,13 @@ impl ToneStackConfig {
         )
     }
 
-    pub const fn apply(&mut self, msg: ToneStackMessage) {
+    pub const fn apply(&mut self, msg: ToneStackMessage) -> Option<ParamUpdate> {
         match msg {
-            ToneStackMessage::ModelChanged(mo) => self.model = mo,
-            ToneStackMessage::BassChanged(v) => self.bass = v,
-            ToneStackMessage::MidChanged(v) => self.mid = v,
-            ToneStackMessage::TrebleChanged(v) => self.treble = v,
-            ToneStackMessage::PresenceChanged(v) => self.presence = v,
+            ToneStackMessage::ModelChanged(mo) => { self.model = mo; Some(ParamUpdate::NeedsStageRebuild) }
+            ToneStackMessage::BassChanged(v) => { self.bass = v; Some(ParamUpdate::Changed("bass", v)) }
+            ToneStackMessage::MidChanged(v) => { self.mid = v; Some(ParamUpdate::Changed("mid", v)) }
+            ToneStackMessage::TrebleChanged(v) => { self.treble = v; Some(ParamUpdate::Changed("treble", v)) }
+            ToneStackMessage::PresenceChanged(v) => { self.presence = v; Some(ParamUpdate::Changed("presence", v)) }
         }
     }
 }

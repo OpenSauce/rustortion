@@ -7,7 +7,7 @@ use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACIN
 use crate::gui::messages::Message;
 use crate::tr;
 
-use super::StageMessage;
+use super::{ParamUpdate, StageMessage};
 
 // --- Config ---
 
@@ -27,9 +27,9 @@ impl LevelConfig {
         LevelStage::new(self.gain)
     }
 
-    pub const fn apply(&mut self, msg: LevelMessage) {
+    pub const fn apply(&mut self, msg: LevelMessage) -> Option<ParamUpdate> {
         match msg {
-            LevelMessage::GainChanged(v) => self.gain = v,
+            LevelMessage::GainChanged(v) => { self.gain = v; Some(ParamUpdate::Changed("gain", v)) }
         }
     }
 }

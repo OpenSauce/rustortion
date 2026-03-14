@@ -7,7 +7,7 @@ use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACIN
 use crate::gui::messages::Message;
 use crate::tr;
 
-use super::StageMessage;
+use super::{ParamUpdate, StageMessage};
 
 // --- Config ---
 
@@ -33,11 +33,11 @@ impl ReverbConfig {
         ReverbStage::new(self.room_size, self.damping, self.mix, sample_rate)
     }
 
-    pub const fn apply(&mut self, msg: ReverbMessage) {
+    pub const fn apply(&mut self, msg: ReverbMessage) -> Option<ParamUpdate> {
         match msg {
-            ReverbMessage::RoomSizeChanged(v) => self.room_size = v,
-            ReverbMessage::DampingChanged(v) => self.damping = v,
-            ReverbMessage::MixChanged(v) => self.mix = v,
+            ReverbMessage::RoomSizeChanged(v) => { self.room_size = v; Some(ParamUpdate::Changed("room_size", v)) }
+            ReverbMessage::DampingChanged(v) => { self.damping = v; Some(ParamUpdate::Changed("damping", v)) }
+            ReverbMessage::MixChanged(v) => { self.mix = v; Some(ParamUpdate::Changed("mix", v)) }
         }
     }
 }

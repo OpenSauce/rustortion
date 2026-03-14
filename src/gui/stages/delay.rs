@@ -7,7 +7,7 @@ use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACIN
 use crate::gui::messages::Message;
 use crate::tr;
 
-use super::StageMessage;
+use super::{ParamUpdate, StageMessage};
 
 // --- Config ---
 
@@ -33,11 +33,11 @@ impl DelayConfig {
         DelayStage::new(self.delay_ms, self.feedback, self.mix, sample_rate)
     }
 
-    pub const fn apply(&mut self, msg: DelayMessage) {
+    pub const fn apply(&mut self, msg: DelayMessage) -> Option<ParamUpdate> {
         match msg {
-            DelayMessage::DelayTimeChanged(v) => self.delay_ms = v,
-            DelayMessage::FeedbackChanged(v) => self.feedback = v,
-            DelayMessage::MixChanged(v) => self.mix = v,
+            DelayMessage::DelayTimeChanged(v) => { self.delay_ms = v; Some(ParamUpdate::Changed("delay_time", v)) }
+            DelayMessage::FeedbackChanged(v) => { self.feedback = v; Some(ParamUpdate::Changed("feedback", v)) }
+            DelayMessage::MixChanged(v) => { self.mix = v; Some(ParamUpdate::Changed("mix", v)) }
         }
     }
 }
