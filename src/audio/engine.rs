@@ -7,6 +7,7 @@ use crate::amp::stages::Stage;
 use crate::audio::peak_meter::PeakMeter;
 use crate::audio::pitch_shifter::PitchShifter;
 use crate::audio::recorder::Recorder;
+use crate::audio::rt_drop::RtDropHandle;
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
 use crate::ir::convolver::Convolver;
@@ -22,6 +23,11 @@ pub struct PreparedIr {
 pub enum EngineMessage {
     SetAmpChain(Box<AmplifierChain>),
     SetInputFilters(Option<Box<dyn Stage>>, Option<Box<dyn Stage>>),
+    SetParameter(usize, &'static str, f32),
+    ReplaceStage(usize, Box<dyn Stage>),
+    AddStage(usize, Box<dyn Stage>),
+    RemoveStage(usize),
+    SwapStages(usize, usize),
     StartRecording(Recorder),
     StopRecording,
     SwapIrConvolver(Box<PreparedIr>),
@@ -41,6 +47,8 @@ pub struct Engine {
     engine_receiver: Receiver<EngineMessage>,
     /// Handle for sending old convolvers off the RT thread for deallocation.
     convolver_drop: ConvolverDropHandle,
+    /// Handle for sending arbitrary objects off the RT thread for deallocation.
+    rt_drop: RtDropHandle,
     samplers: Samplers,
     tuner: Tuner,
     recorder: Option<Recorder>,
@@ -64,8 +72,9 @@ impl Engine {
         peak_meter: PeakMeter,
         metronome: Metronome,
         convolver_drop: ConvolverDropHandle,
+        rt_drop: RtDropHandle,
     ) -> Result<(Self, EngineHandle)> {
-        let (engine_sender, engine_receiver) = bounded::<EngineMessage>(10);
+        let (engine_sender, engine_receiver) = bounded::<EngineMessage>(32);
 
         Ok((
             Self {
@@ -73,6 +82,7 @@ impl Engine {
                 ir_cabinet,
                 engine_receiver,
                 convolver_drop,
+                rt_drop,
                 samplers,
                 tuner,
                 recorder: None,
@@ -188,9 +198,43 @@ impl Engine {
     pub fn handle_messages(&mut self) {
         while let Ok(message) = self.engine_receiver.try_recv() {
             match message {
-                EngineMessage::SetAmpChain(chain) => {
-                    self.chain = chain;
+                EngineMessage::SetAmpChain(new_chain) => {
+                    let old = std::mem::replace(&mut self.chain, new_chain);
+                    self.rt_drop.retire(old);
                     debug!("Received new amplifier chain");
+                }
+                EngineMessage::SetParameter(idx, name, value) => {
+                    if let Some(result) = self.chain.set_parameter(idx, name, value) {
+                        if let Err(e) = result {
+                            error!("Failed to set parameter '{name}' on stage {idx}: {e}");
+                        }
+                    } else {
+                        error!("SetParameter: stage index {idx} out of bounds");
+                    }
+                }
+                EngineMessage::ReplaceStage(idx, new_stage) => {
+                    if let Some(old) = self.chain.replace_stage(idx, new_stage) {
+                        self.rt_drop.retire(old);
+                        debug!("Replaced stage at index {idx}");
+                    } else {
+                        error!("ReplaceStage: stage index {idx} out of bounds");
+                    }
+                }
+                EngineMessage::AddStage(idx, stage) => {
+                    self.chain.insert_stage(idx, stage);
+                    debug!("Added stage at index {idx}");
+                }
+                EngineMessage::RemoveStage(idx) => {
+                    if let Some(old) = self.chain.remove_stage(idx) {
+                        self.rt_drop.retire(old);
+                        debug!("Removed stage at index {idx}");
+                    } else {
+                        error!("RemoveStage: stage index {idx} out of bounds");
+                    }
+                }
+                EngineMessage::SwapStages(a, b) => {
+                    self.chain.swap_stages(a, b);
+                    debug!("Swapped stages {a} and {b}");
                 }
                 EngineMessage::SetInputFilters(hp, lp) => {
                     self.input_highpass = hp;
@@ -318,6 +362,26 @@ impl EngineHandle {
     pub fn set_tuner_enabled(&self, enabled: bool) {
         let update = EngineMessage::SetTunerEnabled(enabled);
         self.send(update);
+    }
+
+    pub fn set_parameter(&self, stage_idx: usize, name: &'static str, value: f32) {
+        self.send(EngineMessage::SetParameter(stage_idx, name, value));
+    }
+
+    pub fn replace_stage(&self, idx: usize, stage: Box<dyn Stage>) {
+        self.send(EngineMessage::ReplaceStage(idx, stage));
+    }
+
+    pub fn add_stage(&self, idx: usize, stage: Box<dyn Stage>) {
+        self.send(EngineMessage::AddStage(idx, stage));
+    }
+
+    pub fn remove_stage(&self, idx: usize) {
+        self.send(EngineMessage::RemoveStage(idx));
+    }
+
+    pub fn swap_stages(&self, a: usize, b: usize) {
+        self.send(EngineMessage::SwapStages(a, b));
     }
 
     pub fn set_amp_chain(&self, new_chain: AmplifierChain) {

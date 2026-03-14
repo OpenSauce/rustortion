@@ -1,4 +1,4 @@
-use crossbeam::channel::{bounded, Receiver, Sender};
+use crossbeam::channel::{Receiver, Sender, bounded};
 
 /// Handle for sending objects off the RT thread for deallocation.
 ///

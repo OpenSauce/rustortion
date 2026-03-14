@@ -33,8 +33,15 @@ impl AmplifierChain {
     }
 
     /// Forward a parameter change to a live stage.
-    pub fn set_parameter(&mut self, idx: usize, name: &str, value: f32) -> Option<Result<(), &'static str>> {
-        self.stages.get_mut(idx).map(|stage| stage.set_parameter(name, value))
+    pub fn set_parameter(
+        &mut self,
+        idx: usize,
+        name: &str,
+        value: f32,
+    ) -> Option<Result<(), &'static str>> {
+        self.stages
+            .get_mut(idx)
+            .map(|stage| stage.set_parameter(name, value))
     }
 
     /// Read a parameter from a live stage.
@@ -65,7 +72,11 @@ impl AmplifierChain {
     }
 
     /// Replace a stage at the given index, returning the old one.
-    pub fn replace_stage(&mut self, idx: usize, new_stage: Box<dyn Stage>) -> Option<Box<dyn Stage>> {
+    pub fn replace_stage(
+        &mut self,
+        idx: usize,
+        new_stage: Box<dyn Stage>,
+    ) -> Option<Box<dyn Stage>> {
         if idx < self.stages.len() {
             let old = std::mem::replace(&mut self.stages[idx], new_stage);
             Some(old)

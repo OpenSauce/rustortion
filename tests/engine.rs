@@ -5,6 +5,7 @@ use rustortion::amp::chain::AmplifierChain;
 use rustortion::amp::stages::level::LevelStage;
 use rustortion::audio::engine::Engine;
 use rustortion::audio::peak_meter::PeakMeter;
+use rustortion::audio::rt_drop::RtDropHandle;
 use rustortion::audio::samplers::Samplers;
 use rustortion::ir::load_service::ConvolverDropHandle;
 use rustortion::metronome::Metronome;
@@ -27,6 +28,7 @@ fn engine_processes_non_zero_signal() -> Result<()> {
         peak_meter,
         metronome,
         ConvolverDropHandle::new().0,
+        RtDropHandle::new().0,
     )?;
 
     let input = vec![0.5f32; BUFFER_SIZE];
@@ -57,6 +59,7 @@ fn engine_handles_buffer_size_change() -> Result<()> {
         peak_meter,
         metronome,
         ConvolverDropHandle::new().0,
+        RtDropHandle::new().0,
     )?;
 
     let input = vec![0.5f32; INITIAL_BUFFER_SIZE];
@@ -106,6 +109,7 @@ fn engine_rejects_mismatched_buffer_sizes() -> Result<()> {
         peak_meter,
         metronome,
         ConvolverDropHandle::new().0,
+        RtDropHandle::new().0,
     )?;
 
     let small_input = vec![0.5f32; BUFFER_SIZE / 2];
@@ -142,6 +146,7 @@ fn engine_applies_amp_chain() -> Result<()> {
         peak_meter,
         metronome,
         ConvolverDropHandle::new().0,
+        RtDropHandle::new().0,
     )?;
 
     let input = vec![1.0f32; BUFFER_SIZE];
@@ -241,6 +246,7 @@ fn engine_tuner_enabled_no_output() -> Result<()> {
         peak_meter,
         metronome,
         ConvolverDropHandle::new().0,
+        RtDropHandle::new().0,
     )?;
 
     let input = vec![0.0f32; BUFFER_SIZE];
@@ -248,6 +254,53 @@ fn engine_tuner_enabled_no_output() -> Result<()> {
     engine.process(&input, &mut output)?;
 
     assert!(output.iter().all(|&x| x == 0.0), "expected silent output");
+
+    Ok(())
+}
+
+#[test]
+fn engine_set_parameter_updates_live_stage() -> Result<()> {
+    const SAMPLE_RATE: usize = 48_000;
+    const BUFFER_SIZE: usize = 128;
+
+    let (tuner, _) = Tuner::new(SAMPLE_RATE);
+    let samplers = Samplers::new(BUFFER_SIZE, 1.0, SAMPLE_RATE)?;
+    let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
+    let metronome = Metronome::new(120.0, SAMPLE_RATE);
+    let (mut engine, handle) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        ConvolverDropHandle::new().0,
+        RtDropHandle::new().0,
+    )?;
+
+    // Set up a chain with a level stage at gain=1.0
+    let mut chain = AmplifierChain::new();
+    chain.add_stage(Box::new(LevelStage::new(1.0)));
+    handle.set_amp_chain(chain);
+
+    // Process to apply the chain
+    let input = vec![0.5f32; BUFFER_SIZE];
+    let mut output = vec![0.0f32; BUFFER_SIZE];
+    engine.process(&input, &mut output)?;
+    let before = output[BUFFER_SIZE - 1];
+
+    // Send parameter update to halve the gain
+    handle.set_parameter(0, "gain", 0.5);
+
+    // Process again — engine should pick up the message
+    engine.process(&input, &mut output)?;
+    let after = output[BUFFER_SIZE - 1];
+
+    // After should be approximately half of before
+    assert!(
+        (after - before * 0.5).abs() < 0.01,
+        "expected ~{}, got {after}",
+        before * 0.5
+    );
 
     Ok(())
 }
