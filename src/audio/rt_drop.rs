@@ -32,23 +32,12 @@ impl RtDropHandle {
 }
 
 impl RtDropReceiver {
-    /// Drain and deallocate all objects waiting in the channel.
-    pub fn drain(&self) {
-        while let Ok(value) = self.drop_rx.try_recv() {
+    /// Block forever, deallocating objects as they arrive.
+    /// Returns when the channel disconnects (i.e. the `RtDropHandle`
+    /// was dropped, signalling shutdown).
+    pub fn run(&self) {
+        while let Ok(value) = self.drop_rx.recv() {
             drop(value);
-        }
-    }
-
-    /// Block until one object arrives, deallocate it and any others
-    /// queued behind it. Returns `false` when the channel disconnects
-    /// (i.e. the `RtDropHandle` was dropped, signalling shutdown).
-    pub fn recv_and_drain(&self) -> bool {
-        if let Ok(value) = self.drop_rx.recv() {
-            drop(value);
-            self.drain();
-            true
-        } else {
-            false
         }
     }
 }
@@ -62,7 +51,8 @@ mod tests {
         let (handle, rx) = RtDropHandle::new();
         let boxed: Box<dyn Send> = Box::new(42_i32);
         handle.retire(boxed);
-        rx.drain();
+        // Verify the value arrived
+        assert!(rx.drop_rx.try_recv().is_ok());
     }
 
     #[test]

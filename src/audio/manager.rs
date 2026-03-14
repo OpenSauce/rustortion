@@ -80,7 +80,7 @@ impl Manager {
 
         let _rt_drop_thread = std::thread::Builder::new()
             .name("rt-drop-service".into())
-            .spawn(move || while rt_drop_rx.recv_and_drain() {})
+            .spawn(move || rt_drop_rx.run())
             .expect("Failed to spawn RT drop service thread");
 
         let ir_load_handle = ir_loader.map(|loader| {
