@@ -13,7 +13,7 @@ use crate::audio::peak_meter::{PeakMeter, PeakMeterHandle};
 use crate::audio::rt_drop::RtDropHandle;
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::{ConvolverType, DEFAULT_MAX_IR_MS, IrCabinet};
-use crate::ir::load_service::{self, ConvolverDropHandle, IrLoadHandle};
+use crate::ir::load_service::{self, IrLoadHandle};
 use crate::ir::loader::IrLoader;
 use crate::metronome::Metronome;
 use crate::settings::{AudioSettings, Settings};
@@ -67,7 +67,6 @@ impl Manager {
 
         let ir_cabinet = Some(IrCabinet::new(convolver_type, max_ir_samples));
 
-        let (convolver_drop_handle, convolver_drop_rx) = ConvolverDropHandle::new();
         let (rt_drop_handle, rt_drop_rx) = RtDropHandle::new();
 
         let (engine, engine_handle) = Engine::new(
@@ -76,7 +75,6 @@ impl Manager {
             ir_cabinet,
             peak_meter,
             metronome,
-            convolver_drop_handle,
             rt_drop_handle,
         )?;
 
@@ -92,7 +90,6 @@ impl Manager {
                 sample_rate,
                 DEFAULT_MAX_IR_MS,
                 convolver_type,
-                convolver_drop_rx,
             )
         });
 

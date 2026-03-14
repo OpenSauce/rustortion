@@ -7,7 +7,6 @@ use rustortion::audio::engine::Engine;
 use rustortion::audio::peak_meter::PeakMeter;
 use rustortion::audio::rt_drop::RtDropHandle;
 use rustortion::audio::samplers::Samplers;
-use rustortion::ir::load_service::ConvolverDropHandle;
 use rustortion::metronome::Metronome;
 use rustortion::tuner::Tuner;
 
@@ -27,7 +26,6 @@ fn engine_processes_non_zero_signal() -> Result<()> {
         None,
         peak_meter,
         metronome,
-        ConvolverDropHandle::new().0,
         RtDropHandle::new().0,
     )?;
 
@@ -58,7 +56,6 @@ fn engine_handles_buffer_size_change() -> Result<()> {
         None,
         peak_meter,
         metronome,
-        ConvolverDropHandle::new().0,
         RtDropHandle::new().0,
     )?;
 
@@ -108,7 +105,6 @@ fn engine_rejects_mismatched_buffer_sizes() -> Result<()> {
         None,
         peak_meter,
         metronome,
-        ConvolverDropHandle::new().0,
         RtDropHandle::new().0,
     )?;
 
@@ -145,7 +141,6 @@ fn engine_applies_amp_chain() -> Result<()> {
         None,
         peak_meter,
         metronome,
-        ConvolverDropHandle::new().0,
         RtDropHandle::new().0,
     )?;
 
@@ -245,7 +240,6 @@ fn engine_tuner_enabled_no_output() -> Result<()> {
         None,
         peak_meter,
         metronome,
-        ConvolverDropHandle::new().0,
         RtDropHandle::new().0,
     )?;
 
@@ -273,7 +267,6 @@ fn engine_set_parameter_updates_live_stage() -> Result<()> {
         None,
         peak_meter,
         metronome,
-        ConvolverDropHandle::new().0,
         RtDropHandle::new().0,
     )?;
 

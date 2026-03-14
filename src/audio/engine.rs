@@ -11,7 +11,6 @@ use crate::audio::rt_drop::RtDropHandle;
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
 use crate::ir::convolver::Convolver;
-use crate::ir::load_service::ConvolverDropHandle;
 use crate::metronome::Metronome;
 use crate::tuner::Tuner;
 
@@ -45,8 +44,6 @@ pub struct Engine {
     ir_cabinet: Option<IrCabinet>,
     /// Channel for updating the amplifier chain.
     engine_receiver: Receiver<EngineMessage>,
-    /// Handle for sending old convolvers off the RT thread for deallocation.
-    convolver_drop: ConvolverDropHandle,
     /// Handle for sending arbitrary objects off the RT thread for deallocation.
     rt_drop: RtDropHandle,
     samplers: Samplers,
@@ -71,7 +68,6 @@ impl Engine {
         ir_cabinet: Option<IrCabinet>,
         peak_meter: PeakMeter,
         metronome: Metronome,
-        convolver_drop: ConvolverDropHandle,
         rt_drop: RtDropHandle,
     ) -> Result<(Self, EngineHandle)> {
         let (engine_sender, engine_receiver) = bounded::<EngineMessage>(32);
@@ -81,7 +77,6 @@ impl Engine {
                 chain: Box::new(AmplifierChain::new()),
                 ir_cabinet,
                 engine_receiver,
-                convolver_drop,
                 rt_drop,
                 samplers,
                 tuner,
@@ -245,7 +240,7 @@ impl Engine {
                     if let Some(ref mut cab) = self.ir_cabinet {
                         debug!("IR convolver swapped: {}", prepared.name);
                         let old = cab.swap_convolver(prepared.convolver);
-                        self.convolver_drop.retire(old);
+                        self.rt_drop.retire(Box::new(old));
                     }
                 }
                 EngineMessage::ClearIr => {
