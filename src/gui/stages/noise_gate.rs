@@ -7,7 +7,7 @@ use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACIN
 use crate::gui::messages::Message;
 use crate::tr;
 
-use super::StageMessage;
+use super::{ParamUpdate, StageMessage};
 
 // --- Config ---
 
@@ -44,13 +44,13 @@ impl NoiseGateConfig {
         )
     }
 
-    pub const fn apply(&mut self, msg: NoiseGateMessage) {
+    pub const fn apply(&mut self, msg: NoiseGateMessage) -> Option<ParamUpdate> {
         match msg {
-            NoiseGateMessage::ThresholdChanged(v) => self.threshold_db = v,
-            NoiseGateMessage::RatioChanged(v) => self.ratio = v,
-            NoiseGateMessage::AttackChanged(v) => self.attack_ms = v,
-            NoiseGateMessage::HoldChanged(v) => self.hold_ms = v,
-            NoiseGateMessage::ReleaseChanged(v) => self.release_ms = v,
+            NoiseGateMessage::ThresholdChanged(v) => { self.threshold_db = v; Some(ParamUpdate::Changed("threshold", v)) }
+            NoiseGateMessage::RatioChanged(v) => { self.ratio = v; Some(ParamUpdate::Changed("ratio", v)) }
+            NoiseGateMessage::AttackChanged(v) => { self.attack_ms = v; Some(ParamUpdate::Changed("attack", v)) }
+            NoiseGateMessage::HoldChanged(v) => { self.hold_ms = v; Some(ParamUpdate::Changed("hold", v)) }
+            NoiseGateMessage::ReleaseChanged(v) => { self.release_ms = v; Some(ParamUpdate::Changed("release", v)) }
         }
     }
 }

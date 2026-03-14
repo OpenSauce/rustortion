@@ -10,6 +10,15 @@ pub enum StageCategory {
     Effect,
 }
 
+/// Result of applying a stage message to a config.
+#[derive(Debug, Clone)]
+pub enum ParamUpdate {
+    /// A float parameter changed — forward via `SetParameter` message.
+    Changed(&'static str, f32),
+    /// A non-float parameter changed — rebuild this stage only.
+    NeedsStageRebuild,
+}
+
 macro_rules! stage_registry {
     (
         default = $Default:ident;
@@ -84,15 +93,14 @@ macro_rules! stage_registry {
                 }
             }
 
-            pub const fn apply(&mut self, msg: StageMessage) -> bool {
+            pub const fn apply(&mut self, msg: StageMessage) -> Option<ParamUpdate> {
                 match (self, msg) {
                     $(
                         (StageConfig::$Variant(cfg), StageMessage::$Variant(m)) => {
-                            cfg.apply(m);
-                            true
+                            cfg.apply(m)
                         }
                     )+
-                    _ => false,
+                    _ => None,
                 }
             }
 

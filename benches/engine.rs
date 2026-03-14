@@ -7,8 +7,8 @@ use rustortion::amp::chain::AmplifierChain;
 use rustortion::amp::stages::level::LevelStage;
 use rustortion::audio::engine::{Engine, EngineHandle};
 use rustortion::audio::peak_meter::PeakMeter;
+use rustortion::audio::rt_drop::RtDropHandle;
 use rustortion::audio::samplers::Samplers;
-use rustortion::ir::load_service::ConvolverDropHandle;
 use rustortion::metronome::Metronome;
 use rustortion::tuner::Tuner;
 
@@ -35,7 +35,7 @@ pub fn build_engine(
         ir_cabinet,
         peak_meter,
         metronome,
-        ConvolverDropHandle::new().0,
+        RtDropHandle::new().0,
     )
     .unwrap();
     (engine, handle)
@@ -119,7 +119,7 @@ fn bench_engine_with_ir_cabinet(c: &mut Criterion) {
                     ir_cabinet,
                     peak_meter,
                     metronome,
-                    ConvolverDropHandle::new().0,
+                    RtDropHandle::new().0,
                 )
                 .unwrap();
 

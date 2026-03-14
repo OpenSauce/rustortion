@@ -9,7 +9,7 @@ use crate::gui::components::widgets::common::{
 use crate::gui::messages::Message;
 use crate::tr;
 
-use super::StageMessage;
+use super::{ParamUpdate, StageMessage};
 
 // --- Config ---
 
@@ -55,16 +55,16 @@ impl MultibandSaturatorConfig {
         )
     }
 
-    pub const fn apply(&mut self, msg: MultibandSaturatorMessage) {
+    pub const fn apply(&mut self, msg: MultibandSaturatorMessage) -> Option<ParamUpdate> {
         match msg {
-            MultibandSaturatorMessage::LowDriveChanged(v) => self.low_drive = v,
-            MultibandSaturatorMessage::MidDriveChanged(v) => self.mid_drive = v,
-            MultibandSaturatorMessage::HighDriveChanged(v) => self.high_drive = v,
-            MultibandSaturatorMessage::LowLevelChanged(v) => self.low_level = v,
-            MultibandSaturatorMessage::MidLevelChanged(v) => self.mid_level = v,
-            MultibandSaturatorMessage::HighLevelChanged(v) => self.high_level = v,
-            MultibandSaturatorMessage::LowFreqChanged(v) => self.low_freq = v,
-            MultibandSaturatorMessage::HighFreqChanged(v) => self.high_freq = v,
+            MultibandSaturatorMessage::LowDriveChanged(v) => { self.low_drive = v; Some(ParamUpdate::Changed("low_drive", v)) }
+            MultibandSaturatorMessage::MidDriveChanged(v) => { self.mid_drive = v; Some(ParamUpdate::Changed("mid_drive", v)) }
+            MultibandSaturatorMessage::HighDriveChanged(v) => { self.high_drive = v; Some(ParamUpdate::Changed("high_drive", v)) }
+            MultibandSaturatorMessage::LowLevelChanged(v) => { self.low_level = v; Some(ParamUpdate::Changed("low_level", v)) }
+            MultibandSaturatorMessage::MidLevelChanged(v) => { self.mid_level = v; Some(ParamUpdate::Changed("mid_level", v)) }
+            MultibandSaturatorMessage::HighLevelChanged(v) => { self.high_level = v; Some(ParamUpdate::Changed("high_level", v)) }
+            MultibandSaturatorMessage::LowFreqChanged(v) => { self.low_freq = v; Some(ParamUpdate::Changed("low_freq", v)) }
+            MultibandSaturatorMessage::HighFreqChanged(v) => { self.high_freq = v; Some(ParamUpdate::Changed("high_freq", v)) }
         }
     }
 }

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use iced::widget::{
     button, checkbox, column, container, pick_list, row, scrollable, slider, space, text,
 };
@@ -24,7 +26,7 @@ use crate::gui::handlers::tuner::TunerHandler;
 use crate::gui::messages::{
     HotkeyMessage, Message, MidiMessage, PresetMessage, SettingsMessage, TunerMessage,
 };
-use crate::gui::stages::{StageCategory, StageConfig, StageType};
+use crate::gui::stages::{ParamUpdate, StageCategory, StageConfig, StageType};
 use crate::gui::tabs::Tab;
 use crate::i18n;
 use crate::midi::start_midi_manager;
@@ -46,7 +48,7 @@ pub struct AmplifierApp {
     settings: Settings,
     settings_handler: SettingsHandler,
     collapsed_stages: Vec<bool>,
-    dirty_chain: bool,
+    dirty_params: HashMap<(usize, &'static str), f32>,
     ir_cabinet_control: IrCabinetControl,
     pitch_shift_control: PitchShiftControl,
     tuner_handler: TunerHandler,
@@ -163,6 +165,17 @@ impl AmplifierApp {
             audio_manager.engine().set_input_filters(hp, lp);
         }
 
+        // Build and send initial chain
+        {
+            let sample_rate = audio_manager.sample_rate();
+            let effective_sr = sample_rate * settings.audio.oversampling_factor as usize;
+            let mut chain = AmplifierChain::new();
+            for cfg in &preset.stages {
+                chain.add_stage(cfg.to_runtime(effective_sr as f32));
+            }
+            audio_manager.engine().set_amp_chain(chain);
+        }
+
         (
             Self {
                 audio_manager,
@@ -174,8 +187,7 @@ impl AmplifierApp {
                 settings,
                 settings_handler,
                 collapsed_stages,
-                // Set dirty chain to true to trigger initial rebuild
-                dirty_chain: true,
+                dirty_params: HashMap::new(),
                 ir_cabinet_control,
                 pitch_shift_control,
                 tuner_handler: TunerHandler::new(),
@@ -480,10 +492,10 @@ impl AmplifierApp {
     // subscription handles all the periodic tasks that happen in the UI
     // this is usually polling for updates from the tuner, audio engine etc
     pub fn subscription(&self) -> Subscription<Message> {
-        let rebuild_sub = if self.dirty_chain {
-            time::every(REBUILD_INTERVAL).map(|_| Message::RebuildTick)
-        } else {
+        let rebuild_sub = if self.dirty_params.is_empty() {
             Subscription::none()
+        } else {
+            time::every(REBUILD_INTERVAL).map(|_| Message::RebuildTick)
         };
 
         let tuner_sub = if self.tuner_handler.is_enabled() {
@@ -539,7 +551,8 @@ impl AmplifierApp {
                     self.collapsed_stages.resize(stages.len(), false);
                 }
                 self.stages = stages;
-                self.mark_stages_dirty();
+                self.dirty_params.clear();
+                self.update_processor_chain();
             }
             Message::SetInputFilters(config) => {
                 self.input_filter_config = config;
@@ -561,37 +574,41 @@ impl AmplifierApp {
                 self.input_filter_config.lp_cutoff = cutoff;
                 self.send_input_filters_to_engine();
             }
-            Message::RebuildTick => self.rebuild_if_dirty(),
+            Message::RebuildTick => self.flush_dirty_params(),
             Message::AddStage => {
                 let new_stage = StageConfig::from(self.selected_stage_type);
                 let category = new_stage.category();
-
-                // Insert at end of same-category section
                 let insert_idx = self.category_end_index(category);
+                let sample_rate = self.effective_sample_rate();
+                let runtime_stage = new_stage.to_runtime(sample_rate as f32);
                 self.stages.insert(insert_idx, new_stage);
                 self.collapsed_stages.insert(insert_idx, false);
-                self.mark_stages_dirty();
+                self.flush_dirty_params();
+                self.audio_manager
+                    .engine()
+                    .add_stage(insert_idx, runtime_stage);
                 self.persist_collapse_state();
             }
             Message::RemoveStage(idx) => {
                 if idx < self.stages.len() {
                     self.stages.remove(idx);
                     self.collapsed_stages.remove(idx);
-                    self.mark_stages_dirty();
+                    self.flush_dirty_params();
+                    self.audio_manager.engine().remove_stage(idx);
                     self.persist_collapse_state();
                 }
             }
             Message::MoveStageUp(idx) => {
                 if idx < self.stages.len() {
                     let category = self.stages[idx].category();
-                    // Find previous stage of same category
                     if let Some(prev) = (0..idx)
                         .rev()
                         .find(|&i| self.stages[i].category() == category)
                     {
                         self.stages.swap(prev, idx);
                         self.collapsed_stages.swap(prev, idx);
-                        self.mark_stages_dirty();
+                        self.flush_dirty_params();
+                        self.audio_manager.engine().swap_stages(prev, idx);
                         self.persist_collapse_state();
                     }
                 }
@@ -599,13 +616,13 @@ impl AmplifierApp {
             Message::MoveStageDown(idx) => {
                 if idx < self.stages.len() {
                     let category = self.stages[idx].category();
-                    // Find next stage of same category
                     if let Some(next) = (idx + 1..self.stages.len())
                         .find(|&i| self.stages[i].category() == category)
                     {
                         self.stages.swap(idx, next);
                         self.collapsed_stages.swap(idx, next);
-                        self.mark_stages_dirty();
+                        self.flush_dirty_params();
+                        self.audio_manager.engine().swap_stages(idx, next);
                         self.persist_collapse_state();
                     }
                 }
@@ -662,11 +679,15 @@ impl AmplifierApp {
                 debug!("Recording stopped");
             }
             Message::Settings(msg) => {
-                return self.settings_handler.handle(
-                    msg,
-                    &mut self.settings,
-                    &mut self.audio_manager,
-                );
+                let old_oversampling = self.settings.audio.oversampling_factor;
+                let task =
+                    self.settings_handler
+                        .handle(msg, &mut self.settings, &mut self.audio_manager);
+                if self.settings.audio.oversampling_factor != old_oversampling {
+                    self.dirty_params.clear();
+                    self.update_processor_chain();
+                }
+                return task;
             }
             Message::IrSelected(ir_name) => {
                 self.ir_cabinet_control
@@ -688,10 +709,19 @@ impl AmplifierApp {
                 self.audio_manager.engine().set_pitch_shift(semitones);
             }
             Message::Stage(idx, stage_msg) => {
-                if let Some(stage) = self.stages.get_mut(idx)
-                    && stage.apply(stage_msg)
-                {
-                    self.mark_stages_dirty();
+                if let Some(stage) = self.stages.get_mut(idx) {
+                    match stage.apply(stage_msg) {
+                        Some(ParamUpdate::Changed(name, value)) => {
+                            self.dirty_params.insert((idx, name), value);
+                        }
+                        Some(ParamUpdate::NeedsStageRebuild) => {
+                            self.flush_dirty_params();
+                            let sample_rate = self.effective_sample_rate();
+                            let new_stage = self.stages[idx].to_runtime(sample_rate as f32);
+                            self.audio_manager.engine().replace_stage(idx, new_stage);
+                        }
+                        None => {}
+                    }
                 }
             }
             Message::Tuner(msg) => {
@@ -888,25 +918,24 @@ impl AmplifierApp {
         }
     }
 
-    fn rebuild_if_dirty(&mut self) {
-        if !self.dirty_chain {
-            return;
+    fn flush_dirty_params(&mut self) {
+        let engine = self.audio_manager.engine();
+        for ((idx, name), value) in self.dirty_params.drain() {
+            engine.set_parameter(idx, name, value);
         }
-        self.update_processor_chain();
-        self.dirty_chain = false;
     }
 
-    const fn mark_stages_dirty(&mut self) {
-        self.dirty_chain = true;
+    fn effective_sample_rate(&self) -> usize {
+        self.audio_manager.sample_rate() * self.settings.audio.oversampling_factor as usize
     }
 
     fn update_processor_chain(&self) {
         let sample_rate = self.audio_manager.sample_rate();
-        let chain = self.build_amplifier_chain(sample_rate);
+        let chain = self.build_full_chain(sample_rate);
         self.audio_manager.engine().set_amp_chain(chain);
     }
 
-    fn build_amplifier_chain(&self, sample_rate: usize) -> AmplifierChain {
+    fn build_full_chain(&self, sample_rate: usize) -> AmplifierChain {
         let mut chain = AmplifierChain::new();
 
         let effective_sample_rate = sample_rate * self.settings.audio.oversampling_factor as usize;

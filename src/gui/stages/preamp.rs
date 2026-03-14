@@ -10,7 +10,7 @@ use crate::gui::components::widgets::common::{
 use crate::gui::messages::Message;
 use crate::tr;
 
-use super::StageMessage;
+use super::{ParamUpdate, StageMessage};
 
 // --- Config ---
 
@@ -36,11 +36,11 @@ impl PreampConfig {
         PreampStage::new(self.gain, self.bias, self.clipper_type, sample_rate)
     }
 
-    pub const fn apply(&mut self, msg: PreampMessage) {
+    pub const fn apply(&mut self, msg: PreampMessage) -> Option<ParamUpdate> {
         match msg {
-            PreampMessage::GainChanged(v) => self.gain = v,
-            PreampMessage::BiasChanged(v) => self.bias = v,
-            PreampMessage::ClipperChanged(c) => self.clipper_type = c,
+            PreampMessage::GainChanged(v) => { self.gain = v; Some(ParamUpdate::Changed("gain", v)) }
+            PreampMessage::BiasChanged(v) => { self.bias = v; Some(ParamUpdate::Changed("bias", v)) }
+            PreampMessage::ClipperChanged(c) => { self.clipper_type = c; Some(ParamUpdate::NeedsStageRebuild) }
         }
     }
 }

@@ -9,7 +9,7 @@ use crate::gui::components::widgets::common::{
 use crate::gui::messages::Message;
 use crate::tr;
 
-use super::StageMessage;
+use super::{ParamUpdate, StageMessage};
 
 // --- Config ---
 
@@ -35,11 +35,11 @@ impl PowerAmpConfig {
         PowerAmpStage::new(self.drive, self.amp_type, self.sag, sample_rate)
     }
 
-    pub const fn apply(&mut self, msg: PowerAmpMessage) {
+    pub const fn apply(&mut self, msg: PowerAmpMessage) -> Option<ParamUpdate> {
         match msg {
-            PowerAmpMessage::TypeChanged(t) => self.amp_type = t,
-            PowerAmpMessage::DriveChanged(v) => self.drive = v,
-            PowerAmpMessage::SagChanged(v) => self.sag = v,
+            PowerAmpMessage::TypeChanged(t) => { self.amp_type = t; Some(ParamUpdate::NeedsStageRebuild) }
+            PowerAmpMessage::DriveChanged(v) => { self.drive = v; Some(ParamUpdate::Changed("drive", v)) }
+            PowerAmpMessage::SagChanged(v) => { self.sag = v; Some(ParamUpdate::Changed("sag", v)) }
         }
     }
 }
