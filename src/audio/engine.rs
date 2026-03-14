@@ -9,15 +9,23 @@ use crate::audio::pitch_shifter::PitchShifter;
 use crate::audio::recorder::Recorder;
 use crate::audio::samplers::Samplers;
 use crate::ir::cabinet::IrCabinet;
+use crate::ir::convolver::Convolver;
+use crate::ir::load_service::ConvolverDropHandle;
 use crate::metronome::Metronome;
 use crate::tuner::Tuner;
+
+pub struct PreparedIr {
+    pub name: String,
+    pub convolver: Convolver,
+}
 
 pub enum EngineMessage {
     SetAmpChain(Box<AmplifierChain>),
     SetInputFilters(Option<Box<dyn Stage>>, Option<Box<dyn Stage>>),
     StartRecording(Recorder),
     StopRecording,
-    SetIrCabinet(Option<String>),
+    SwapIrConvolver(Box<PreparedIr>),
+    ClearIr,
     SetIrBypass(bool),
     SetIrGain(f32),
     SetTunerEnabled(bool),
@@ -31,6 +39,8 @@ pub struct Engine {
     ir_cabinet: Option<IrCabinet>,
     /// Channel for updating the amplifier chain.
     engine_receiver: Receiver<EngineMessage>,
+    /// Handle for sending old convolvers off the RT thread for deallocation.
+    convolver_drop: ConvolverDropHandle,
     samplers: Samplers,
     tuner: Tuner,
     recorder: Option<Recorder>,
@@ -41,6 +51,7 @@ pub struct Engine {
     input_lowpass: Option<Box<dyn Stage>>,
 }
 
+#[derive(Clone)]
 pub struct EngineHandle {
     engine_sender: Sender<EngineMessage>,
 }
@@ -52,6 +63,7 @@ impl Engine {
         ir_cabinet: Option<IrCabinet>,
         peak_meter: PeakMeter,
         metronome: Metronome,
+        convolver_drop: ConvolverDropHandle,
     ) -> Result<(Self, EngineHandle)> {
         let (engine_sender, engine_receiver) = bounded::<EngineMessage>(10);
 
@@ -60,6 +72,7 @@ impl Engine {
                 chain: Box::new(AmplifierChain::new()),
                 ir_cabinet,
                 engine_receiver,
+                convolver_drop,
                 samplers,
                 tuner,
                 recorder: None,
@@ -173,7 +186,7 @@ impl Engine {
     }
 
     pub fn handle_messages(&mut self) {
-        if let Ok(message) = self.engine_receiver.try_recv() {
+        while let Ok(message) = self.engine_receiver.try_recv() {
             match message {
                 EngineMessage::SetAmpChain(chain) => {
                     self.chain = chain;
@@ -184,15 +197,17 @@ impl Engine {
                     self.input_lowpass = lp;
                     debug!("Updated input filters");
                 }
-                EngineMessage::SetIrCabinet(ir_name) => {
-                    if let Some(ref mut cab) = self.ir_cabinet
-                        && let Some(name) = ir_name
-                    {
-                        if let Err(e) = cab.select_ir(&name) {
-                            error!("Failed to set IR: {e}");
-                        } else {
-                            debug!("IR Cabinet set to: {name}");
-                        }
+                EngineMessage::SwapIrConvolver(prepared) => {
+                    if let Some(ref mut cab) = self.ir_cabinet {
+                        debug!("IR convolver swapped: {}", prepared.name);
+                        let old = cab.swap_convolver(prepared.convolver);
+                        self.convolver_drop.retire(old);
+                    }
+                }
+                EngineMessage::ClearIr => {
+                    if let Some(ref mut cab) = self.ir_cabinet {
+                        cab.clear_convolver();
+                        debug!("IR cleared");
                     }
                 }
                 EngineMessage::SetIrBypass(bypass) => {
@@ -211,42 +226,54 @@ impl Engine {
                     self.tuner.set_enabled(enabled);
                 }
                 EngineMessage::StartRecording(recorder) => {
-                    if self.recorder.is_some() {
-                        debug!("Recorder already active, ignoring start request");
-                        return;
-                    }
-
-                    debug!("Recorder updated");
-                    self.recorder = Some(recorder);
+                    self.handle_start_recording(recorder);
                 }
                 EngineMessage::StopRecording => {
-                    if self.recorder.is_none() {
-                        debug!("No active recorder to stop");
-                        return;
-                    }
-
-                    debug!("Stopping recorder");
-                    if let Some(recorder) = self.recorder.take()
-                        && let Err(e) = recorder.stop()
-                    {
-                        error!("Failed to stop recorder: {e}");
-                    }
-
-                    self.recorder = None;
+                    self.handle_stop_recording();
                 }
                 EngineMessage::SetPitchShift(semitones) => {
-                    if semitones == 0 {
-                        self.pitch_shifter = None;
-                        debug!("Pitch shift disabled (bypass)");
-                    } else if let Some(ref mut shifter) = self.pitch_shifter {
-                        shifter.set_semitones(semitones as f32);
-                        debug!("Pitch shift set to {semitones} semitones");
-                    } else {
-                        self.pitch_shifter = Some(PitchShifter::new(semitones as f32));
-                        debug!("Pitch shift set to {semitones} semitones");
-                    }
+                    self.handle_pitch_shift(semitones);
                 }
             }
+        }
+    }
+
+    fn handle_start_recording(&mut self, recorder: Recorder) {
+        if self.recorder.is_some() {
+            debug!("Recorder already active, ignoring start request");
+            return;
+        }
+
+        debug!("Recorder updated");
+        self.recorder = Some(recorder);
+    }
+
+    fn handle_stop_recording(&mut self) {
+        if self.recorder.is_none() {
+            debug!("No active recorder to stop");
+            return;
+        }
+
+        debug!("Stopping recorder");
+        if let Some(recorder) = self.recorder.take()
+            && let Err(e) = recorder.stop()
+        {
+            error!("Failed to stop recorder: {e}");
+        }
+
+        self.recorder = None;
+    }
+
+    fn handle_pitch_shift(&mut self, semitones: i32) {
+        if semitones == 0 {
+            self.pitch_shifter = None;
+            debug!("Pitch shift disabled (bypass)");
+        } else if let Some(ref mut shifter) = self.pitch_shifter {
+            shifter.set_semitones(semitones as f32);
+            debug!("Pitch shift set to {semitones} semitones");
+        } else {
+            self.pitch_shifter = Some(PitchShifter::new(semitones as f32));
+            debug!("Pitch shift set to {semitones} semitones");
         }
     }
 }
@@ -269,9 +296,13 @@ impl EngineHandle {
         });
     }
 
-    pub fn set_ir_cabinet(&self, ir_name: Option<String>) {
-        let update = EngineMessage::SetIrCabinet(ir_name);
+    pub fn swap_ir_convolver(&self, prepared: PreparedIr) {
+        let update = EngineMessage::SwapIrConvolver(Box::new(prepared));
         self.send(update);
+    }
+
+    pub fn clear_ir(&self) {
+        self.send(EngineMessage::ClearIr);
     }
 
     pub fn set_ir_bypass(&self, bypass: bool) {

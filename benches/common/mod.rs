@@ -1,5 +1,7 @@
 use hound::{WavSpec, WavWriter};
-use rustortion::ir::cabinet::IrCabinet;
+use rustortion::ir::cabinet::{ConvolverType, DEFAULT_MAX_IR_MS, IrCabinet};
+use rustortion::ir::convolver::Convolver;
+use rustortion::ir::loader::IrLoader;
 use std::fs;
 use std::path::Path;
 
@@ -12,10 +14,17 @@ pub fn create_test_cabinet(ir_length: usize, sample_rate: usize) -> IrCabinet {
         create_synthetic_ir(&ir_path, ir_length, sample_rate as u32);
     }
 
-    let mut cabinet = IrCabinet::new(&ir_dir, sample_rate).unwrap();
-    cabinet
-        .select_ir(&format!("test_ir_{ir_length}.wav"))
+    let max_ir_samples = (sample_rate * DEFAULT_MAX_IR_MS) / 1000;
+    let mut cabinet = IrCabinet::new(ConvolverType::Fir, max_ir_samples);
+
+    let loader = IrLoader::new(&ir_dir, sample_rate).unwrap();
+    let ir_samples = loader
+        .load_by_name(&format!("test_ir_{ir_length}.wav"))
         .unwrap();
+
+    let mut convolver = Convolver::new_fir(max_ir_samples);
+    convolver.set_ir(&ir_samples).unwrap();
+    cabinet.swap_convolver(convolver);
 
     cabinet
 }

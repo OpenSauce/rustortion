@@ -87,10 +87,26 @@ impl AmplifierApp {
 
         if let Some(ir_name) = preset.ir_name {
             ir_cabinet_control.set_selected_ir(Some(ir_name.clone()));
-            audio_manager.engine().set_ir_cabinet(Some(ir_name));
+            audio_manager.request_ir_load(&ir_name);
         } else if let Some(first_ir) = ir_cabinet_control.get_selected_ir() {
             ir_cabinet_control.set_selected_ir(Some(first_ir.clone()));
-            audio_manager.engine().set_ir_cabinet(Some(first_ir));
+            audio_manager.request_ir_load(&first_ir);
+        }
+
+        // Preload IRs referenced by presets
+        {
+            let mut preset_ir_names: Vec<String> = preset_handler
+                .get_available_presets()
+                .iter()
+                .filter_map(|name| {
+                    preset_handler
+                        .get_preset_by_name(name)
+                        .and_then(|p| p.ir_name.clone())
+                })
+                .collect();
+            preset_ir_names.sort();
+            preset_ir_names.dedup();
+            audio_manager.preload_irs(&preset_ir_names);
         }
 
         // Initialize MIDI
@@ -655,7 +671,7 @@ impl AmplifierApp {
             Message::IrSelected(ir_name) => {
                 self.ir_cabinet_control
                     .set_selected_ir(Some(ir_name.clone()));
-                self.audio_manager.engine().set_ir_cabinet(Some(ir_name));
+                self.audio_manager.request_ir_load(&ir_name);
             }
             Message::IrBypassed(bypassed) => {
                 self.ir_cabinet_control.set_bypassed(bypassed);
@@ -724,7 +740,7 @@ impl AmplifierApp {
 
     fn handle_midi(&mut self, msg: MidiMessage) -> Task<Message> {
         if matches!(msg, MidiMessage::Open) {
-            let presets = self.preset_handler.get_available_presets();
+            let presets = self.preset_handler.get_available_presets().to_vec();
             let mappings = self.settings.midi.mappings.clone();
             self.midi_handler.open(presets, mappings);
             return Task::none();
@@ -755,7 +771,7 @@ impl AmplifierApp {
 
     fn handle_hotkey(&mut self, msg: HotkeyMessage) -> Task<Message> {
         if matches!(msg, HotkeyMessage::Open) {
-            let presets = self.preset_handler.get_available_presets();
+            let presets = self.preset_handler.get_available_presets().to_vec();
             self.hotkey_handler.open(presets);
             return Task::none();
         }
