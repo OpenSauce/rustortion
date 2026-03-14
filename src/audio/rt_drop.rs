@@ -34,14 +34,17 @@ impl RtDropHandle {
 impl RtDropReceiver {
     /// Drain and deallocate all objects waiting in the channel.
     pub fn drain(&self) {
-        while self.drop_rx.try_recv().is_ok() {}
+        while let Ok(value) = self.drop_rx.try_recv() {
+            drop(value);
+        }
     }
 
     /// Block until one object arrives, deallocate it and any others
     /// queued behind it. Returns `false` when the channel disconnects
     /// (i.e. the `RtDropHandle` was dropped, signalling shutdown).
     pub fn recv_and_drain(&self) -> bool {
-        if self.drop_rx.recv().is_ok() {
+        if let Ok(value) = self.drop_rx.recv() {
+            drop(value);
             self.drain();
             true
         } else {
