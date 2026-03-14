@@ -32,7 +32,7 @@ impl Default for PowerAmpConfig {
 
 impl PowerAmpConfig {
     pub fn to_stage(&self, sample_rate: f32) -> PowerAmpStage {
-        PowerAmpStage::new(self.drive, self.amp_type, self.sag, sample_rate)
+        PowerAmpStage::new(self.drive, self.amp_type, self.sag, 0.5, sample_rate)
     }
 
     pub const fn apply(&mut self, msg: PowerAmpMessage) -> Option<ParamUpdate> {
