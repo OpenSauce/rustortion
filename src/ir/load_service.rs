@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::thread;
 
-use crossbeam::channel::{Receiver, Sender, unbounded};
+use crossbeam::channel::{Receiver, Sender, bounded, unbounded};
 use log::{debug, error, info};
 
 use crate::audio::engine::{EngineHandle, PreparedIr};
@@ -66,7 +66,7 @@ pub struct ConvolverDropReceiver {
 impl ConvolverDropHandle {
     /// Create a paired handle and receiver for RT-safe convolver disposal.
     pub fn new() -> (Self, ConvolverDropReceiver) {
-        let (drop_tx, drop_rx) = unbounded();
+        let (drop_tx, drop_rx) = bounded(4);
         (Self { drop_tx }, ConvolverDropReceiver { drop_rx })
     }
 
