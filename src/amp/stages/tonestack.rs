@@ -305,7 +305,10 @@ mod tests {
             energies.push(measure_sine_energy(&mut stage, 1000.0, 50));
         }
         let all_same = energies.windows(2).all(|w| (w[0] - w[1]).abs() < 1e-6);
-        assert!(!all_same, "models should produce different output: {energies:?}");
+        assert!(
+            !all_same,
+            "models should produce different output: {energies:?}"
+        );
     }
 
     #[test]
@@ -320,10 +323,7 @@ mod tests {
             avg += stage.process(0.5);
         }
         avg /= n as f32;
-        assert!(
-            avg.abs() < 0.05,
-            "DC blocker should remove DC, avg={avg}"
-        );
+        assert!(avg.abs() < 0.05, "DC blocker should remove DC, avg={avg}");
     }
 
     #[test]
@@ -358,10 +358,14 @@ mod tests {
     fn test_parameter_clamping() {
         let mut stage = make_tonestack(ToneStackModel::Flat);
         stage.set_parameter("bass", 5.0).unwrap();
-        assert!((stage.get_parameter("bass").unwrap() - 2.0).abs() < 1e-6,
-            "out-of-range high should clamp to 2.0");
+        assert!(
+            (stage.get_parameter("bass").unwrap() - 2.0).abs() < 1e-6,
+            "out-of-range high should clamp to 2.0"
+        );
         stage.set_parameter("bass", -1.0).unwrap();
-        assert!((stage.get_parameter("bass").unwrap() - 0.0).abs() < 1e-6,
-            "out-of-range low should clamp to 0.0");
+        assert!(
+            (stage.get_parameter("bass").unwrap() - 0.0).abs() < 1e-6,
+            "out-of-range low should clamp to 0.0"
+        );
     }
 }

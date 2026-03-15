@@ -105,11 +105,7 @@ mod tests {
     #[test]
     fn test_bounded_output() {
         for gain in [0.0, 5.0, 10.0] {
-            for clipper in [
-                ClipperType::Soft,
-                ClipperType::Hard,
-                ClipperType::Triode,
-            ] {
+            for clipper in [ClipperType::Soft, ClipperType::Hard, ClipperType::Triode] {
                 let mut stage = PreampStage::new(gain, 0.0, clipper, SR);
                 for i in 0..2000 {
                     let input = (i as f32 / 100.0).sin() * 5.0;
