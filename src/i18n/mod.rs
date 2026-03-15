@@ -163,6 +163,8 @@ pub struct Translations {
     pub stage_delay: &'static str,
     pub stage_reverb: &'static str,
     pub stage_eq: &'static str,
+    pub stage_bypass: &'static str,
+    pub stage_bypass_tooltip: &'static str,
 
     // Stage parameters
     pub clipper: &'static str,
@@ -355,6 +357,8 @@ pub static EN: Translations = Translations {
     stage_delay: "Delay",
     stage_reverb: "Reverb",
     stage_eq: "Graphic EQ",
+    stage_bypass: "Bypass",
+    stage_bypass_tooltip: "Toggle stage bypass",
 
     // Stage parameters
     clipper: "Clipper:",
@@ -538,6 +542,8 @@ pub static ZH_CN: Translations = Translations {
     stage_delay: "延迟",
     stage_reverb: "混响",
     stage_eq: "图形均衡器",
+    stage_bypass: "旁路",
+    stage_bypass_tooltip: "切换旁路",
 
     // Stage parameters
     clipper: "削波器:",
