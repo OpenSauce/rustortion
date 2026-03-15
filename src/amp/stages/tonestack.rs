@@ -200,8 +200,9 @@ mod tests {
 
     /// Run a sine wave through the stage and return RMS energy
     fn measure_sine_energy(stage: &mut ToneStackStage, freq_hz: f32, num_cycles: usize) -> f32 {
-        let samples_per_cycle = (SR / freq_hz) as usize;
-        let total_samples = samples_per_cycle * num_cycles;
+        // Compute total duration directly from desired cycles, rounding to nearest
+        // whole sample to avoid truncation bias at high frequencies.
+        let total_samples = ((num_cycles as f32) * SR / freq_hz).round() as usize;
         // Warm up
         for i in 0..total_samples {
             let t = i as f32 / SR;
@@ -221,25 +222,29 @@ mod tests {
     fn test_flat_unity_passthrough() {
         let mut stage = make_tonestack(ToneStackModel::Flat);
         let freq = 1000.0;
+        // Warm up to let filters/DC blocker settle
         for i in 0..4000 {
             let t = i as f32 / SR;
             stage.process((2.0 * PI * freq * t).sin() * 0.5);
         }
-        let mut max_ratio = 0.0_f32;
-        let mut min_ratio = f32::MAX;
-        for i in 0..2000 {
+        // Measure RMS gain over a window
+        let mut sum_in2 = 0.0_f32;
+        let mut sum_out2 = 0.0_f32;
+        let num_samples = 2000_usize;
+        for i in 0..num_samples {
             let t = (4000 + i) as f32 / SR;
             let input = (2.0 * PI * freq * t).sin() * 0.5;
             let out = stage.process(input);
-            if input.abs() > 0.1 {
-                let ratio = out / input;
-                max_ratio = max_ratio.max(ratio);
-                min_ratio = min_ratio.min(ratio);
-            }
+            sum_in2 += input * input;
+            sum_out2 += out * out;
         }
+        let input_rms = (sum_in2 / num_samples as f32).sqrt();
+        let output_rms = (sum_out2 / num_samples as f32).sqrt();
+        let gain = output_rms / input_rms;
+        // Expect ~0.7x (-3 dB headroom) with tolerance for filter settling
         assert!(
-            min_ratio > 0.4 && max_ratio < 1.0,
-            "flat unity should be near 0.7x passthrough: min_ratio={min_ratio}, max_ratio={max_ratio}"
+            (gain - 0.7).abs() <= 0.05,
+            "flat unity should be near 0.7x RMS passthrough: measured gain={gain}"
         );
     }
 

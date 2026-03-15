@@ -121,28 +121,35 @@ mod tests {
 
     #[test]
     fn test_higher_gain_more_distortion() {
-        fn count_zero_crossings(gain: f32) -> usize {
+        // Measure harmonic distortion energy: RMS of (output - scaled_input).
+        // Higher gain should produce more harmonic content beyond the fundamental.
+        fn distortion_energy(gain: f32) -> f32 {
             let mut stage = make_preamp(gain, 0.0);
-            let mut prev = 0.0_f32;
-            let mut crossings = 0;
+            // Warm up
             for i in 0..500 {
                 stage.process((i as f32 * 0.1).sin() * 0.3);
             }
-            for i in 0..4000 {
+            let mut sum_in2 = 0.0_f32;
+            let mut sum_diff2 = 0.0_f32;
+            let n = 4000;
+            for i in 0..n {
                 let input = (i as f32 * 0.1).sin() * 0.3;
                 let out = stage.process(input);
-                if prev.signum() != out.signum() && prev != 0.0 {
-                    crossings += 1;
-                }
-                prev = out;
+                sum_in2 += input * input;
+                sum_diff2 += (out - input) * (out - input);
             }
-            crossings
+            let in_rms = (sum_in2 / n as f32).sqrt();
+            if in_rms < 1e-10 {
+                return 0.0;
+            }
+            // Normalized distortion: RMS(out - in) / RMS(in)
+            (sum_diff2 / n as f32).sqrt() / in_rms
         }
-        let low_gain_crossings = count_zero_crossings(1.0);
-        let high_gain_crossings = count_zero_crossings(10.0);
+        let low_gain_dist = distortion_energy(1.0);
+        let high_gain_dist = distortion_energy(10.0);
         assert!(
-            high_gain_crossings >= low_gain_crossings,
-            "high gain should produce >= zero crossings: low={low_gain_crossings}, high={high_gain_crossings}"
+            high_gain_dist > low_gain_dist,
+            "high gain should produce more distortion: low={low_gain_dist}, high={high_gain_dist}"
         );
     }
 
