@@ -298,4 +298,22 @@ mod tests {
         stage.set_parameter("makeup", 6.0).unwrap();
         assert!((stage.get_parameter("makeup").unwrap() - 6.0).abs() < 0.1);
     }
+
+    #[test]
+    fn threshold_zero_returns_finite_floor() {
+        let mut stage = make_compressor();
+        stage.threshold = 0.0;
+        let db = stage.get_parameter("threshold").unwrap();
+        assert!(db.is_finite());
+        assert_eq!(db, -200.0);
+    }
+
+    #[test]
+    fn makeup_zero_returns_finite_floor() {
+        let mut stage = make_compressor();
+        stage.makeup = 0.0;
+        let db = stage.get_parameter("makeup").unwrap();
+        assert!(db.is_finite());
+        assert_eq!(db, -200.0);
+    }
 }
