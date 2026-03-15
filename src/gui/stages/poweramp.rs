@@ -28,7 +28,7 @@ impl Default for PowerAmpConfig {
             drive: 0.5,
             amp_type: PowerAmpType::ClassAB,
             sag: 0.3,
-            sag_release: 0.5,
+            sag_release: 120.0,
         }
     }
 }
@@ -108,14 +108,14 @@ pub fn view(
                 ),
                 labeled_slider(
                     tr!(sag_release),
-                    0.0..=1.0,
+                    40.0..=200.0,
                     cfg.sag_release,
                     move |v| Message::Stage(
                         idx,
                         StageMessage::PowerAmp(PowerAmpMessage::SagReleaseChanged(v))
                     ),
-                    |v| format!("{v:.2}"),
-                    0.05
+                    |v| format!("{v:.0} ms"),
+                    5.0
                 ),
             ]
             .spacing(SPACING_TIGHT)
@@ -133,8 +133,8 @@ mod tests {
         let json = r#"{"drive":0.5,"amp_type":"ClassAB","sag":0.3}"#;
         let cfg: PowerAmpConfig = serde_json::from_str(json).unwrap();
         assert!(
-            (cfg.sag_release - 0.5).abs() < 1e-6,
-            "missing sag_release should default to 0.5, got {}",
+            (cfg.sag_release - 120.0).abs() < 1e-6,
+            "missing sag_release should default to 120.0, got {}",
             cfg.sag_release
         );
     }

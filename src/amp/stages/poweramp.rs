@@ -30,26 +30,25 @@ pub struct PowerAmpStage {
     sample_rate: f32,
 }
 
-/// Interpolate sag release time from tight (40ms) to spongy (200ms).
-const fn sag_release_ms(sag_release: f32) -> f32 {
-    sag_release * 160.0 + 40.0
-}
+/// Sag release range in milliseconds: tight (40ms) to spongy (200ms).
+const SAG_RELEASE_MIN_MS: f32 = 40.0;
+const SAG_RELEASE_MAX_MS: f32 = 200.0;
 
 impl PowerAmpStage {
     pub fn new(
         drive: f32,
         amp_type: PowerAmpType,
         sag: f32,
-        sag_release: f32,
+        sag_release_ms: f32,
         sample_rate: f32,
     ) -> Self {
-        let sag_release = sag_release.clamp(0.0, 1.0);
+        let sag_release_ms = sag_release_ms.clamp(SAG_RELEASE_MIN_MS, SAG_RELEASE_MAX_MS);
         Self {
             drive: drive.clamp(0.0, 1.0),
             amp_type,
             sag: sag.clamp(0.0, 1.0),
-            sag_release,
-            sag_envelope: EnvelopeFollower::from_ms(10.0, sag_release_ms(sag_release), sample_rate),
+            sag_release: sag_release_ms,
+            sag_envelope: EnvelopeFollower::from_ms(10.0, sag_release_ms, sample_rate),
             dc_blocker: DcBlocker::new(10.0, sample_rate),
             sample_rate,
         }
@@ -114,15 +113,13 @@ impl Stage for PowerAmpStage {
                 }
             }
             "sag_release" => {
-                if (0.0..=1.0).contains(&value) {
+                if (SAG_RELEASE_MIN_MS..=SAG_RELEASE_MAX_MS).contains(&value) {
                     self.sag_release = value;
-                    self.sag_envelope.set_release_coeff(calculate_coefficient(
-                        sag_release_ms(value),
-                        self.sample_rate,
-                    ));
+                    self.sag_envelope
+                        .set_release_coeff(calculate_coefficient(value, self.sample_rate));
                     Ok(())
                 } else {
-                    Err("Sag release must be between 0.0 and 1.0")
+                    Err("Sag release must be between 40.0 and 200.0 ms")
                 }
             }
             _ => Err("Unknown parameter name"),
@@ -145,14 +142,19 @@ mod tests {
 
     const SAMPLE_RATE: f32 = 48000.0;
 
-    fn make_stage(amp_type: PowerAmpType, drive: f32, sag: f32, sag_release: f32) -> PowerAmpStage {
-        PowerAmpStage::new(drive, amp_type, sag, sag_release, SAMPLE_RATE)
+    fn make_stage(
+        amp_type: PowerAmpType,
+        drive: f32,
+        sag: f32,
+        sag_release_ms: f32,
+    ) -> PowerAmpStage {
+        PowerAmpStage::new(drive, amp_type, sag, sag_release_ms, SAMPLE_RATE)
     }
 
     #[test]
     fn test_class_ab_symmetric() {
-        let mut stage_pos = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 0.5);
-        let mut stage_neg = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 0.5);
+        let mut stage_pos = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 120.0);
+        let mut stage_neg = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 120.0);
         for i in 1..=20 {
             let x = i as f32 * 0.1;
             let pos = stage_pos.process(x);
@@ -166,8 +168,8 @@ mod tests {
 
     #[test]
     fn test_class_b_symmetric() {
-        let mut stage_pos = make_stage(PowerAmpType::ClassB, 0.5, 0.0, 0.5);
-        let mut stage_neg = make_stage(PowerAmpType::ClassB, 0.5, 0.0, 0.5);
+        let mut stage_pos = make_stage(PowerAmpType::ClassB, 0.5, 0.0, 120.0);
+        let mut stage_neg = make_stage(PowerAmpType::ClassB, 0.5, 0.0, 120.0);
         for i in 1..=20 {
             let x = i as f32 * 0.1;
             let pos = stage_pos.process(x);
@@ -181,8 +183,8 @@ mod tests {
 
     #[test]
     fn test_class_b_more_crossover_than_ab() {
-        let mut ab = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 0.5);
-        let mut b = make_stage(PowerAmpType::ClassB, 0.5, 0.0, 0.5);
+        let mut ab = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 120.0);
+        let mut b = make_stage(PowerAmpType::ClassB, 0.5, 0.0, 120.0);
         let small_input = 0.05;
         let ab_out = ab.process(small_input).abs();
         let b_out = b.process(small_input).abs();
@@ -194,8 +196,8 @@ mod tests {
 
     #[test]
     fn test_class_a_asymmetric() {
-        let mut stage_pos = make_stage(PowerAmpType::ClassA, 0.5, 0.0, 0.5);
-        let mut stage_neg = make_stage(PowerAmpType::ClassA, 0.5, 0.0, 0.5);
+        let mut stage_pos = make_stage(PowerAmpType::ClassA, 0.5, 0.0, 120.0);
+        let mut stage_neg = make_stage(PowerAmpType::ClassA, 0.5, 0.0, 120.0);
         let pos = stage_pos.process(0.5);
         let neg = stage_neg.process(-0.5);
         assert!(
@@ -208,8 +210,8 @@ mod tests {
     fn test_sag_zero_no_effect() {
         // sag=0 stage vs sag=1 stage: after warmup, sag=0 should match sag=1
         // because sag=0 means ceiling stays at 1.0 regardless of envelope
-        let mut no_sag = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 0.5);
-        let mut with_sag = make_stage(PowerAmpType::ClassAB, 0.5, 1.0, 0.5);
+        let mut no_sag = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 120.0);
+        let mut with_sag = make_stage(PowerAmpType::ClassAB, 0.5, 1.0, 120.0);
 
         // Warm up both envelopes
         for _ in 0..2000 {
@@ -229,13 +231,13 @@ mod tests {
 
     #[test]
     fn test_sag_increases_distortion() {
-        let mut stage = make_stage(PowerAmpType::ClassAB, 0.8, 1.0, 0.5);
+        let mut stage = make_stage(PowerAmpType::ClassAB, 0.8, 1.0, 120.0);
         for _ in 0..2000 {
             stage.process(0.9);
         }
         let saggy_output = stage.process(0.9);
 
-        let mut clean_stage = make_stage(PowerAmpType::ClassAB, 0.8, 0.0, 0.5);
+        let mut clean_stage = make_stage(PowerAmpType::ClassAB, 0.8, 0.0, 120.0);
         for _ in 0..2000 {
             clean_stage.process(0.9);
         }
@@ -249,7 +251,7 @@ mod tests {
 
     #[test]
     fn test_ceiling_floor_clamp() {
-        let mut stage = make_stage(PowerAmpType::ClassAB, 1.0, 1.0, 0.5);
+        let mut stage = make_stage(PowerAmpType::ClassAB, 1.0, 1.0, 120.0);
         for _ in 0..10000 {
             let out = stage.process(5.0);
             assert!(out.is_finite(), "output must be finite");
@@ -259,17 +261,18 @@ mod tests {
 
     #[test]
     fn test_sag_release_parameter() {
-        let mut stage = make_stage(PowerAmpType::ClassAB, 0.5, 0.5, 0.0);
-        assert!((stage.get_parameter("sag_release").unwrap() - 0.0).abs() < 1e-6);
-        stage.set_parameter("sag_release", 1.0).unwrap();
-        assert!((stage.get_parameter("sag_release").unwrap() - 1.0).abs() < 1e-6);
-        assert!(stage.set_parameter("sag_release", 1.5).is_err());
-        assert!(stage.set_parameter("sag_release", -0.1).is_err());
+        let mut stage = make_stage(PowerAmpType::ClassAB, 0.5, 0.5, 40.0);
+        assert!((stage.get_parameter("sag_release").unwrap() - 40.0).abs() < 1e-6);
+        stage.set_parameter("sag_release", 200.0).unwrap();
+        assert!((stage.get_parameter("sag_release").unwrap() - 200.0).abs() < 1e-6);
+        // Out of range should fail
+        assert!(stage.set_parameter("sag_release", 201.0).is_err());
+        assert!(stage.set_parameter("sag_release", 39.0).is_err());
     }
 
     #[test]
     fn test_denormal_protection() {
-        let mut stage = make_stage(PowerAmpType::ClassAB, 0.5, 0.5, 0.5);
+        let mut stage = make_stage(PowerAmpType::ClassAB, 0.5, 0.5, 120.0);
         for _ in 0..1000 {
             stage.process(1.0);
         }
@@ -286,7 +289,7 @@ mod tests {
     #[test]
     fn test_sample_rate_consistency() {
         for sr in [44100.0_f32, 48000.0, 96000.0] {
-            let mut stage = PowerAmpStage::new(0.5, PowerAmpType::ClassAB, 0.8, 0.5, sr);
+            let mut stage = PowerAmpStage::new(0.5, PowerAmpType::ClassAB, 0.8, 120.0, sr);
             for _ in 0..((sr * 0.1) as usize) {
                 stage.process(0.9);
             }
@@ -301,8 +304,8 @@ mod tests {
 
     #[test]
     fn test_sag_release_recovery_speed() {
-        let mut tight = make_stage(PowerAmpType::ClassAB, 0.5, 1.0, 0.0);
-        let mut spongy = make_stage(PowerAmpType::ClassAB, 0.5, 1.0, 1.0);
+        let mut tight = make_stage(PowerAmpType::ClassAB, 0.5, 1.0, 40.0);
+        let mut spongy = make_stage(PowerAmpType::ClassAB, 0.5, 1.0, 200.0);
         for _ in 0..5000 {
             tight.process(1.0);
             spongy.process(1.0);
@@ -321,7 +324,7 @@ mod tests {
 
     #[test]
     fn test_class_a_dc_blocker() {
-        let mut stage = make_stage(PowerAmpType::ClassA, 0.8, 0.0, 0.5);
+        let mut stage = make_stage(PowerAmpType::ClassA, 0.8, 0.0, 120.0);
         // Warm up: let DC blocker settle (10 Hz cutoff needs many samples)
         for _ in 0..48000 {
             stage.process(0.5);
