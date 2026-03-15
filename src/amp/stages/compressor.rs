@@ -119,3 +119,175 @@ impl Stage for CompressorStage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SR: f32 = 44100.0;
+
+    /// Helper: threshold -20 dB, ratio 4:1, 0 dB makeup, fast attack/release
+    fn make_compressor() -> CompressorStage {
+        CompressorStage::new(1.0, 50.0, -20.0, 4.0, 0.0, SR)
+    }
+
+    #[test]
+    fn test_below_threshold_passthrough() {
+        let mut stage = make_compressor(); // threshold = -20 dB ≈ 0.1
+        let input = 0.01; // -40 dB, well below threshold
+        for _ in 0..2000 {
+            stage.process(input);
+        }
+        let out = stage.process(input);
+        assert!(
+            (out - input).abs() < 0.005,
+            "below threshold should pass through: in={input}, out={out}"
+        );
+    }
+
+    #[test]
+    fn test_above_threshold_compression() {
+        let mut stage = make_compressor(); // threshold -20 dB
+        let input = 0.5; // well above threshold
+        for _ in 0..5000 {
+            stage.process(input);
+        }
+        let out = stage.process(input);
+        assert!(
+            out.abs() < input.abs(),
+            "above threshold should compress: in={input}, out={out}"
+        );
+    }
+
+    #[test]
+    fn test_higher_ratio_more_compression() {
+        let mut stage_low = CompressorStage::new(1.0, 50.0, -20.0, 2.0, 0.0, SR);
+        let mut stage_high = CompressorStage::new(1.0, 50.0, -20.0, 10.0, 0.0, SR);
+        let input = 0.8;
+        for _ in 0..5000 {
+            stage_low.process(input);
+            stage_high.process(input);
+        }
+        let out_low = stage_low.process(input).abs();
+        let out_high = stage_high.process(input).abs();
+        assert!(
+            out_high < out_low,
+            "higher ratio should compress more: 2:1={out_low}, 10:1={out_high}"
+        );
+    }
+
+    #[test]
+    fn test_makeup_gain() {
+        let mut no_makeup = CompressorStage::new(1.0, 50.0, -20.0, 4.0, 0.0, SR);
+        let mut with_makeup = CompressorStage::new(1.0, 50.0, -20.0, 4.0, 12.0, SR);
+        let input = 0.5;
+        for _ in 0..5000 {
+            no_makeup.process(input);
+            with_makeup.process(input);
+        }
+        let out_no = no_makeup.process(input).abs();
+        let out_yes = with_makeup.process(input).abs();
+        assert!(
+            out_yes > out_no,
+            "makeup should boost output: no={out_no}, with={out_yes}"
+        );
+    }
+
+    #[test]
+    fn test_silence_stays_silent() {
+        let mut stage = CompressorStage::new(1.0, 50.0, -20.0, 4.0, 12.0, SR);
+        for _ in 0..1000 {
+            stage.process(0.0);
+        }
+        let out = stage.process(0.0);
+        assert!(
+            out.abs() < 1e-6,
+            "silence in should produce silence, got {out}"
+        );
+    }
+
+    #[test]
+    fn test_attack_lets_transient_through() {
+        let mut stage = CompressorStage::new(100.0, 200.0, -20.0, 10.0, 0.0, SR);
+        for _ in 0..2000 {
+            stage.process(0.0);
+        }
+        let first = stage.process(0.8).abs();
+        for _ in 0..5000 {
+            stage.process(0.8);
+        }
+        let settled = stage.process(0.8).abs();
+        assert!(
+            first > settled,
+            "slow attack should let transient through: first={first}, settled={settled}"
+        );
+    }
+
+    #[test]
+    fn test_release_recovery() {
+        let mut stage = CompressorStage::new(1.0, 100.0, -20.0, 10.0, 0.0, SR);
+        for _ in 0..5000 {
+            stage.process(0.8);
+        }
+        let still_compressed = stage.process(0.05).abs();
+        for _ in 0..20000 {
+            stage.process(0.05);
+        }
+        let recovered = stage.process(0.05).abs();
+        assert!(
+            recovered > still_compressed,
+            "after release, gain should recover: still_compressed={still_compressed}, recovered={recovered}"
+        );
+    }
+
+    #[test]
+    fn test_bounded_output() {
+        let mut stage = CompressorStage::new(1.0, 50.0, -20.0, 4.0, 24.0, SR);
+        for i in 0..5000 {
+            let input = (i as f32 * 0.1).sin() * 5.0;
+            let out = stage.process(input);
+            assert!(
+                out.is_finite() && out.abs() < 100.0,
+                "output must be finite and bounded, got {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_parameter_validation() {
+        let mut stage = make_compressor();
+        assert!(stage.set_parameter("threshold", -60.0).is_ok());
+        assert!(stage.set_parameter("threshold", 0.0).is_ok());
+        assert!(stage.set_parameter("threshold", -61.0).is_err());
+        assert!(stage.set_parameter("threshold", 0.1).is_err());
+        assert!(stage.set_parameter("ratio", 1.0).is_ok());
+        assert!(stage.set_parameter("ratio", 20.0).is_ok());
+        assert!(stage.set_parameter("ratio", 0.9).is_err());
+        assert!(stage.set_parameter("ratio", 20.1).is_err());
+        assert!(stage.set_parameter("attack", 0.1).is_ok());
+        assert!(stage.set_parameter("attack", 100.0).is_ok());
+        assert!(stage.set_parameter("attack", 0.0).is_err());
+        assert!(stage.set_parameter("release", 10.0).is_ok());
+        assert!(stage.set_parameter("release", 1000.0).is_ok());
+        assert!(stage.set_parameter("release", 9.9).is_err());
+        assert!(stage.set_parameter("makeup", -12.0).is_ok());
+        assert!(stage.set_parameter("makeup", 24.0).is_ok());
+        assert!(stage.set_parameter("makeup", -12.1).is_err());
+        assert!(stage.set_parameter("unknown", 0.0).is_err());
+    }
+
+    #[test]
+    fn test_parameter_roundtrip() {
+        let mut stage = make_compressor();
+        stage.set_parameter("ratio", 8.0).unwrap();
+        assert!((stage.get_parameter("ratio").unwrap() - 8.0).abs() < 1e-6);
+        stage.set_parameter("attack", 50.0).unwrap();
+        assert!((stage.get_parameter("attack").unwrap() - 50.0).abs() < 1e-6);
+        stage.set_parameter("release", 200.0).unwrap();
+        assert!((stage.get_parameter("release").unwrap() - 200.0).abs() < 1e-6);
+        stage.set_parameter("threshold", -12.0).unwrap();
+        assert!((stage.get_parameter("threshold").unwrap() - (-12.0)).abs() < 0.1);
+        stage.set_parameter("makeup", 6.0).unwrap();
+        assert!((stage.get_parameter("makeup").unwrap() - 6.0).abs() < 0.1);
+    }
+}
