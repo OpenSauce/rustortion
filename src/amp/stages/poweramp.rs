@@ -31,8 +31,8 @@ pub struct PowerAmpStage {
 }
 
 /// Interpolate sag release time from tight (40ms) to spongy (200ms).
-fn sag_release_ms(sag_release: f32) -> f32 {
-    sag_release.mul_add(160.0, 40.0)
+const fn sag_release_ms(sag_release: f32) -> f32 {
+    sag_release * 160.0 + 40.0
 }
 
 impl PowerAmpStage {
