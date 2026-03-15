@@ -187,3 +187,181 @@ impl Stage for ToneStackStage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SR: f32 = 44100.0;
+
+    fn make_tonestack(model: ToneStackModel) -> ToneStackStage {
+        ToneStackStage::new(model, 1.0, 1.0, 1.0, 1.0, SR)
+    }
+
+    /// Run a sine wave through the stage and return RMS energy
+    fn measure_sine_energy(stage: &mut ToneStackStage, freq_hz: f32, num_cycles: usize) -> f32 {
+        let samples_per_cycle = (SR / freq_hz) as usize;
+        let total_samples = samples_per_cycle * num_cycles;
+        // Warm up
+        for i in 0..total_samples {
+            let t = i as f32 / SR;
+            stage.process((2.0 * PI * freq_hz * t).sin() * 0.5);
+        }
+        // Measure
+        let mut energy = 0.0_f32;
+        for i in 0..total_samples {
+            let t = (total_samples + i) as f32 / SR;
+            let out = stage.process((2.0 * PI * freq_hz * t).sin() * 0.5);
+            energy += out * out;
+        }
+        (energy / total_samples as f32).sqrt()
+    }
+
+    #[test]
+    fn test_flat_unity_passthrough() {
+        let mut stage = make_tonestack(ToneStackModel::Flat);
+        let freq = 1000.0;
+        for i in 0..4000 {
+            let t = i as f32 / SR;
+            stage.process((2.0 * PI * freq * t).sin() * 0.5);
+        }
+        let mut max_ratio = 0.0_f32;
+        let mut min_ratio = f32::MAX;
+        for i in 0..2000 {
+            let t = (4000 + i) as f32 / SR;
+            let input = (2.0 * PI * freq * t).sin() * 0.5;
+            let out = stage.process(input);
+            if input.abs() > 0.1 {
+                let ratio = out / input;
+                max_ratio = max_ratio.max(ratio);
+                min_ratio = min_ratio.min(ratio);
+            }
+        }
+        assert!(
+            min_ratio > 0.4 && max_ratio < 1.0,
+            "flat unity should be near 0.7x passthrough: min_ratio={min_ratio}, max_ratio={max_ratio}"
+        );
+    }
+
+    #[test]
+    fn test_bass_boost() {
+        let mut boosted = ToneStackStage::new(ToneStackModel::Flat, 2.0, 1.0, 1.0, 1.0, SR);
+        let mut cut = ToneStackStage::new(ToneStackModel::Flat, 0.1, 1.0, 1.0, 1.0, SR);
+        let bass_energy_boost = measure_sine_energy(&mut boosted, 80.0, 40);
+        let bass_energy_cut = measure_sine_energy(&mut cut, 80.0, 40);
+        assert!(
+            bass_energy_boost > bass_energy_cut,
+            "bass=2.0 should have more low energy than bass=0.1: boost={bass_energy_boost}, cut={bass_energy_cut}"
+        );
+    }
+
+    #[test]
+    fn test_treble_boost() {
+        let mut boosted = ToneStackStage::new(ToneStackModel::Flat, 1.0, 1.0, 2.0, 1.0, SR);
+        let mut cut = ToneStackStage::new(ToneStackModel::Flat, 1.0, 1.0, 0.1, 1.0, SR);
+        let energy_boost = measure_sine_energy(&mut boosted, 8000.0, 100);
+        let energy_cut = measure_sine_energy(&mut cut, 8000.0, 100);
+        assert!(
+            energy_boost > energy_cut,
+            "treble=2.0 should have more high-freq energy: boost={energy_boost}, cut={energy_cut}"
+        );
+    }
+
+    #[test]
+    fn test_mid_scoop() {
+        let mut full_mid = ToneStackStage::new(ToneStackModel::Flat, 1.0, 2.0, 1.0, 1.0, SR);
+        let mut scooped = ToneStackStage::new(ToneStackModel::Flat, 1.0, 0.1, 1.0, 1.0, SR);
+        let energy_full = measure_sine_energy(&mut full_mid, 1000.0, 50);
+        let energy_scoop = measure_sine_energy(&mut scooped, 1000.0, 50);
+        assert!(
+            energy_full > energy_scoop,
+            "mid=2.0 should have more mid energy than mid=0.1: full={energy_full}, scoop={energy_scoop}"
+        );
+    }
+
+    #[test]
+    fn test_presence_effect() {
+        let mut high_pres = ToneStackStage::new(ToneStackModel::Flat, 1.0, 1.0, 1.0, 2.0, SR);
+        let mut low_pres = ToneStackStage::new(ToneStackModel::Flat, 1.0, 1.0, 1.0, 0.0, SR);
+        let energy_high = measure_sine_energy(&mut high_pres, 6000.0, 100);
+        let energy_low = measure_sine_energy(&mut low_pres, 6000.0, 100);
+        assert!(
+            energy_high > energy_low,
+            "presence=2.0 should boost highs vs 0.0: high={energy_high}, low={energy_low}"
+        );
+    }
+
+    #[test]
+    fn test_model_differences() {
+        let models = [
+            ToneStackModel::Modern,
+            ToneStackModel::British,
+            ToneStackModel::American,
+            ToneStackModel::Flat,
+        ];
+        let mut energies = Vec::new();
+        for model in &models {
+            let mut stage = make_tonestack(*model);
+            energies.push(measure_sine_energy(&mut stage, 1000.0, 50));
+        }
+        let all_same = energies.windows(2).all(|w| (w[0] - w[1]).abs() < 1e-6);
+        assert!(!all_same, "models should produce different output: {energies:?}");
+    }
+
+    #[test]
+    fn test_dc_rejection() {
+        let mut stage = make_tonestack(ToneStackModel::Flat);
+        for _ in 0..48000 {
+            stage.process(0.5);
+        }
+        let mut avg = 0.0_f32;
+        let n = 4096;
+        for _ in 0..n {
+            avg += stage.process(0.5);
+        }
+        avg /= n as f32;
+        assert!(
+            avg.abs() < 0.05,
+            "DC blocker should remove DC, avg={avg}"
+        );
+    }
+
+    #[test]
+    fn test_bounded_output() {
+        let mut stage = ToneStackStage::new(ToneStackModel::Modern, 2.0, 2.0, 2.0, 2.0, SR);
+        for i in 0..5000 {
+            let input = (i as f32 * 0.1).sin() * 5.0;
+            let out = stage.process(input);
+            assert!(
+                out.is_finite() && out.abs() < 50.0,
+                "output must be bounded, got {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_parameter_roundtrip() {
+        let mut stage = make_tonestack(ToneStackModel::Flat);
+        stage.set_parameter("bass", 1.5).unwrap();
+        assert!((stage.get_parameter("bass").unwrap() - 1.5).abs() < 1e-6);
+        stage.set_parameter("mid", 0.3).unwrap();
+        assert!((stage.get_parameter("mid").unwrap() - 0.3).abs() < 1e-6);
+        stage.set_parameter("treble", 1.8).unwrap();
+        assert!((stage.get_parameter("treble").unwrap() - 1.8).abs() < 1e-6);
+        stage.set_parameter("presence", 0.5).unwrap();
+        assert!((stage.get_parameter("presence").unwrap() - 0.5).abs() < 1e-6);
+        assert!(stage.get_parameter("unknown").is_err());
+        assert!(stage.set_parameter("unknown", 0.0).is_err());
+    }
+
+    #[test]
+    fn test_parameter_clamping() {
+        let mut stage = make_tonestack(ToneStackModel::Flat);
+        stage.set_parameter("bass", 5.0).unwrap();
+        assert!((stage.get_parameter("bass").unwrap() - 2.0).abs() < 1e-6,
+            "out-of-range high should clamp to 2.0");
+        stage.set_parameter("bass", -1.0).unwrap();
+        assert!((stage.get_parameter("bass").unwrap() - 0.0).abs() < 1e-6,
+            "out-of-range low should clamp to 0.0");
+    }
+}
