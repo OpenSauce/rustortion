@@ -23,16 +23,22 @@ const fn stage_abbreviation(cfg: &StageConfig) -> &'static str {
 
 fn block_style(
     is_active_tab: bool,
+    bypassed: bool,
 ) -> impl Fn(&iced::Theme, iced::widget::button::Status) -> iced::widget::button::Style {
     move |theme: &iced::Theme, status| {
         let palette = theme.palette();
+        let alpha = if bypassed { 0.5 } else { 1.0 };
         let mut style = iced::widget::button::Style {
-            text_color: palette.text,
+            text_color: iced::Color::from_rgba(
+                palette.text.r, palette.text.g, palette.text.b, alpha,
+            ),
             border: iced::Border {
                 color: if is_active_tab {
-                    palette.primary
+                    iced::Color::from_rgba(
+                        palette.primary.r, palette.primary.g, palette.primary.b, alpha,
+                    )
                 } else {
-                    iced::Color::from_rgba(1.0, 1.0, 1.0, 0.2)
+                    iced::Color::from_rgba(1.0, 1.0, 1.0, 0.2 * alpha)
                 },
                 width: if is_active_tab { 2.0 } else { 1.0 },
                 radius: 4.0.into(),
@@ -42,15 +48,15 @@ fn block_style(
                     palette.primary.r,
                     palette.primary.g,
                     palette.primary.b,
-                    0.15,
+                    0.15 * alpha,
                 )
             } else {
-                iced::Color::from_rgba(0.2, 0.2, 0.3, 0.3)
+                iced::Color::from_rgba(0.2, 0.2, 0.3, 0.3 * alpha)
             })),
             ..iced::widget::button::Style::default()
         };
 
-        if matches!(status, iced::widget::button::Status::Hovered) {
+        if !bypassed && matches!(status, iced::widget::button::Status::Hovered) {
             style.background = Some(iced::Background::Color(iced::Color::from_rgba(
                 palette.primary.r,
                 palette.primary.g,
@@ -108,7 +114,7 @@ pub fn view<'a>(
     chain = chain.push(
         button(text(filter_label).size(11))
             .on_press(Message::TabSelected(Tab::Io))
-            .style(block_style(io_active))
+            .style(block_style(io_active, false))
             .padding([2, 6]),
     );
 
@@ -122,10 +128,11 @@ pub fn view<'a>(
             StageCategory::Effect => Tab::Effects,
         };
         let is_active = active_tab == tab;
+        let bypassed = stage.bypassed();
         chain = chain.push(
             button(text(abbr).size(11))
                 .on_press(Message::TabSelected(tab))
-                .style(block_style(is_active))
+                .style(block_style(is_active, bypassed))
                 .padding([2, 6]),
         );
     }
@@ -137,7 +144,7 @@ pub fn view<'a>(
     chain = chain.push(
         button(text("CAB").size(11))
             .on_press(Message::TabSelected(Tab::Cabinet))
-            .style(block_style(cab_active))
+            .style(block_style(cab_active, false))
             .padding([2, 6]),
     );
 
