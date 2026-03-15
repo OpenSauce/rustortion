@@ -3,7 +3,7 @@ use iced::Element;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::delay::DelayStage;
-use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACING_TIGHT};
+use crate::gui::components::widgets::common::{labeled_slider, stage_card, StageViewState, SPACING_TIGHT};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -16,6 +16,8 @@ pub struct DelayConfig {
     pub delay_ms: f32,
     pub feedback: f32,
     pub mix: f32,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for DelayConfig {
@@ -24,6 +26,7 @@ impl Default for DelayConfig {
             delay_ms: 300.0,
             feedback: 0.3,
             mix: 0.5,
+            bypassed: false,
         }
     }
 }
@@ -56,16 +59,12 @@ pub enum DelayMessage {
 pub fn view(
     idx: usize,
     cfg: &DelayConfig,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
+    state: StageViewState,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_delay),
         idx,
-        is_collapsed,
-        can_move_up,
-        can_move_down,
+        state,
         || {
             column![
                 labeled_slider(

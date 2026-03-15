@@ -3,7 +3,7 @@ use iced::Element;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::level::LevelStage;
-use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACING_TIGHT};
+use crate::gui::components::widgets::common::{labeled_slider, stage_card, StageViewState, SPACING_TIGHT};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -14,11 +14,13 @@ use super::{ParamUpdate, StageMessage};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct LevelConfig {
     pub gain: f32,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for LevelConfig {
     fn default() -> Self {
-        Self { gain: 1.0 }
+        Self { gain: 1.0, bypassed: false }
     }
 }
 
@@ -46,11 +48,9 @@ pub enum LevelMessage {
 pub fn view(
     idx: usize,
     cfg: &LevelConfig,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
+    state: StageViewState,
 ) -> Element<'_, Message> {
-    stage_card(tr!(stage_level), idx, is_collapsed, can_move_up, can_move_down, || {
+    stage_card(tr!(stage_level), idx, state, || {
         column![labeled_slider(
             tr!(gain),
             0.0..=2.0,
@@ -62,4 +62,30 @@ pub fn view(
         .spacing(SPACING_TIGHT)
         .into()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_without_bypassed_defaults_to_false() {
+        let json = r#"{"gain": 1.0}"#;
+        let cfg: LevelConfig = serde_json::from_str(json).unwrap();
+        assert!(!cfg.bypassed);
+    }
+
+    #[test]
+    fn deserialize_with_bypassed_true() {
+        let json = r#"{"gain": 1.0, "bypassed": true}"#;
+        let cfg: LevelConfig = serde_json::from_str(json).unwrap();
+        assert!(cfg.bypassed);
+    }
+
+    #[test]
+    fn serialize_includes_bypassed() {
+        let cfg = LevelConfig { gain: 1.0, bypassed: true };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("\"bypassed\":true"));
+    }
 }

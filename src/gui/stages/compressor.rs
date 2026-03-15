@@ -3,7 +3,7 @@ use iced::Element;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::compressor::CompressorStage;
-use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACING_TIGHT};
+use crate::gui::components::widgets::common::{labeled_slider, stage_card, StageViewState, SPACING_TIGHT};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -18,6 +18,8 @@ pub struct CompressorConfig {
     pub threshold_db: f32,
     pub ratio: f32,
     pub makeup_db: f32,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for CompressorConfig {
@@ -28,6 +30,7 @@ impl Default for CompressorConfig {
             threshold_db: -20.0,
             ratio: 4.0,
             makeup_db: 0.0,
+            bypassed: false,
         }
     }
 }
@@ -71,16 +74,12 @@ pub enum CompressorMessage {
 pub fn view(
     idx: usize,
     cfg: &CompressorConfig,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
+    state: StageViewState,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_compressor),
         idx,
-        is_collapsed,
-        can_move_up,
-        can_move_down,
+        state,
         || {
             column![
                 labeled_slider(
