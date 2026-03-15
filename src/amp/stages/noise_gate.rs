@@ -360,4 +360,13 @@ mod tests {
         assert!((gate.get_parameter("threshold").unwrap() - (-40.0)).abs() < 0.5);
         assert!(gate.get_parameter("unknown").is_err());
     }
+
+    #[test]
+    fn threshold_zero_returns_finite_floor() {
+        let mut gate = make_gate();
+        gate.threshold = 0.0;
+        let db = gate.get_parameter("threshold").unwrap();
+        assert!(db.is_finite());
+        assert_eq!(db, -200.0);
+    }
 }

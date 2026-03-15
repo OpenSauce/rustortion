@@ -87,11 +87,23 @@ impl jack::ProcessHandler for ProcessHandler {
         let new_size = frames as usize;
 
         if new_size > self.max_buffer_capacity {
-            error!(
-                "JACK buffer_size {new_size} exceeds pre-allocated capacity {}; ignoring",
-                self.max_buffer_capacity
-            );
-            return jack::Control::Continue;
+            if let Err(e) = self
+                .buffer
+                .try_reserve(new_size.saturating_sub(self.buffer.capacity()))
+            {
+                error!("Failed to grow audio buffer for JACK buffer_size {new_size}: {e}");
+                return jack::Control::Quit;
+            }
+
+            if let Err(e) = self
+                .metronome_buffer
+                .try_reserve(new_size.saturating_sub(self.metronome_buffer.capacity()))
+            {
+                error!("Failed to grow metronome buffer for JACK buffer_size {new_size}: {e}");
+                return jack::Control::Quit;
+            }
+
+            self.max_buffer_capacity = new_size;
         }
 
         warn!("JACK buffer_size changed to {frames} frames");
