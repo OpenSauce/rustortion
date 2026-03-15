@@ -107,6 +107,11 @@ impl EnvelopeFollower {
         self.envelope
     }
 
+    /// Reset envelope to zero (denormal flush).
+    pub const fn reset(&mut self) {
+        self.envelope = 0.0;
+    }
+
     #[inline]
     pub fn process(&mut self, input: f32) -> f32 {
         let abs_input = input.abs();

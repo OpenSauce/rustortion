@@ -43,11 +43,12 @@ impl PowerAmpStage {
         sag_release: f32,
         sample_rate: f32,
     ) -> Self {
+        let sag_release = sag_release.clamp(0.0, 1.0);
         Self {
             drive: drive.clamp(0.0, 1.0),
             amp_type,
             sag: sag.clamp(0.0, 1.0),
-            sag_release: sag_release.clamp(0.0, 1.0),
+            sag_release,
             sag_envelope: EnvelopeFollower::from_ms(10.0, sag_release_ms(sag_release), sample_rate),
             dc_blocker: DcBlocker::new(10.0, sample_rate),
             sample_rate,
@@ -62,8 +63,7 @@ impl Stage for PowerAmpStage {
         self.sag_envelope.process(driven);
 
         if self.sag_envelope.value().abs() < 1e-20 {
-            self.sag_envelope =
-                EnvelopeFollower::from_ms(10.0, sag_release_ms(self.sag_release), self.sample_rate);
+            self.sag_envelope.reset();
         }
 
         let ceiling = (self.sag * self.sag_envelope.value())
@@ -206,16 +206,25 @@ mod tests {
 
     #[test]
     fn test_sag_zero_no_effect() {
-        let mut with_sag = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 0.5);
+        // sag=0 stage vs sag=1 stage: after warmup, sag=0 should match sag=1
+        // because sag=0 means ceiling stays at 1.0 regardless of envelope
         let mut no_sag = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 0.5);
-        for _ in 0..100 {
-            let out1 = with_sag.process(0.8);
-            let out2 = no_sag.process(0.8);
-            assert!(
-                (out1 - out2).abs() < 1e-6,
-                "sag=0 should have no effect: {out1} vs {out2}"
-            );
+        let mut with_sag = make_stage(PowerAmpType::ClassAB, 0.5, 1.0, 0.5);
+
+        // Warm up both envelopes
+        for _ in 0..2000 {
+            no_sag.process(0.8);
+            with_sag.process(0.8);
         }
+
+        let out_no_sag = no_sag.process(0.8);
+        let out_with_sag = with_sag.process(0.8);
+
+        // sag=0 output should be larger (no ceiling reduction)
+        assert!(
+            out_no_sag.abs() > out_with_sag.abs(),
+            "sag=0 should produce higher output than sag=1: no_sag={out_no_sag}, with_sag={out_with_sag}"
+        );
     }
 
     #[test]
