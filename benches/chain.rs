@@ -63,6 +63,7 @@ fn build_chain(sample_rate: f32) -> AmplifierChain {
         0.5,
         PowerAmpType::ClassAB,
         0.3,
+        120.0,
         sample_rate,
     )));
     chain.add_stage(Box::new(LevelStage::new(0.8)));

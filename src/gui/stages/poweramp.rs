@@ -14,10 +14,12 @@ use super::{ParamUpdate, StageMessage};
 // --- Config ---
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(default)]
 pub struct PowerAmpConfig {
     pub drive: f32,
     pub amp_type: PowerAmpType,
     pub sag: f32,
+    pub sag_release: f32,
 }
 
 impl Default for PowerAmpConfig {
@@ -26,13 +28,14 @@ impl Default for PowerAmpConfig {
             drive: 0.5,
             amp_type: PowerAmpType::ClassAB,
             sag: 0.3,
+            sag_release: 120.0,
         }
     }
 }
 
 impl PowerAmpConfig {
     pub fn to_stage(&self, sample_rate: f32) -> PowerAmpStage {
-        PowerAmpStage::new(self.drive, self.amp_type, self.sag, sample_rate)
+        PowerAmpStage::new(self.drive, self.amp_type, self.sag, self.sag_release, sample_rate)
     }
 
     pub const fn apply(&mut self, msg: PowerAmpMessage) -> Option<ParamUpdate> {
@@ -40,6 +43,7 @@ impl PowerAmpConfig {
             PowerAmpMessage::TypeChanged(t) => { self.amp_type = t; Some(ParamUpdate::NeedsStageRebuild) }
             PowerAmpMessage::DriveChanged(v) => { self.drive = v; Some(ParamUpdate::Changed("drive", v)) }
             PowerAmpMessage::SagChanged(v) => { self.sag = v; Some(ParamUpdate::Changed("sag", v)) }
+            PowerAmpMessage::SagReleaseChanged(v) => { self.sag_release = v; Some(ParamUpdate::Changed("sag_release", v)) }
         }
     }
 }
@@ -51,6 +55,7 @@ pub enum PowerAmpMessage {
     TypeChanged(PowerAmpType),
     DriveChanged(f32),
     SagChanged(f32),
+    SagReleaseChanged(f32),
 }
 
 // --- View ---
@@ -101,9 +106,36 @@ pub fn view(
                     |v| format!("{v:.2}"),
                     0.05
                 ),
+                labeled_slider(
+                    tr!(sag_release),
+                    40.0..=200.0,
+                    cfg.sag_release,
+                    move |v| Message::Stage(
+                        idx,
+                        StageMessage::PowerAmp(PowerAmpMessage::SagReleaseChanged(v))
+                    ),
+                    |v| format!("{v:.0} {}", tr!(ms)),
+                    5.0
+                ),
             ]
             .spacing(SPACING_TIGHT)
             .into()
         },
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_preset_backward_compat() {
+        let json = r#"{"drive":0.5,"amp_type":"ClassAB","sag":0.3}"#;
+        let cfg: PowerAmpConfig = serde_json::from_str(json).unwrap();
+        assert!(
+            (cfg.sag_release - 120.0).abs() < 1e-6,
+            "missing sag_release should default to 120.0, got {}",
+            cfg.sag_release
+        );
+    }
 }
