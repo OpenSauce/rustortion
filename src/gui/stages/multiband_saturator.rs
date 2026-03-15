@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::amp::stages::multiband_saturator::MultibandSaturatorStage;
 use crate::gui::components::widgets::common::{
     SPACING_NORMAL, SPACING_SECTION, SPACING_TIGHT, TEXT_SIZE_INFO, labeled_slider, stage_card,
+    StageViewState,
 };
 use crate::gui::messages::Message;
 use crate::tr;
@@ -91,18 +92,12 @@ pub enum MultibandSaturatorMessage {
 pub fn view(
     idx: usize,
     cfg: &MultibandSaturatorConfig,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
-    bypassed: bool,
+    state: StageViewState,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_multiband_saturator),
         idx,
-        is_collapsed,
-        can_move_up,
-        can_move_down,
-        bypassed,
+        state,
         || {
             let crossover_section = column![
                 text(tr!(crossover)).size(TEXT_SIZE_INFO),

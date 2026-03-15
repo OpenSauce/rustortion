@@ -234,8 +234,11 @@ impl Engine {
                     debug!("Swapped stages {a} and {b}");
                 }
                 EngineMessage::SetStageBypassed(idx, bypassed) => {
-                    self.chain.set_bypassed(idx, bypassed);
-                    debug!("Stage {idx} bypass: {bypassed}");
+                    if self.chain.set_bypassed(idx, bypassed) {
+                        debug!("Stage {idx} bypass: {bypassed}");
+                    } else {
+                        error!("SetStageBypassed: stage index {idx} out of bounds");
+                    }
                 }
                 EngineMessage::SetInputFilters(hp, lp) => {
                     self.input_highpass = hp;

@@ -15,8 +15,8 @@ use crate::gui::components::minimap;
 use crate::gui::components::peak_meter::PeakMeterDisplay;
 use crate::gui::components::pitch_shift_control::PitchShiftControl;
 use crate::gui::components::widgets::common::{
-    COLOR_ERROR, PADDING_LARGE, PADDING_NORMAL, SPACING_NORMAL, SPACING_TIGHT, TAB_BUTTON_PADDING,
-    TEXT_SIZE_TAB, section_container, section_title,
+    COLOR_ERROR, PADDING_LARGE, PADDING_NORMAL, SPACING_NORMAL, SPACING_TIGHT, StageViewState,
+    TAB_BUTTON_PADDING, TEXT_SIZE_TAB, section_container, section_title,
 };
 use crate::gui::handlers::hotkey::HotkeyHandler;
 use crate::gui::handlers::midi::MidiHandler;
@@ -344,10 +344,12 @@ impl AmplifierApp {
             let bypassed = self.stages[abs_idx].bypassed();
             stage_col = stage_col.push(self.stages[abs_idx].view(
                 abs_idx,
-                is_collapsed,
-                can_move_up,
-                can_move_down,
-                bypassed,
+                StageViewState {
+                    is_collapsed,
+                    can_move_up,
+                    can_move_down,
+                    bypassed,
+                },
             ));
         }
 
@@ -667,7 +669,9 @@ impl AmplifierApp {
                 if let Some(stage) = self.stages.get_mut(idx) {
                     let new_state = !stage.bypassed();
                     stage.set_bypassed(new_state);
-                    self.audio_manager.engine().set_stage_bypassed(idx, new_state);
+                    self.audio_manager
+                        .engine()
+                        .set_stage_bypassed(idx, new_state);
                 }
             }
             Message::StageTypeSelected(stage_type) => {

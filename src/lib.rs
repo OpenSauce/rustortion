@@ -36,8 +36,6 @@
 )]
 // Nursery lints that are too noisy or not applicable
 #![allow(clippy::redundant_pub_crate, clippy::significant_drop_tightening)]
-// Stage view functions pass 4 bools (is_collapsed, can_move_up, can_move_down, bypassed)
-#![allow(clippy::fn_params_excessive_bools)]
 
 pub mod amp;
 pub mod audio;

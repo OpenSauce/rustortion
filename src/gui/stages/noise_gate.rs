@@ -3,7 +3,7 @@ use iced::Element;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::noise_gate::NoiseGateStage;
-use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACING_TIGHT};
+use crate::gui::components::widgets::common::{labeled_slider, stage_card, StageViewState, SPACING_TIGHT};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -74,18 +74,12 @@ pub enum NoiseGateMessage {
 pub fn view(
     idx: usize,
     cfg: &NoiseGateConfig,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
-    bypassed: bool,
+    state: StageViewState,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_noise_gate),
         idx,
-        is_collapsed,
-        can_move_up,
-        can_move_down,
-        bypassed,
+        state,
         || {
             column![
                 labeled_slider(

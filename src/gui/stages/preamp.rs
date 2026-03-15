@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::amp::stages::clipper::ClipperType;
 use crate::amp::stages::preamp::PreampStage;
 use crate::gui::components::widgets::common::{
-    labeled_picker, labeled_slider, stage_card, SPACING_TIGHT,
+    labeled_picker, labeled_slider, stage_card, StageViewState, SPACING_TIGHT,
 };
 use crate::gui::messages::Message;
 use crate::tr;
@@ -71,12 +71,9 @@ const CLIPPER_TYPES: [ClipperType; 6] = [
 pub fn view(
     idx: usize,
     cfg: &PreampConfig,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
-    bypassed: bool,
+    state: StageViewState,
 ) -> Element<'_, Message> {
-    stage_card(tr!(stage_preamp), idx, is_collapsed, can_move_up, can_move_down, bypassed, || {
+    stage_card(tr!(stage_preamp), idx, state, || {
         column![
             labeled_picker(tr!(clipper), CLIPPER_TYPES, Some(cfg.clipper_type), move |t| {
                 Message::Stage(idx, StageMessage::Preamp(PreampMessage::ClipperChanged(t)))

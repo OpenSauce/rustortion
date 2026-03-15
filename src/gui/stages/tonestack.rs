@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::tonestack::{ToneStackModel, ToneStackStage};
 use crate::gui::components::widgets::common::{
-    labeled_picker, labeled_slider, stage_card, SPACING_TIGHT,
+    labeled_picker, labeled_slider, stage_card, StageViewState, SPACING_TIGHT,
 };
 use crate::gui::messages::Message;
 use crate::tr;
@@ -83,18 +83,12 @@ const TONE_STACK_MODELS: [ToneStackModel; 4] = [
 pub fn view(
     idx: usize,
     cfg: &ToneStackConfig,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
-    bypassed: bool,
+    state: StageViewState,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_tone_stack),
         idx,
-        is_collapsed,
-        can_move_up,
-        can_move_down,
-        bypassed,
+        state,
         || {
             column![
                 labeled_picker(tr!(model), TONE_STACK_MODELS, Some(cfg.model), move |m| {

@@ -18,7 +18,10 @@ impl AmplifierChain {
     }
 
     pub fn add_stage(&mut self, stage: Box<dyn Stage>) {
-        self.stages.push(BypassableStage { inner: stage, bypassed: false });
+        self.stages.push(BypassableStage {
+            inner: stage,
+            bypassed: false,
+        });
     }
 
     pub fn process(&mut self, input: f32) -> f32 {
@@ -49,7 +52,9 @@ impl AmplifierChain {
         name: &str,
         value: f32,
     ) -> Option<Result<(), &'static str>> {
-        self.stages.get_mut(idx).map(|s| s.inner.set_parameter(name, value))
+        self.stages
+            .get_mut(idx)
+            .map(|s| s.inner.set_parameter(name, value))
     }
 
     /// Read a parameter from a live stage.
@@ -60,7 +65,13 @@ impl AmplifierChain {
     /// Insert a stage at the given index.
     pub fn insert_stage(&mut self, idx: usize, stage: Box<dyn Stage>) {
         let idx = idx.min(self.stages.len());
-        self.stages.insert(idx, BypassableStage { inner: stage, bypassed: false });
+        self.stages.insert(
+            idx,
+            BypassableStage {
+                inner: stage,
+                bypassed: false,
+            },
+        );
     }
 
     /// Remove and return the stage at the given index.
@@ -93,10 +104,13 @@ impl AmplifierChain {
         }
     }
 
-    /// Set the bypass state of a stage.
-    pub fn set_bypassed(&mut self, idx: usize, bypassed: bool) {
+    /// Set the bypass state of a stage. Returns `true` if the index was valid.
+    pub fn set_bypassed(&mut self, idx: usize, bypassed: bool) -> bool {
         if let Some(stage) = self.stages.get_mut(idx) {
             stage.bypassed = bypassed;
+            true
+        } else {
+            false
         }
     }
 }
@@ -180,7 +194,10 @@ mod tests {
         chain.add_stage(make_level(1.0));
         chain.set_bypassed(0, true);
         let out = chain.process(1.0);
-        assert!((out - 1.0).abs() < 1e-6, "bypassed stage should pass through");
+        assert!(
+            (out - 1.0).abs() < 1e-6,
+            "bypassed stage should pass through"
+        );
     }
 
     #[test]
@@ -191,7 +208,10 @@ mod tests {
         let mut buf = [1.0_f32; 4];
         chain.process_block(&mut buf);
         for s in &buf {
-            assert!((*s - 1.0).abs() < 1e-6, "bypassed block should pass through");
+            assert!(
+                (*s - 1.0).abs() < 1e-6,
+                "bypassed block should pass through"
+            );
         }
     }
 
@@ -222,7 +242,10 @@ mod tests {
         chain.insert_stage(0, make_level(0.5)); // insert before bypassed
         // idx 0 = new (active, 0.5x), idx 1 = old (bypassed, 1.0x)
         let out = chain.process(1.0);
-        assert!((out - 0.5).abs() < 1e-6, "inserted stage active, old stage bypassed");
+        assert!(
+            (out - 0.5).abs() < 1e-6,
+            "inserted stage active, old stage bypassed"
+        );
     }
 
     #[test]
@@ -233,7 +256,10 @@ mod tests {
         chain.set_bypassed(1, true);
         chain.remove_stage(0); // remove first; now the bypassed one is at idx 0
         let out = chain.process(1.0);
-        assert!((out - 1.0).abs() < 1e-6, "remaining bypassed stage should pass through");
+        assert!(
+            (out - 1.0).abs() < 1e-6,
+            "remaining bypassed stage should pass through"
+        );
     }
 
     #[test]
@@ -245,6 +271,9 @@ mod tests {
         chain.swap_stages(0, 1);
         // After swap: idx 0 = 2.0x (not bypassed), idx 1 = 0.5x (bypassed)
         let out = chain.process(1.0);
-        assert!((out - 2.0).abs() < 1e-6, "swapped: active 2x, bypassed 0.5x");
+        assert!(
+            (out - 2.0).abs() < 1e-6,
+            "swapped: active 2x, bypassed 0.5x"
+        );
     }
 }

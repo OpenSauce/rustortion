@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::eq::{BAND_FREQS, EqStage, MAX_GAIN_DB, MIN_GAIN_DB, NUM_BANDS};
 use crate::gui::components::widgets::common::{
-    labeled_vertical_slider, stage_card, SPACING_WIDE,
+    labeled_vertical_slider, stage_card, StageViewState, SPACING_WIDE,
 };
 use crate::gui::messages::Message;
 use crate::tr;
@@ -89,18 +89,12 @@ fn format_freq(hz: f64) -> String {
 pub fn view(
     idx: usize,
     cfg: &EqConfig,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
-    bypassed: bool,
+    state: StageViewState,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_eq),
         idx,
-        is_collapsed,
-        can_move_up,
-        can_move_down,
-        bypassed,
+        state,
         || {
             let mut faders = row![].spacing(SPACING_WIDE);
             for (band, &freq) in BAND_FREQS.iter().enumerate() {

@@ -3,7 +3,7 @@ use iced::Element;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::level::LevelStage;
-use crate::gui::components::widgets::common::{labeled_slider, stage_card, SPACING_TIGHT};
+use crate::gui::components::widgets::common::{labeled_slider, stage_card, StageViewState, SPACING_TIGHT};
 use crate::gui::messages::Message;
 use crate::tr;
 
@@ -48,12 +48,9 @@ pub enum LevelMessage {
 pub fn view(
     idx: usize,
     cfg: &LevelConfig,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
-    bypassed: bool,
+    state: StageViewState,
 ) -> Element<'_, Message> {
-    stage_card(tr!(stage_level), idx, is_collapsed, can_move_up, can_move_down, bypassed, || {
+    stage_card(tr!(stage_level), idx, state, || {
         column![labeled_slider(
             tr!(gain),
             0.0..=2.0,

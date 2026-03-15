@@ -1,6 +1,7 @@
 use crate::gui::messages::Message;
+use crate::tr;
 use iced::widget::{
-    button, column, container, pick_list, row, rule, slider, text, vertical_slider,
+    button, column, container, pick_list, row, rule, slider, text, tooltip, vertical_slider,
 };
 use iced::{Alignment, Color, Element, Length};
 
@@ -95,24 +96,27 @@ pub fn icon_button(
     }
 }
 
-pub fn stage_header(
-    stage_name: &str,
-    idx: usize,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
-    bypassed: bool,
-) -> Element<'_, Message> {
+/// View state for a stage card — groups the boolean flags to avoid excessive parameters.
+#[derive(Debug, Clone, Copy)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct StageViewState {
+    pub is_collapsed: bool,
+    pub can_move_up: bool,
+    pub can_move_down: bool,
+    pub bypassed: bool,
+}
+
+fn stage_header(stage_name: &str, idx: usize, state: StageViewState) -> Element<'_, Message> {
     let header_text = format!("{} {}", stage_name, idx + 1);
 
-    let collapse_icon = if is_collapsed { "▶" } else { "▼" };
+    let collapse_icon = if state.is_collapsed { "▶" } else { "▼" };
     let collapse_btn = icon_button(
         collapse_icon,
         Some(Message::ToggleStageCollapse(idx)),
         iced::widget::button::secondary,
     );
 
-    let move_up_btn = if can_move_up {
+    let move_up_btn = if state.can_move_up {
         icon_button(
             "↑",
             Some(Message::MoveStageUp(idx)),
@@ -122,7 +126,7 @@ pub fn stage_header(
         icon_button("↑", None, iced::widget::button::secondary)
     };
 
-    let move_down_btn = if can_move_down {
+    let move_down_btn = if state.can_move_down {
         icon_button(
             "↓",
             Some(Message::MoveStageDown(idx)),
@@ -138,14 +142,18 @@ pub fn stage_header(
         iced::widget::button::danger,
     );
 
-    let bypass_btn = icon_button(
-        "⏻",
-        Some(Message::ToggleStageBypass(idx)),
-        if bypassed {
-            iced::widget::button::secondary
-        } else {
-            iced::widget::button::success
-        },
+    let bypass_btn = tooltip(
+        icon_button(
+            "⏻",
+            Some(Message::ToggleStageBypass(idx)),
+            if state.bypassed {
+                iced::widget::button::secondary
+            } else {
+                iced::widget::button::success
+            },
+        ),
+        tr!(stage_bypass_tooltip),
+        iced::widget::tooltip::Position::Bottom,
     );
 
     row![
@@ -164,27 +172,24 @@ pub fn stage_header(
 pub fn stage_card<'a>(
     stage_name: &'a str,
     idx: usize,
-    is_collapsed: bool,
-    can_move_up: bool,
-    can_move_down: bool,
-    bypassed: bool,
+    state: StageViewState,
     body: impl FnOnce() -> Element<'a, Message>,
 ) -> Element<'a, Message> {
-    let header = stage_header(stage_name, idx, is_collapsed, can_move_up, can_move_down, bypassed);
+    let header = stage_header(stage_name, idx, state);
 
     let mut content = column![header].spacing(SPACING_TIGHT);
 
-    if !is_collapsed {
+    if !state.is_collapsed {
         content = content.push(body());
     }
 
-    let padding = if is_collapsed {
+    let padding = if state.is_collapsed {
         PADDING_SMALL
     } else {
         PADDING_NORMAL
     };
 
-    let opacity = if bypassed { 0.5 } else { 1.0 };
+    let opacity = if state.bypassed { 0.5 } else { 1.0 };
 
     container(content.padding(padding))
         .width(Length::Fill)
