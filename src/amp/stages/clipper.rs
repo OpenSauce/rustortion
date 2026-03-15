@@ -49,11 +49,12 @@ impl ClipperType {
 
             Self::Asymmetric => {
                 // Asymmetric clipping to model even harmonics from tubes
-                // Positive signals clip differently than negative ones
+                // Positive: tanh saturation. Negative: softer x/(1+|x|) blend
+                // for bounded output with even harmonic generation.
                 if driven >= 0.0 {
                     driven.tanh()
                 } else {
-                    0.7f32.mul_add(driven.tanh(), 0.3 * driven)
+                    0.7f32.mul_add(driven.tanh(), 0.3 * (driven / (1.0 + driven.abs())))
                 }
             }
 
@@ -237,5 +238,54 @@ mod tests {
             (max - 1.0).abs() < 0.05,
             "table max should be near 1.0, got {max}"
         );
+    }
+
+    #[test]
+    fn test_asymmetric_bounded_output() {
+        // TUBE-3: Asymmetric clipper must be bounded for all inputs
+        for drive in [1.0, 5.0, 10.0, 20.0] {
+            for i in -100..=100 {
+                let input = i as f32 * 0.1;
+                let output = ClipperType::Asymmetric.process(input, drive);
+                assert!(
+                    (-1.05..=1.05).contains(&output),
+                    "Asymmetric output {output} out of bounds for input={input}, drive={drive}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_asymmetric_preserves_asymmetry() {
+        let pos = ClipperType::Asymmetric.process(0.5, 3.0);
+        let neg = ClipperType::Asymmetric.process(-0.5, 3.0);
+        assert!(
+            (pos.abs() - neg.abs()).abs() > 0.01,
+            "Asymmetric clipper should produce different magnitudes for +/- input, pos={pos}, neg={neg}"
+        );
+    }
+
+    #[test]
+    fn test_all_clippers_bounded() {
+        let types = [
+            ClipperType::Soft,
+            ClipperType::Medium,
+            ClipperType::Hard,
+            ClipperType::Asymmetric,
+            ClipperType::ClassA,
+            ClipperType::Triode,
+        ];
+        for clipper in &types {
+            for drive in [1.0, 5.0, 10.0, 20.0] {
+                for i in -50..=50 {
+                    let input = i as f32 * 0.2;
+                    let output = clipper.process(input, drive);
+                    assert!(
+                        (-1.5..=1.5).contains(&output),
+                        "{clipper:?} output {output} out of bounds for input={input}, drive={drive}"
+                    );
+                }
+            }
+        }
     }
 }
