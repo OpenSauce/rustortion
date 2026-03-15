@@ -164,7 +164,11 @@ impl Stage for NoiseGateStage {
 
     fn get_parameter(&self, name: &str) -> Result<f32, &'static str> {
         match name {
-            "threshold" => Ok(20.0 * self.threshold.log10()),
+            "threshold" => Ok(if self.threshold > 1e-10 {
+                20.0 * self.threshold.log10()
+            } else {
+                -200.0
+            }),
             "ratio" => Ok(self.ratio),
             "attack" => Ok(self.attack_ms),
             "hold" => Ok(self.hold_ms),
@@ -355,5 +359,14 @@ mod tests {
         gate.set_parameter("threshold", -40.0).unwrap();
         assert!((gate.get_parameter("threshold").unwrap() - (-40.0)).abs() < 0.5);
         assert!(gate.get_parameter("unknown").is_err());
+    }
+
+    #[test]
+    fn threshold_zero_returns_finite_floor() {
+        let mut gate = make_gate();
+        gate.threshold = 0.0;
+        let db = gate.get_parameter("threshold").unwrap();
+        assert!(db.is_finite());
+        assert_eq!(db, -200.0);
     }
 }

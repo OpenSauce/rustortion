@@ -7,6 +7,7 @@ use iced::{Alignment, Element, Length, Subscription, Task, Theme, keyboard, time
 use log::{debug, error};
 
 use crate::amp::chain::AmplifierChain;
+use crate::amp::stages::Stage;
 use crate::amp::stages::filter::{FilterStage, FilterType};
 use crate::audio::manager::Manager;
 use crate::gui::components::input_filter_control::InputFilterConfig;
@@ -144,24 +145,7 @@ impl AmplifierApp {
         // Send initial input filters to engine before constructing app
         {
             let sample_rate = audio_manager.sample_rate() as f32;
-            let hp: Option<Box<dyn crate::amp::stages::Stage>> = if input_filter_config.hp_enabled {
-                Some(Box::new(FilterStage::new(
-                    FilterType::Highpass,
-                    input_filter_config.hp_cutoff,
-                    sample_rate,
-                )))
-            } else {
-                None
-            };
-            let lp: Option<Box<dyn crate::amp::stages::Stage>> = if input_filter_config.lp_enabled {
-                Some(Box::new(FilterStage::new(
-                    FilterType::Lowpass,
-                    input_filter_config.lp_cutoff,
-                    sample_rate,
-                )))
-            } else {
-                None
-            };
+            let (hp, lp) = create_input_filters(&input_filter_config, sample_rate);
             audio_manager.engine().set_input_filters(hp, lp);
         }
 
@@ -973,31 +957,33 @@ impl AmplifierApp {
 
     fn send_input_filters_to_engine(&self) {
         let sample_rate = self.audio_manager.sample_rate() as f32;
-
-        let hp: Option<Box<dyn crate::amp::stages::Stage>> = if self.input_filter_config.hp_enabled
-        {
-            Some(Box::new(FilterStage::new(
-                FilterType::Highpass,
-                self.input_filter_config.hp_cutoff,
-                sample_rate,
-            )))
-        } else {
-            None
-        };
-
-        let lp: Option<Box<dyn crate::amp::stages::Stage>> = if self.input_filter_config.lp_enabled
-        {
-            Some(Box::new(FilterStage::new(
-                FilterType::Lowpass,
-                self.input_filter_config.lp_cutoff,
-                sample_rate,
-            )))
-        } else {
-            None
-        };
-
+        let (hp, lp) = create_input_filters(&self.input_filter_config, sample_rate);
         self.audio_manager.engine().set_input_filters(hp, lp);
     }
+}
+
+type FilterPair = (Option<Box<dyn Stage>>, Option<Box<dyn Stage>>);
+
+fn create_input_filters(config: &InputFilterConfig, sample_rate: f32) -> FilterPair {
+    let hp: Option<Box<dyn Stage>> = if config.hp_enabled {
+        Some(Box::new(FilterStage::new(
+            FilterType::Highpass,
+            config.hp_cutoff,
+            sample_rate,
+        )))
+    } else {
+        None
+    };
+    let lp: Option<Box<dyn Stage>> = if config.lp_enabled {
+        Some(Box::new(FilterStage::new(
+            FilterType::Lowpass,
+            config.lp_cutoff,
+            sample_rate,
+        )))
+    } else {
+        None
+    };
+    (hp, lp)
 }
 
 /// Shared container for all tab content panels — consistent sizing and structure.
