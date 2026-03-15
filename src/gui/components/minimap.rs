@@ -30,12 +30,18 @@ fn block_style(
         let alpha = if bypassed { 0.5 } else { 1.0 };
         let mut style = iced::widget::button::Style {
             text_color: iced::Color::from_rgba(
-                palette.text.r, palette.text.g, palette.text.b, alpha,
+                palette.text.r,
+                palette.text.g,
+                palette.text.b,
+                alpha,
             ),
             border: iced::Border {
                 color: if is_active_tab {
                     iced::Color::from_rgba(
-                        palette.primary.r, palette.primary.g, palette.primary.b, alpha,
+                        palette.primary.r,
+                        palette.primary.g,
+                        palette.primary.b,
+                        alpha,
                     )
                 } else {
                     iced::Color::from_rgba(1.0, 1.0, 1.0, 0.2 * alpha)
