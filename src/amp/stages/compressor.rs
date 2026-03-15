@@ -110,11 +110,19 @@ impl Stage for CompressorStage {
 
     fn get_parameter(&self, name: &str) -> Result<f32, &'static str> {
         match name {
-            "threshold" => Ok(20.0 * self.threshold.log10()),
+            "threshold" => Ok(if self.threshold > 1e-10 {
+                20.0 * self.threshold.log10()
+            } else {
+                -200.0
+            }),
             "ratio" => Ok(self.ratio),
             "attack" => Ok(self.attack_ms),
             "release" => Ok(self.release_ms),
-            "makeup" => Ok(20.0 * self.makeup.log10()),
+            "makeup" => Ok(if self.makeup > 1e-10 {
+                20.0 * self.makeup.log10()
+            } else {
+                -200.0
+            }),
             _ => Err("Unknown parameter"),
         }
     }

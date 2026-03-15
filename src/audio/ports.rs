@@ -5,7 +5,7 @@ pub struct Ports {
     input: Port<AudioIn>,
     output_left: Port<AudioOut>,
     output_right: Port<AudioOut>,
-    //need seperate ports for guitar output and metronome output
+    //need separate ports for guitar output and metronome output
     metronome_output: Port<AudioOut>,
 }
 

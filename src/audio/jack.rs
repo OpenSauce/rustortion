@@ -17,6 +17,7 @@ pub struct ProcessHandler {
     audio_engine: Engine,
     buffer: Vec<f32>,
     metronome_buffer: Vec<f32>,
+    max_buffer_capacity: usize,
 }
 
 impl NotificationHandler {
@@ -39,15 +40,24 @@ impl jack::NotificationHandler for NotificationHandler {
 }
 
 impl ProcessHandler {
+    const MAX_BUFFER_FRAMES: usize = 8192;
+
     pub fn new(client: &Client, audio_engine: Engine) -> Result<Self> {
         let ports = Ports::new(client).context("failed to create audio ports")?;
         let buffer_size = client.buffer_size() as usize;
+        let max_capacity = Self::MAX_BUFFER_FRAMES.max(buffer_size);
+
+        let mut buffer = Vec::with_capacity(max_capacity);
+        buffer.resize(buffer_size, 0.0);
+        let mut metronome_buffer = Vec::with_capacity(max_capacity);
+        metronome_buffer.resize(buffer_size, 0.0);
 
         Ok(Self {
             ports,
             audio_engine,
-            buffer: vec![0.0; buffer_size],
-            metronome_buffer: vec![0.0; buffer_size],
+            buffer,
+            metronome_buffer,
+            max_buffer_capacity: max_capacity,
         })
     }
 }
@@ -74,14 +84,22 @@ impl jack::ProcessHandler for ProcessHandler {
     }
 
     fn buffer_size(&mut self, _client: &jack::Client, frames: jack::Frames) -> jack::Control {
-        warn!("JACK buffer_size changed to {frames} frames");
-
         let new_size = frames as usize;
+
+        if new_size > self.max_buffer_capacity {
+            error!(
+                "JACK buffer_size {new_size} exceeds pre-allocated capacity {}; ignoring",
+                self.max_buffer_capacity
+            );
+            return jack::Control::Continue;
+        }
+
+        warn!("JACK buffer_size changed to {frames} frames");
         self.buffer.resize(new_size, 0.0);
+        self.metronome_buffer.resize(new_size, 0.0);
 
         if let Err(e) = self.audio_engine.update_buffer_size(new_size) {
             error!("Failed to update buffer size: {e}");
-            return jack::Control::Continue;
         }
 
         jack::Control::Continue

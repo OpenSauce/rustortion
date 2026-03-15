@@ -164,7 +164,11 @@ impl Stage for NoiseGateStage {
 
     fn get_parameter(&self, name: &str) -> Result<f32, &'static str> {
         match name {
-            "threshold" => Ok(20.0 * self.threshold.log10()),
+            "threshold" => Ok(if self.threshold > 1e-10 {
+                20.0 * self.threshold.log10()
+            } else {
+                -200.0
+            }),
             "ratio" => Ok(self.ratio),
             "attack" => Ok(self.attack_ms),
             "hold" => Ok(self.hold_ms),

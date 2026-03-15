@@ -178,7 +178,7 @@ impl Engine {
         Ok(())
     }
 
-    //need to process metronome seperately
+    //need to process metronome separately
     pub fn process_metronome(&mut self, output: &mut [f32]) -> bool {
         if self.metronome.is_enabled() {
             self.metronome.process_block(output);
