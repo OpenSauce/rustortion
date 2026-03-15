@@ -191,6 +191,7 @@ impl Engine {
         self.samplers.resize_buffers(new_size)
     }
 
+    #[allow(clippy::cognitive_complexity)]
     pub fn handle_messages(&mut self) {
         while let Ok(message) = self.engine_receiver.try_recv() {
             match message {

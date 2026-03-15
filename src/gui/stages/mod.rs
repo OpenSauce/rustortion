@@ -116,7 +116,7 @@ macro_rules! stage_registry {
                 }
             }
 
-            pub fn set_bypassed(&mut self, bypassed: bool) {
+            pub const fn set_bypassed(&mut self, bypassed: bool) {
                 match self {
                     $( StageConfig::$Variant(cfg) => cfg.bypassed = bypassed, )+
                 }
