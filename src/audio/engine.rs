@@ -35,6 +35,7 @@ pub enum EngineMessage {
     SetIrGain(f32),
     SetTunerEnabled(bool),
     SetPitchShift(i32),
+    SetStageBypassed(usize, bool),
 }
 
 pub struct Engine {
@@ -231,6 +232,10 @@ impl Engine {
                     self.chain.swap_stages(a, b);
                     debug!("Swapped stages {a} and {b}");
                 }
+                EngineMessage::SetStageBypassed(idx, bypassed) => {
+                    self.chain.set_bypassed(idx, bypassed);
+                    debug!("Stage {idx} bypass: {bypassed}");
+                }
                 EngineMessage::SetInputFilters(hp, lp) => {
                     self.input_highpass = hp;
                     self.input_lowpass = lp;
@@ -387,6 +392,10 @@ impl EngineHandle {
     pub fn set_pitch_shift(&self, semitones: i32) {
         let update = EngineMessage::SetPitchShift(semitones);
         self.send(update);
+    }
+
+    pub fn set_stage_bypassed(&self, idx: usize, bypassed: bool) {
+        self.send(EngineMessage::SetStageBypassed(idx, bypassed));
     }
 
     pub fn set_input_filters(&self, hp: Option<Box<dyn Stage>>, lp: Option<Box<dyn Stage>>) {
