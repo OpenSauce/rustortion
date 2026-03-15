@@ -173,3 +173,187 @@ impl Stage for NoiseGateStage {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SR: f32 = 44100.0;
+
+    fn make_gate() -> NoiseGateStage {
+        // threshold -30 dB, ratio 10:1, 1ms attack, 50ms hold, 50ms release
+        NoiseGateStage::new(-30.0, 10.0, 1.0, 50.0, 50.0, SR)
+    }
+
+    #[test]
+    fn test_loud_signal_passes() {
+        let mut gate = make_gate(); // threshold -30 dB ≈ 0.0316
+        let input = 0.5; // well above threshold
+        for _ in 0..2000 {
+            gate.process(input);
+        }
+        let out = gate.process(input);
+        assert!(
+            (out - input).abs() < 0.05,
+            "loud signal should pass through: in={input}, out={out}"
+        );
+    }
+
+    #[test]
+    fn test_quiet_signal_attenuated() {
+        let mut gate = make_gate(); // threshold -30 dB
+        let input = 0.001; // well below threshold (-60 dB)
+        for _ in 0..10000 {
+            gate.process(input);
+        }
+        let out = gate.process(input);
+        assert!(
+            out.abs() < input.abs() * 0.5,
+            "quiet signal should be attenuated: in={input}, out={out}"
+        );
+    }
+
+    #[test]
+    fn test_hold_time() {
+        let hold_ms = 100.0;
+        let release_ms = 50.0;
+        let mut gate_with_hold = NoiseGateStage::new(-30.0, 10.0, 1.0, hold_ms, release_ms, SR);
+        let mut gate_no_hold = NoiseGateStage::new(-30.0, 10.0, 1.0, 0.0, release_ms, SR);
+        let probe = 0.02; // below threshold but nonzero so we can measure gate state
+
+        // Open both gates
+        for _ in 0..2000 {
+            gate_with_hold.process(0.5);
+            gate_no_hold.process(0.5);
+        }
+        // Feed below-threshold signal and measure after half the hold period
+        let half_hold = ((hold_ms * 0.001 * SR) / 2.0) as usize;
+        for _ in 0..half_hold {
+            gate_with_hold.process(probe);
+            gate_no_hold.process(probe);
+        }
+        let out_with_hold = gate_with_hold.process(probe).abs();
+        let out_no_hold = gate_no_hold.process(probe).abs();
+        // Gate with hold should pass more signal (still open) vs no-hold (already closing)
+        assert!(
+            out_with_hold > out_no_hold,
+            "hold should keep gate open longer: with_hold={out_with_hold}, no_hold={out_no_hold}"
+        );
+    }
+
+    #[test]
+    fn test_ratio_controls_attenuation() {
+        let mut gate_low = NoiseGateStage::new(-30.0, 2.0, 1.0, 0.0, 50.0, SR);
+        let mut gate_high = NoiseGateStage::new(-30.0, 100.0, 1.0, 0.0, 50.0, SR);
+        let input = 0.001; // below threshold
+        for _ in 0..10000 {
+            gate_low.process(input);
+            gate_high.process(input);
+        }
+        let out_low = gate_low.process(input).abs();
+        let out_high = gate_high.process(input).abs();
+        assert!(
+            out_high < out_low,
+            "higher ratio should attenuate more: 2:1={out_low}, 100:1={out_high}"
+        );
+    }
+
+    #[test]
+    fn test_zero_input_attenuated() {
+        let mut gate = make_gate();
+        for _ in 0..5000 {
+            gate.process(0.0);
+        }
+        let out = gate.process(0.0);
+        assert!(
+            out.abs() < 1e-10,
+            "zero input should produce zero output, got {out}"
+        );
+    }
+
+    #[test]
+    fn test_smooth_transitions() {
+        // Gate closing should be gradual (release smoothing), not instant
+        let mut gate = NoiseGateStage::new(-30.0, 100.0, 1.0, 0.0, 100.0, SR);
+        let probe = 0.02; // below threshold, nonzero to observe gate gain
+        // Open the gate
+        for _ in 0..2000 {
+            gate.process(0.5);
+        }
+        // Now feed below-threshold signal — gate should close gradually
+        let first = gate.process(probe).abs();
+        // Skip some samples into the release
+        for _ in 0..500 {
+            gate.process(probe);
+        }
+        let mid = gate.process(probe).abs();
+        // Skip more
+        for _ in 0..5000 {
+            gate.process(probe);
+        }
+        let late = gate.process(probe).abs();
+        // First should pass more than mid, mid more than late (gradual closing)
+        assert!(
+            first >= mid && mid >= late,
+            "gate should close gradually: first={first}, mid={mid}, late={late}"
+        );
+        // And the range should be meaningful — not all the same
+        assert!(
+            first > late * 1.1,
+            "gate should actually attenuate over time: first={first}, late={late}"
+        );
+    }
+
+    #[test]
+    fn test_bounded_output() {
+        let mut gate = make_gate();
+        for i in 0..5000 {
+            let input = (i as f32 * 0.1).sin() * 5.0;
+            let out = gate.process(input);
+            assert!(
+                out.is_finite() && out.abs() <= input.abs() + 0.01,
+                "gate should never amplify: in={input}, out={out}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_parameter_validation() {
+        let mut gate = make_gate();
+        assert!(gate.set_parameter("threshold", -80.0).is_ok());
+        assert!(gate.set_parameter("threshold", 0.0).is_ok());
+        assert!(gate.set_parameter("threshold", -80.1).is_err());
+        assert!(gate.set_parameter("threshold", 0.1).is_err());
+        assert!(gate.set_parameter("ratio", 1.0).is_ok());
+        assert!(gate.set_parameter("ratio", 100.0).is_ok());
+        assert!(gate.set_parameter("ratio", 0.9).is_err());
+        assert!(gate.set_parameter("ratio", 100.1).is_err());
+        assert!(gate.set_parameter("attack", 0.1).is_ok());
+        assert!(gate.set_parameter("attack", 100.0).is_ok());
+        assert!(gate.set_parameter("attack", 0.0).is_err());
+        assert!(gate.set_parameter("hold", 0.0).is_ok());
+        assert!(gate.set_parameter("hold", 500.0).is_ok());
+        assert!(gate.set_parameter("hold", -0.1).is_err());
+        assert!(gate.set_parameter("release", 1.0).is_ok());
+        assert!(gate.set_parameter("release", 1000.0).is_ok());
+        assert!(gate.set_parameter("release", 0.9).is_err());
+        assert!(gate.set_parameter("unknown", 0.0).is_err());
+    }
+
+    #[test]
+    fn test_parameter_roundtrip() {
+        let mut gate = make_gate();
+        gate.set_parameter("ratio", 50.0).unwrap();
+        assert!((gate.get_parameter("ratio").unwrap() - 50.0).abs() < 1e-6);
+        gate.set_parameter("attack", 10.0).unwrap();
+        assert!((gate.get_parameter("attack").unwrap() - 10.0).abs() < 1e-6);
+        gate.set_parameter("hold", 200.0).unwrap();
+        assert!((gate.get_parameter("hold").unwrap() - 200.0).abs() < 1e-6);
+        gate.set_parameter("release", 500.0).unwrap();
+        assert!((gate.get_parameter("release").unwrap() - 500.0).abs() < 1e-6);
+        // threshold is stored linear, returned as dB
+        gate.set_parameter("threshold", -40.0).unwrap();
+        assert!((gate.get_parameter("threshold").unwrap() - (-40.0)).abs() < 0.5);
+        assert!(gate.get_parameter("unknown").is_err());
+    }
+}
