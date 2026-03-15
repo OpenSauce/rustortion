@@ -66,3 +66,29 @@ pub fn view(
         .into()
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deserialize_without_bypassed_defaults_to_false() {
+        let json = r#"{"gain": 1.0}"#;
+        let cfg: LevelConfig = serde_json::from_str(json).unwrap();
+        assert!(!cfg.bypassed);
+    }
+
+    #[test]
+    fn deserialize_with_bypassed_true() {
+        let json = r#"{"gain": 1.0, "bypassed": true}"#;
+        let cfg: LevelConfig = serde_json::from_str(json).unwrap();
+        assert!(cfg.bypassed);
+    }
+
+    #[test]
+    fn serialize_includes_bypassed() {
+        let cfg = LevelConfig { gain: 1.0, bypassed: true };
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(json.contains("\"bypassed\":true"));
+    }
+}
