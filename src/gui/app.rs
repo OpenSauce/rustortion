@@ -173,6 +173,11 @@ impl AmplifierApp {
             for cfg in &preset.stages {
                 chain.add_stage(cfg.to_runtime(effective_sr as f32));
             }
+            for (i, cfg) in preset.stages.iter().enumerate() {
+                if cfg.bypassed() {
+                    chain.set_bypassed(i, true);
+                }
+            }
             audio_manager.engine().set_amp_chain(chain);
         }
 
@@ -336,11 +341,13 @@ impl AmplifierApp {
             let is_collapsed = self.collapsed_stages.get(abs_idx).copied().unwrap_or(false);
             let can_move_up = pos > 0;
             let can_move_down = pos < total_in_category.saturating_sub(1);
+            let bypassed = self.stages[abs_idx].bypassed();
             stage_col = stage_col.push(self.stages[abs_idx].view(
                 abs_idx,
                 is_collapsed,
                 can_move_up,
                 can_move_down,
+                bypassed,
             ));
         }
 
@@ -656,6 +663,13 @@ impl AmplifierApp {
                     self.persist_collapse_state();
                 }
             }
+            Message::ToggleStageBypass(idx) => {
+                if let Some(stage) = self.stages.get_mut(idx) {
+                    let new_state = !stage.bypassed();
+                    stage.set_bypassed(new_state);
+                    self.audio_manager.engine().set_stage_bypassed(idx, new_state);
+                }
+            }
             Message::StageTypeSelected(stage_type) => {
                 self.selected_stage_type = stage_type;
             }
@@ -942,6 +956,12 @@ impl AmplifierApp {
 
         for cfg in &self.stages {
             chain.add_stage(cfg.to_runtime(effective_sample_rate as f32));
+        }
+
+        for (i, cfg) in self.stages.iter().enumerate() {
+            if cfg.bypassed() {
+                chain.set_bypassed(i, true);
+            }
         }
 
         chain
