@@ -114,7 +114,7 @@ pub fn view(
                         idx,
                         StageMessage::PowerAmp(PowerAmpMessage::SagReleaseChanged(v))
                     ),
-                    |v| format!("{v:.0} ms"),
+                    |v| format!("{v:.0} {}", tr!(ms)),
                     5.0
                 ),
             ]

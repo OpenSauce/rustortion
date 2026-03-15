@@ -208,8 +208,8 @@ mod tests {
 
     #[test]
     fn test_sag_zero_no_effect() {
-        // sag=0 stage vs sag=1 stage: after warmup, sag=0 should match sag=1
-        // because sag=0 means ceiling stays at 1.0 regardless of envelope
+        // sag=0 stage vs sag=1 stage: after warmup, sag=0 should produce higher output
+        // because sag=0 means the ceiling stays at 1.0 and is not reduced by the envelope
         let mut no_sag = make_stage(PowerAmpType::ClassAB, 0.5, 0.0, 120.0);
         let mut with_sag = make_stage(PowerAmpType::ClassAB, 0.5, 1.0, 120.0);
 
