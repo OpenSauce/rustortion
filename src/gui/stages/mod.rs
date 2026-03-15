@@ -104,9 +104,21 @@ macro_rules! stage_registry {
                 }
             }
 
-            pub fn view(&self, idx: usize, is_collapsed: bool, can_move_up: bool, can_move_down: bool) -> Element<'_, Message> {
+            pub fn view(&self, idx: usize, is_collapsed: bool, can_move_up: bool, can_move_down: bool, bypassed: bool) -> Element<'_, Message> {
                 match self {
-                    $( StageConfig::$Variant(cfg) => $module::view(idx, cfg, is_collapsed, can_move_up, can_move_down), )+
+                    $( StageConfig::$Variant(cfg) => $module::view(idx, cfg, is_collapsed, can_move_up, can_move_down, bypassed), )+
+                }
+            }
+
+            pub const fn bypassed(&self) -> bool {
+                match self {
+                    $( StageConfig::$Variant(cfg) => cfg.bypassed, )+
+                }
+            }
+
+            pub fn set_bypassed(&mut self, bypassed: bool) {
+                match self {
+                    $( StageConfig::$Variant(cfg) => cfg.bypassed = bypassed, )+
                 }
             }
 

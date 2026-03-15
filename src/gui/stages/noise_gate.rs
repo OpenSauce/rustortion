@@ -18,6 +18,8 @@ pub struct NoiseGateConfig {
     pub attack_ms: f32,
     pub hold_ms: f32,
     pub release_ms: f32,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for NoiseGateConfig {
@@ -28,6 +30,7 @@ impl Default for NoiseGateConfig {
             attack_ms: 1.0,
             hold_ms: 10.0,
             release_ms: 100.0,
+            bypassed: false,
         }
     }
 }
@@ -74,6 +77,7 @@ pub fn view(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_noise_gate),
@@ -81,6 +85,7 @@ pub fn view(
         is_collapsed,
         can_move_up,
         can_move_down,
+        bypassed,
         || {
             column![
                 labeled_slider(

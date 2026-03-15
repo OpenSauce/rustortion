@@ -23,12 +23,15 @@ const BAND_NAMES: [&str; 16] = [
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct EqConfig {
     pub gains: [f32; NUM_BANDS],
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for EqConfig {
     fn default() -> Self {
         Self {
             gains: [0.0; NUM_BANDS],
+            bypassed: false,
         }
     }
 }
@@ -89,6 +92,7 @@ pub fn view(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_eq),
@@ -96,6 +100,7 @@ pub fn view(
         is_collapsed,
         can_move_up,
         can_move_down,
+        bypassed,
         || {
             let mut faders = row![].spacing(SPACING_WIDE);
             for (band, &freq) in BAND_FREQS.iter().enumerate() {

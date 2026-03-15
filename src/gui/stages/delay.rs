@@ -16,6 +16,8 @@ pub struct DelayConfig {
     pub delay_ms: f32,
     pub feedback: f32,
     pub mix: f32,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for DelayConfig {
@@ -24,6 +26,7 @@ impl Default for DelayConfig {
             delay_ms: 300.0,
             feedback: 0.3,
             mix: 0.5,
+            bypassed: false,
         }
     }
 }
@@ -59,6 +62,7 @@ pub fn view(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_delay),
@@ -66,6 +70,7 @@ pub fn view(
         is_collapsed,
         can_move_up,
         can_move_down,
+        bypassed,
         || {
             column![
                 labeled_slider(

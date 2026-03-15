@@ -16,6 +16,8 @@ pub struct ReverbConfig {
     pub room_size: f32,
     pub damping: f32,
     pub mix: f32,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for ReverbConfig {
@@ -24,6 +26,7 @@ impl Default for ReverbConfig {
             room_size: 0.5,
             damping: 0.5,
             mix: 0.2,
+            bypassed: false,
         }
     }
 }
@@ -59,6 +62,7 @@ pub fn view(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_reverb),
@@ -66,6 +70,7 @@ pub fn view(
         is_collapsed,
         can_move_up,
         can_move_down,
+        bypassed,
         || {
             column![
                 labeled_slider(

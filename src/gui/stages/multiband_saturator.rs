@@ -23,6 +23,8 @@ pub struct MultibandSaturatorConfig {
     pub high_level: f32,
     pub low_freq: f32,
     pub high_freq: f32,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for MultibandSaturatorConfig {
@@ -36,6 +38,7 @@ impl Default for MultibandSaturatorConfig {
             high_level: 1.0,
             low_freq: 200.0,
             high_freq: 2500.0,
+            bypassed: false,
         }
     }
 }
@@ -91,6 +94,7 @@ pub fn view(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_multiband_saturator),
@@ -98,6 +102,7 @@ pub fn view(
         is_collapsed,
         can_move_up,
         can_move_down,
+        bypassed,
         || {
             let crossover_section = column![
                 text(tr!(crossover)).size(TEXT_SIZE_INFO),

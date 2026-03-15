@@ -20,6 +20,8 @@ pub struct ToneStackConfig {
     pub mid: f32,
     pub treble: f32,
     pub presence: f32,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for ToneStackConfig {
@@ -30,6 +32,7 @@ impl Default for ToneStackConfig {
             mid: 0.5,
             treble: 0.5,
             presence: 0.5,
+            bypassed: false,
         }
     }
 }
@@ -83,6 +86,7 @@ pub fn view(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_tone_stack),
@@ -90,6 +94,7 @@ pub fn view(
         is_collapsed,
         can_move_up,
         can_move_down,
+        bypassed,
         || {
             column![
                 labeled_picker(tr!(model), TONE_STACK_MODELS, Some(cfg.model), move |m| {

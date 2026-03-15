@@ -18,6 +18,8 @@ pub struct CompressorConfig {
     pub threshold_db: f32,
     pub ratio: f32,
     pub makeup_db: f32,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for CompressorConfig {
@@ -28,6 +30,7 @@ impl Default for CompressorConfig {
             threshold_db: -20.0,
             ratio: 4.0,
             makeup_db: 0.0,
+            bypassed: false,
         }
     }
 }
@@ -74,6 +77,7 @@ pub fn view(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_compressor),
@@ -81,6 +85,7 @@ pub fn view(
         is_collapsed,
         can_move_up,
         can_move_down,
+        bypassed,
         || {
             column![
                 labeled_slider(

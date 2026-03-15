@@ -20,6 +20,7 @@ pub struct PowerAmpConfig {
     pub amp_type: PowerAmpType,
     pub sag: f32,
     pub sag_release: f32,
+    pub bypassed: bool,
 }
 
 impl Default for PowerAmpConfig {
@@ -29,6 +30,7 @@ impl Default for PowerAmpConfig {
             amp_type: PowerAmpType::ClassAB,
             sag: 0.3,
             sag_release: 120.0,
+            bypassed: false,
         }
     }
 }
@@ -72,6 +74,7 @@ pub fn view(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
     stage_card(
         tr!(stage_power_amp),
@@ -79,6 +82,7 @@ pub fn view(
         is_collapsed,
         can_move_up,
         can_move_down,
+        bypassed,
         || {
             column![
                 labeled_picker(tr!(type_label), POWER_AMP_TYPES, Some(cfg.amp_type), move |t| {

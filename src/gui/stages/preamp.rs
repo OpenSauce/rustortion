@@ -19,6 +19,8 @@ pub struct PreampConfig {
     pub gain: f32,
     pub bias: f32,
     pub clipper_type: ClipperType,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for PreampConfig {
@@ -27,6 +29,7 @@ impl Default for PreampConfig {
             gain: 5.0,
             bias: 0.0,
             clipper_type: ClipperType::Soft,
+            bypassed: false,
         }
     }
 }
@@ -71,8 +74,9 @@ pub fn view(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
-    stage_card(tr!(stage_preamp), idx, is_collapsed, can_move_up, can_move_down, || {
+    stage_card(tr!(stage_preamp), idx, is_collapsed, can_move_up, can_move_down, bypassed, || {
         column![
             labeled_picker(tr!(clipper), CLIPPER_TYPES, Some(cfg.clipper_type), move |t| {
                 Message::Stage(idx, StageMessage::Preamp(PreampMessage::ClipperChanged(t)))

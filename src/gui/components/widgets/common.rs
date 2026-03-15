@@ -101,6 +101,7 @@ pub fn stage_header(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
     let header_text = format!("{} {}", stage_name, idx + 1);
 
@@ -137,11 +138,22 @@ pub fn stage_header(
         iced::widget::button::danger,
     );
 
+    let bypass_btn = icon_button(
+        "⏻",
+        Some(Message::ToggleStageBypass(idx)),
+        if bypassed {
+            iced::widget::button::secondary
+        } else {
+            iced::widget::button::success
+        },
+    );
+
     row![
         collapse_btn,
         move_up_btn,
         move_down_btn,
         remove_btn,
+        bypass_btn,
         text(header_text)
     ]
     .spacing(SPACING_TIGHT)
@@ -155,9 +167,10 @@ pub fn stage_card<'a>(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
     body: impl FnOnce() -> Element<'a, Message>,
 ) -> Element<'a, Message> {
-    let header = stage_header(stage_name, idx, is_collapsed, can_move_up, can_move_down);
+    let header = stage_header(stage_name, idx, is_collapsed, can_move_up, can_move_down, bypassed);
 
     let mut content = column![header].spacing(SPACING_TIGHT);
 
@@ -171,11 +184,14 @@ pub fn stage_card<'a>(
         PADDING_NORMAL
     };
 
+    let opacity = if bypassed { 0.5 } else { 1.0 };
+
     container(content.padding(padding))
         .width(Length::Fill)
-        .style(|theme: &iced::Theme| {
+        .style(move |theme: &iced::Theme| {
+            let bg = theme.palette().background;
             container::Style::default()
-                .background(theme.palette().background)
+                .background(iced::Color::from_rgba(bg.r, bg.g, bg.b, opacity))
                 .border(iced::Border::default().rounded(BORDER_RADIUS_CARD))
         })
         .into()

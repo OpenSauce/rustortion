@@ -14,11 +14,13 @@ use super::{ParamUpdate, StageMessage};
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct LevelConfig {
     pub gain: f32,
+    #[serde(default)]
+    pub bypassed: bool,
 }
 
 impl Default for LevelConfig {
     fn default() -> Self {
-        Self { gain: 1.0 }
+        Self { gain: 1.0, bypassed: false }
     }
 }
 
@@ -49,8 +51,9 @@ pub fn view(
     is_collapsed: bool,
     can_move_up: bool,
     can_move_down: bool,
+    bypassed: bool,
 ) -> Element<'_, Message> {
-    stage_card(tr!(stage_level), idx, is_collapsed, can_move_up, can_move_down, || {
+    stage_card(tr!(stage_level), idx, is_collapsed, can_move_up, can_move_down, bypassed, || {
         column![labeled_slider(
             tr!(gain),
             0.0..=2.0,
