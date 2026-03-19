@@ -5,7 +5,7 @@ use crate::amp::stages::common::{DcBlocker, OnePoleLP};
 pub struct PreampStage {
     gain: f32,      // 0..10
     bias: f32,      // −1..+1
-    bias_comp: f32, // cosh²(bias), cached for RT performance
+    bias_comp: f32, // cosh²(bias) clamped to 4.0, cached for RT performance
     clipper_type: ClipperType,
     interstage_lp: OnePoleLP,
     dc_blocker: DcBlocker,
@@ -34,7 +34,8 @@ impl Stage for PreampStage {
         let drive = self.gain.mul_add(DRIVE_SCALE, DRIVE_MIN);
 
         // --- Initial asymmetric soft clip with DC compensation ---
-        // Instead of adding DC to the input, shift the tanh curve and recenter:
+        // Instead of adding DC to the input, shift the tanh curve, recenter, and apply
+        // bias-dependent level normalization via `bias_comp`:
         let pre = (drive.mul_add(input, self.bias).tanh() - self.bias.tanh()) * self.bias_comp;
 
         // Inter-stage lowpass: models plate load capacitance rolling off upper
@@ -242,13 +243,14 @@ mod tests {
         fn measure_rms(bias: f32) -> f32 {
             let mut stage = PreampStage::new(5.0, bias, ClipperType::Soft, SR);
             // Long warmup for DC blocker to settle (15 Hz HP needs time)
-            for i in 0..48000 {
+            let warmup_len: usize = 48000;
+            for i in 0..warmup_len {
                 stage.process((i as f32 * 0.05).sin() * 0.3);
             }
             let mut sum2 = 0.0_f32;
-            let n = 8000;
+            let n: usize = 8000;
             for i in 0..n {
-                let input = (i as f32 * 0.05).sin() * 0.3;
+                let input = ((warmup_len + i) as f32 * 0.05).sin() * 0.3;
                 let out = stage.process(input);
                 sum2 += out * out;
             }
