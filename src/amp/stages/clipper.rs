@@ -49,11 +49,12 @@ impl ClipperType {
 
             Self::Asymmetric => {
                 // Asymmetric clipping to model even harmonics from tubes
-                // Positive signals clip differently than negative ones
+                // Positive: tanh saturation. Negative: softer x/(1+|x|) blend
+                // for bounded output with even harmonic generation.
                 if driven >= 0.0 {
                     driven.tanh()
                 } else {
-                    0.7f32.mul_add(driven.tanh(), 0.3 * driven)
+                    0.7f32.mul_add(driven.tanh(), 0.3 * (driven / (1.0 + driven.abs())))
                 }
             }
 
@@ -103,8 +104,8 @@ impl TubeTable {
         const VP: f64 = 250.0; // plate voltage (operating point)
         const VG_SCALE: f64 = 4.0; // maps normalized input to grid voltage range
 
-        let input_min: f64 = -5.0;
-        let input_max: f64 = 5.0;
+        let input_min: f64 = -10.0;
+        let input_max: f64 = 10.0;
 
         let mut raw = [0.0f64; Self::SIZE];
         for (idx, sample) in raw.iter_mut().enumerate() {
@@ -162,6 +163,7 @@ impl TubeTable {
             .mul_add(frac, coeff_b)
             .mul_add(frac, coeff_c)
             .mul_add(frac, p1)
+            .clamp(-1.0, 1.0)
     }
 }
 
@@ -237,5 +239,98 @@ mod tests {
             (max - 1.0).abs() < 0.05,
             "table max should be near 1.0, got {max}"
         );
+    }
+
+    #[test]
+    fn test_asymmetric_bounded_output() {
+        // TUBE-3: Asymmetric clipper must be bounded for all inputs
+        for drive in [1.0, 5.0, 10.0, 20.0] {
+            for i in -100..=100 {
+                let input = i as f32 * 0.1;
+                let output = ClipperType::Asymmetric.process(input, drive);
+                assert!(
+                    (-1.05..=1.05).contains(&output),
+                    "Asymmetric output {output} out of bounds for input={input}, drive={drive}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_asymmetric_preserves_asymmetry() {
+        let pos = ClipperType::Asymmetric.process(0.5, 3.0);
+        let neg = ClipperType::Asymmetric.process(-0.5, 3.0);
+        assert!(
+            (pos.abs() - neg.abs()).abs() > 0.01,
+            "Asymmetric clipper should produce different magnitudes for +/- input, pos={pos}, neg={neg}"
+        );
+    }
+
+    #[test]
+    fn test_all_clippers_bounded() {
+        let types = [
+            ClipperType::Soft,
+            ClipperType::Medium,
+            ClipperType::Hard,
+            ClipperType::Asymmetric,
+            ClipperType::ClassA,
+            ClipperType::Triode,
+        ];
+        for clipper in &types {
+            for drive in [1.0, 5.0, 10.0, 20.0] {
+                for i in -50..=50 {
+                    let input = i as f32 * 0.2;
+                    let output = clipper.process(input, drive);
+                    assert!(
+                        (-1.5..=1.5).contains(&output),
+                        "{clipper:?} output {output} out of bounds for input={input}, drive={drive}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_triode_monotonic_extended_range() {
+        // TUBE-4: Monotonic across full [-10, 10] range
+        let mut prev = ClipperType::Triode.process(-10.0, 1.0);
+        let steps = 2000;
+        for i in 1..=steps {
+            let input = 20.0f32.mul_add(i as f32 / steps as f32, -10.0);
+            let output = ClipperType::Triode.process(input, 1.0);
+            assert!(
+                output >= prev - 1e-5,
+                "non-monotonic at input={input}: prev={prev}, current={output}"
+            );
+            prev = output;
+        }
+    }
+
+    #[test]
+    fn test_triode_no_hard_clip_at_boundary() {
+        // TUBE-4: Derivative must be non-zero at +5.0 (old boundary in active region)
+        // At -5.0 the tube is in cutoff so the derivative is physically zero.
+        // Use central finite difference: (f(x+h) - f(x-h)) / 2h
+        let h = 0.01_f32;
+        let boundary = 5.0_f32;
+        let y_plus = ClipperType::Triode.process(boundary + h, 1.0);
+        let y_minus = ClipperType::Triode.process(boundary - h, 1.0);
+        let derivative = (y_plus - y_minus) / (2.0 * h);
+        assert!(
+            derivative.abs() > 1e-4,
+            "derivative at old boundary {boundary} should be non-zero, got {derivative}"
+        );
+    }
+
+    #[test]
+    fn test_triode_bounded_extended() {
+        // TUBE-4: Output bounded for inputs beyond old ±5.0 range
+        for input in [-9.0_f32, -7.0, -5.5, 5.5, 7.0, 9.0] {
+            let output = ClipperType::Triode.process(input, 1.0);
+            assert!(
+                (-1.05..=1.05).contains(&output),
+                "output {output} out of bounds for input={input}"
+            );
+        }
     }
 }

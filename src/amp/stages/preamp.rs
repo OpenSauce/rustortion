@@ -3,8 +3,9 @@ use crate::amp::stages::clipper::ClipperType;
 use crate::amp::stages::common::{DcBlocker, OnePoleLP};
 
 pub struct PreampStage {
-    gain: f32, // 0..10
-    bias: f32, // −1..+1
+    gain: f32,      // 0..10
+    bias: f32,      // −1..+1
+    bias_comp: f32, // cosh²(bias) clamped to 4.0, cached for RT performance
     clipper_type: ClipperType,
     interstage_lp: OnePoleLP,
     dc_blocker: DcBlocker,
@@ -12,9 +13,11 @@ pub struct PreampStage {
 
 impl PreampStage {
     pub fn new(gain: f32, bias: f32, clipper: ClipperType, sample_rate: f32) -> Self {
+        let bias = bias.clamp(-1.0, 1.0);
         Self {
             gain,
-            bias: bias.clamp(-1.0, 1.0),
+            bias,
+            bias_comp: bias.cosh().powi(2).min(4.0),
             clipper_type: clipper,
             interstage_lp: OnePoleLP::new(10_000.0, sample_rate),
             dc_blocker: DcBlocker::new(15.0, sample_rate),
@@ -31,8 +34,9 @@ impl Stage for PreampStage {
         let drive = self.gain.mul_add(DRIVE_SCALE, DRIVE_MIN);
 
         // --- Initial asymmetric soft clip with DC compensation ---
-        // Instead of adding DC to the input, shift the tanh curve and recenter:
-        let pre = drive.mul_add(input, self.bias).tanh() - self.bias.tanh();
+        // Instead of adding DC to the input, shift the tanh curve, recenter, and apply
+        // bias-dependent level normalization via `bias_comp`:
+        let pre = (drive.mul_add(input, self.bias).tanh() - self.bias.tanh()) * self.bias_comp;
 
         // Inter-stage lowpass: models plate load capacitance rolling off upper
         // harmonics before they reach the next nonlinearity. Without this,
@@ -61,6 +65,7 @@ impl Stage for PreampStage {
             "bias" => {
                 if (-1.0..=1.0).contains(&v) {
                     self.bias = v;
+                    self.bias_comp = v.cosh().powi(2).min(4.0);
                     Ok(())
                 } else {
                     Err("Bias −1-1")
@@ -229,6 +234,70 @@ mod tests {
             let out = stage.process(0.5);
             assert!(out.is_finite(), "output not finite at sr={sr}");
             assert!(out.abs() < 5.0, "output unbounded at sr={sr}, got {out}");
+        }
+    }
+
+    #[test]
+    fn test_bias_level_consistency() {
+        // TUBE-5: RMS output level should be within ±1.5 dB across bias range
+        fn measure_rms(bias: f32) -> f32 {
+            let mut stage = PreampStage::new(5.0, bias, ClipperType::Soft, SR);
+            // Long warmup for DC blocker to settle (15 Hz HP needs time)
+            let warmup_len: usize = 48000;
+            for i in 0..warmup_len {
+                stage.process((i as f32 * 0.05).sin() * 0.3);
+            }
+            let mut sum2 = 0.0_f32;
+            let n: usize = 8000;
+            for i in 0..n {
+                let input = ((warmup_len + i) as f32 * 0.05).sin() * 0.3;
+                let out = stage.process(input);
+                sum2 += out * out;
+            }
+            (sum2 / n as f32).sqrt()
+        }
+
+        let rms_zero = measure_rms(0.0);
+        for bias in [-1.0, -0.5, 0.5, 1.0] {
+            let rms = measure_rms(bias);
+            let db_diff = 20.0 * (rms / rms_zero).log10();
+            assert!(
+                db_diff.abs() < 1.5,
+                "RMS at bias={bias} differs by {db_diff:.1} dB from bias=0 (rms={rms:.4}, ref={rms_zero:.4})"
+            );
+        }
+    }
+
+    #[test]
+    fn test_zero_input_silence_with_bias() {
+        // TUBE-5: Zero input must produce silence even with bias compensation
+        for bias in [-1.0, -0.5, 0.0, 0.5, 1.0] {
+            let mut stage = PreampStage::new(5.0, bias, ClipperType::Soft, SR);
+            // Extra warmup — bias_comp amplifies DC before blocker
+            for _ in 0..48000 {
+                stage.process(0.0);
+            }
+            let out = stage.process(0.0);
+            assert!(
+                out.abs() < 1e-4,
+                "zero input should produce silence at bias={bias}, got {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_asymmetric_clipper_with_bias_bounded() {
+        // Combined regression: TUBE-3 + TUBE-5 interaction
+        for bias in [-1.0, -0.5, 0.5, 1.0] {
+            let mut stage = PreampStage::new(10.0, bias, ClipperType::Asymmetric, SR);
+            for i in 0..48000 {
+                let input = (i as f32 * 0.1).sin() * 5.0;
+                let out = stage.process(input);
+                assert!(
+                    out.is_finite() && out.abs() < 10.0,
+                    "output must be finite and bounded, got {out} (bias={bias})"
+                );
+            }
         }
     }
 }
