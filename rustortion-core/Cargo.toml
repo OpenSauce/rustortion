@@ -1,0 +1,38 @@
+[package]
+name = "rustortion-core"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+hound = "3.5"
+chrono = "0.4"
+rubato = "0.16"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+crossbeam = "0.8"
+log = "0.4"
+anyhow = "1.0"
+rustfft = "6.4"
+realfft = "3.5"
+arc-swap = "1.8"
+
+[dev-dependencies]
+criterion = { version = "0.8", features = ["html_reports"] }
+tempfile = "3.24"
+
+[[bench]]
+name = "impulse_responses"
+harness = false
+
+[[bench]]
+name = "engine"
+harness = false
+
+[[bench]]
+name = "chain"
+harness = false
+
+[[bench]]
+name = "samplers"
+harness = false
