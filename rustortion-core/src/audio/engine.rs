@@ -74,7 +74,7 @@ impl Engine {
         metronome: Metronome,
         rt_drop: RtDropHandle,
     ) -> Result<(Self, EngineHandle)> {
-        let (engine_sender, engine_receiver) = bounded::<EngineMessage>(32);
+        let (engine_sender, engine_receiver) = bounded::<EngineMessage>(128);
 
         Ok((
             Self {
@@ -107,7 +107,7 @@ impl Engine {
     ) -> Result<(Self, EngineHandle, crate::audio::rt_drop::RtDropReceiver)> {
         let samplers = Samplers::new(max_buffer_size, oversample_factor, sample_rate)?;
         let (rt_drop_handle, rt_drop_rx) = RtDropHandle::new();
-        let (engine_sender, engine_receiver) = bounded::<EngineMessage>(32);
+        let (engine_sender, engine_receiver) = bounded::<EngineMessage>(128);
 
         let engine = Self {
             chain: Box::new(AmplifierChain::new()),

@@ -5,4 +5,4 @@ edition = "2024"
 repository = "https://github.com/OpenSauce/rustortion"
 
 [dependencies]
-nih_plug_xtask = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+nih_plug_xtask = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "28b149ec" }

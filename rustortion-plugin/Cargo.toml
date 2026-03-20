@@ -8,7 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 rustortion-core = { path = "../rustortion-core" }
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git" }
-nih_plug_iced = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["opengl"] }
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "28b149ec" }
+nih_plug_iced = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "28b149ec", features = ["opengl"] }
 log = "0.4"
 dirs = "6"

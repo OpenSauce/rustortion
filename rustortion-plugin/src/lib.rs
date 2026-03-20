@@ -345,10 +345,13 @@ impl Plugin for RustortionPlugin {
                 }
 
                 // Load presets
-                let preset_dir = dirs::config_dir()
-                    .unwrap_or_default()
-                    .join("rustortion")
-                    .join("presets");
+                let preset_dir = dirs::config_dir().map_or_else(
+                    || {
+                        nih_log!("Could not determine config directory; preset loading may fail");
+                        std::path::PathBuf::from("rustortion").join("presets")
+                    },
+                    |dir| dir.join("rustortion").join("presets"),
+                );
 
                 match rustortion_core::preset::Manager::new(&preset_dir) {
                     Ok(manager) => {
