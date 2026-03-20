@@ -28,7 +28,7 @@ struct RustortionPlugin {
     sample_rate: f32,
     shared: Arc<SharedState>,
     preset_names: Vec<String>,
-    editor_preset_names: Arc<Vec<String>>,
+    editor_preset_names: Arc<Mutex<Vec<String>>>,
     current_preset_idx: Arc<AtomicUsize>,
     last_preset_idx: usize,
     last_ir_gain: f32,
@@ -68,7 +68,7 @@ impl Default for RustortionPlugin {
                 max_buffer_size: AtomicU32::new(0),
             }),
             preset_names: Vec::new(),
-            editor_preset_names: Arc::new(Vec::new()),
+            editor_preset_names: Arc::new(Mutex::new(Vec::new())),
             current_preset_idx: Arc::new(AtomicUsize::new(0)),
             last_preset_idx: 0,
             last_ir_gain: util::db_to_gain(-20.0),
@@ -361,7 +361,9 @@ impl Plugin for RustortionPlugin {
                             .map(|p| p.name.clone())
                             .collect();
                         self.preset_names.clone_from(&names);
-                        self.editor_preset_names = Arc::new(names);
+                        if let Ok(mut editor_names) = self.editor_preset_names.lock() {
+                            editor_names.clone_from(&names);
+                        }
                         let manager = Arc::new(manager);
                         if let Ok(mut m) = self.shared.preset_manager.lock() {
                             *m = Some(manager);

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
 use nih_plug::prelude::{Editor, GuiContext};
@@ -27,7 +28,7 @@ pub fn default_state() -> Arc<IcedState> {
 pub fn create(
     params: Arc<RustortionParams>,
     editor_state: Arc<IcedState>,
-    preset_names: Arc<Vec<String>>,
+    preset_names: Arc<Mutex<Vec<String>>>,
     current_preset_idx: Arc<AtomicUsize>,
     oversampling_idx: Arc<AtomicU8>,
 ) -> Option<Box<dyn Editor>> {
@@ -40,7 +41,7 @@ pub fn create(
 struct RustortionEditor {
     params: Arc<RustortionParams>,
     context: Arc<dyn GuiContext>,
-    preset_names: Arc<Vec<String>>,
+    preset_names: Arc<Mutex<Vec<String>>>,
     current_preset_idx: Arc<AtomicUsize>,
     oversampling_idx: Arc<AtomicU8>,
 
@@ -66,7 +67,7 @@ impl IcedEditor for RustortionEditor {
     type Message = Message;
     type InitializationFlags = (
         Arc<RustortionParams>,
-        Arc<Vec<String>>,
+        Arc<Mutex<Vec<String>>>,
         Arc<AtomicUsize>,
         Arc<AtomicU8>,
     );
@@ -110,7 +111,7 @@ impl IcedEditor for RustortionEditor {
             }
             Message::NextPreset => {
                 let idx = self.current_preset_idx.load(Ordering::Relaxed);
-                let len = self.preset_names.len();
+                let len = self.preset_names.lock().map_or(0, |n| n.len());
                 if idx + 1 < len {
                     self.current_preset_idx.store(idx + 1, Ordering::Relaxed);
                 }
@@ -133,10 +134,12 @@ impl IcedEditor for RustortionEditor {
 
     fn view(&mut self) -> Element<'_, Self::Message> {
         let idx = self.current_preset_idx.load(Ordering::Relaxed);
-        let preset_name = self
+        let preset_name_owned = self
             .preset_names
-            .get(idx)
-            .map_or("No Preset", String::as_str);
+            .lock()
+            .ok()
+            .and_then(|n| n.get(idx).cloned());
+        let preset_name = preset_name_owned.as_deref().unwrap_or("No Preset");
 
         Column::new()
             .align_items(Alignment::Center)
