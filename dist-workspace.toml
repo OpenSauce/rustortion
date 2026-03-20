@@ -24,3 +24,4 @@ allow-dirty = ["ci"]
 libjack-jackd2-dev = '*'
 pkg-config = '*'
 libasound2-dev = '*'
+libgl-dev = '*'

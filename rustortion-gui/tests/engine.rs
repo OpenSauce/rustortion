@@ -1,0 +1,299 @@
+#![allow(clippy::pedantic, clippy::nursery)]
+
+use anyhow::Result;
+use rustortion_core::amp::chain::AmplifierChain;
+use rustortion_core::amp::stages::level::LevelStage;
+use rustortion_core::audio::engine::Engine;
+use rustortion_core::audio::peak_meter::PeakMeter;
+use rustortion_core::audio::rt_drop::RtDropHandle;
+use rustortion_core::audio::samplers::Samplers;
+use rustortion_core::metronome::Metronome;
+use rustortion_core::tuner::Tuner;
+
+#[test]
+fn engine_processes_non_zero_signal() -> Result<()> {
+    const SAMPLE_RATE: usize = 48_000;
+    const BUFFER_SIZE: usize = 128;
+    const OVERSAMPLE_FACTOR: f64 = 1.0;
+
+    let (tuner, _) = Tuner::new(SAMPLE_RATE);
+    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
+    let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
+    let metronome = Metronome::new(120.0, SAMPLE_RATE);
+    let (mut engine, _) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        RtDropHandle::new().0,
+    )?;
+
+    let input = vec![0.5f32; BUFFER_SIZE];
+    let mut output = vec![0.0f32; BUFFER_SIZE];
+
+    engine.process(&input, &mut output)?;
+
+    assert!(output.iter().any(|&x| x != 0.0), "expected non-zero output");
+
+    Ok(())
+}
+
+#[test]
+fn engine_handles_buffer_size_change() -> Result<()> {
+    const SAMPLE_RATE: usize = 48000;
+    const INITIAL_BUFFER_SIZE: usize = 128;
+    const NEW_BUFFER_SIZE: usize = 256;
+    const OVERSAMPLE_FACTOR: f64 = 1.0;
+
+    let (tuner, _) = Tuner::new(SAMPLE_RATE);
+    let samplers = Samplers::new(INITIAL_BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
+    let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
+    let metronome = Metronome::new(120.0, SAMPLE_RATE);
+    let (mut engine, _) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        RtDropHandle::new().0,
+    )?;
+
+    let input = vec![0.5f32; INITIAL_BUFFER_SIZE];
+    let mut output = vec![0.0f32; INITIAL_BUFFER_SIZE];
+    engine.process(&input, &mut output)?;
+
+    assert_eq!(
+        output.len(),
+        INITIAL_BUFFER_SIZE,
+        "output length should match initial buffer size"
+    );
+
+    engine.update_buffer_size(NEW_BUFFER_SIZE)?;
+
+    let input = vec![0.5f32; NEW_BUFFER_SIZE];
+    let mut output = vec![0.0f32; NEW_BUFFER_SIZE];
+
+    engine.process(&input, &mut output)?;
+
+    assert!(
+        output.iter().any(|&x| x != 0.0),
+        "expected non-zero output after buffer size change"
+    );
+    assert_eq!(
+        output.len(),
+        NEW_BUFFER_SIZE,
+        "output length should match new buffer size"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn engine_rejects_mismatched_buffer_sizes() -> Result<()> {
+    const SAMPLE_RATE: usize = 48000;
+    const BUFFER_SIZE: usize = 128;
+    const OVERSAMPLE_FACTOR: f64 = 2.0;
+
+    let (tuner, _) = Tuner::new(SAMPLE_RATE);
+    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
+    let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
+    let metronome = Metronome::new(120.0, SAMPLE_RATE);
+    let (mut engine, _) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        RtDropHandle::new().0,
+    )?;
+
+    let small_input = vec![0.5f32; BUFFER_SIZE / 2];
+    let mut small_output = vec![0.0f32; BUFFER_SIZE / 2];
+    assert!(
+        engine.process(&small_input, &mut small_output).is_err(),
+        "expected error when input buffer size is smaller than expected"
+    );
+
+    let large_input = vec![0.5f32; BUFFER_SIZE * 2];
+    let mut large_output = vec![0.0f32; BUFFER_SIZE * 2];
+    assert!(
+        engine.process(&large_input, &mut large_output).is_err(),
+        "expected error when input buffer size is larger than expected"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn engine_applies_amp_chain() -> Result<()> {
+    const SAMPLE_RATE: usize = 48000;
+    const BUFFER_SIZE: usize = 128;
+    const OVERSAMPLE_FACTOR: f64 = 1.0;
+
+    let (tuner, _) = Tuner::new(SAMPLE_RATE);
+    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
+    let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
+    let metronome = Metronome::new(120.0, SAMPLE_RATE);
+    let (mut engine, handle) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        RtDropHandle::new().0,
+    )?;
+
+    let input = vec![1.0f32; BUFFER_SIZE];
+    let mut output = vec![0.0f32; BUFFER_SIZE];
+
+    engine.process(&input, &mut output)?;
+
+    let baseline_rms =
+        (output.iter().map(|&x| (x as f64) * (x as f64)).sum::<f64>() / output.len() as f64).sqrt();
+
+    let mut chain = AmplifierChain::new();
+    chain.add_stage(Box::new(LevelStage::new(0.5)));
+    handle.set_amp_chain(chain);
+
+    engine.process(&input, &mut output)?;
+
+    let chain_rms =
+        (output.iter().map(|&x| (x as f64) * (x as f64)).sum::<f64>() / output.len() as f64).sqrt();
+
+    assert!(baseline_rms > 0.0, "expected non-zero baseline output");
+    assert!(
+        chain_rms < baseline_rms,
+        "expected 0.5x level to attenuate: baseline_rms={baseline_rms}, chain_rms={chain_rms}"
+    );
+
+    Ok(())
+}
+
+#[test]
+fn samplers_preserve_tone_signal() -> Result<()> {
+    const SAMPLE_RATE: usize = 48000;
+    const BUFFER_SIZE: usize = 512;
+    const TEST_FREQ: f32 = 440.0;
+
+    for &oversample in &[1.0, 2.0, 4.0, 8.0, 16.0] {
+        let mut samplers = Samplers::new(BUFFER_SIZE, oversample, SAMPLE_RATE)?;
+
+        let input: Vec<f32> = (0..BUFFER_SIZE)
+            .map(|i| {
+                let t = i as f32 / SAMPLE_RATE as f32;
+                (2.0 * std::f32::consts::PI * TEST_FREQ * t).sin() * 0.5
+            })
+            .collect();
+
+        // FFT samplers have a delay so we need to prime them.
+        for _ in 0..10 {
+            samplers.copy_input(&input)?;
+            let _ = samplers.upsample()?;
+            let _ = samplers.downsample()?;
+        }
+
+        samplers.copy_input(&input)?;
+
+        let upsampled = samplers.upsample()?;
+        let upsampled_rms =
+            (upsampled.iter().map(|x| x * x).sum::<f32>() / upsampled.len() as f32).sqrt();
+
+        let downsampled = samplers.downsample()?;
+        let downsampled_rms =
+            (downsampled.iter().map(|x| x * x).sum::<f32>() / downsampled.len() as f32).sqrt();
+
+        let input_rms = (input.iter().map(|x| x * x).sum::<f32>() / input.len() as f32).sqrt();
+
+        println!(
+            "{}x oversample: input_rms={:.4}, upsampled_rms={:.4}, downsampled_rms={:.4}, preservation={:.4}",
+            oversample,
+            input_rms,
+            upsampled_rms,
+            downsampled_rms,
+            downsampled_rms / input_rms
+        );
+
+        let preservation_ratio = downsampled_rms / input_rms;
+        assert!(
+            preservation_ratio > 0.8 && preservation_ratio < 1.2,
+            "{oversample}x oversample: signal not preserved, got ratio {preservation_ratio:.4}"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn engine_tuner_enabled_no_output() -> Result<()> {
+    const SAMPLE_RATE: usize = 48000;
+    const BUFFER_SIZE: usize = 128;
+    const OVERSAMPLE_FACTOR: f64 = 1.0;
+    let (mut tuner, _) = Tuner::new(SAMPLE_RATE);
+    tuner.set_enabled(true);
+    let samplers = Samplers::new(BUFFER_SIZE, OVERSAMPLE_FACTOR, SAMPLE_RATE)?;
+    let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
+    let metronome = Metronome::new(120.0, SAMPLE_RATE);
+    let (mut engine, _) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        RtDropHandle::new().0,
+    )?;
+
+    let input = vec![0.0f32; BUFFER_SIZE];
+    let mut output = vec![0.0f32; BUFFER_SIZE];
+    engine.process(&input, &mut output)?;
+
+    assert!(output.iter().all(|&x| x == 0.0), "expected silent output");
+
+    Ok(())
+}
+
+#[test]
+fn engine_set_parameter_updates_live_stage() -> Result<()> {
+    const SAMPLE_RATE: usize = 48_000;
+    const BUFFER_SIZE: usize = 128;
+
+    let (tuner, _) = Tuner::new(SAMPLE_RATE);
+    let samplers = Samplers::new(BUFFER_SIZE, 1.0, SAMPLE_RATE)?;
+    let (peak_meter, _) = PeakMeter::new(SAMPLE_RATE);
+    let metronome = Metronome::new(120.0, SAMPLE_RATE);
+    let (mut engine, handle) = Engine::new(
+        tuner,
+        samplers,
+        None,
+        peak_meter,
+        metronome,
+        RtDropHandle::new().0,
+    )?;
+
+    // Set up a chain with a level stage at gain=1.0
+    let mut chain = AmplifierChain::new();
+    chain.add_stage(Box::new(LevelStage::new(1.0)));
+    handle.set_amp_chain(chain);
+
+    // Process to apply the chain
+    let input = vec![0.5f32; BUFFER_SIZE];
+    let mut output = vec![0.0f32; BUFFER_SIZE];
+    engine.process(&input, &mut output)?;
+    let before = output[BUFFER_SIZE - 1];
+
+    // Send parameter update to halve the gain
+    handle.set_parameter(0, "gain", 0.5);
+
+    // Process again -- engine should pick up the message
+    engine.process(&input, &mut output)?;
+    let after = output[BUFFER_SIZE - 1];
+
+    // After should be approximately half of before
+    assert!(
+        (after - before * 0.5).abs() < 0.01,
+        "expected ~{}, got {after}",
+        before * 0.5
+    );
+
+    Ok(())
+}

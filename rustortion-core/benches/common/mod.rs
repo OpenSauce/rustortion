@@ -1,0 +1,52 @@
+use hound::{WavSpec, WavWriter};
+use rustortion_core::ir::cabinet::{ConvolverType, DEFAULT_MAX_IR_MS, IrCabinet};
+use rustortion_core::ir::convolver::Convolver;
+use rustortion_core::ir::loader::IrLoader;
+use std::fs;
+use std::path::Path;
+
+pub fn create_test_cabinet(ir_length: usize, sample_rate: usize) -> IrCabinet {
+    let ir_dir = std::env::temp_dir().join("rustortion_bench_ir");
+    fs::create_dir_all(&ir_dir).unwrap();
+
+    let ir_path = ir_dir.join(format!("test_ir_{ir_length}.wav"));
+    if !ir_path.exists() {
+        create_synthetic_ir(&ir_path, ir_length, sample_rate as u32);
+    }
+
+    let max_ir_samples = (sample_rate * DEFAULT_MAX_IR_MS) / 1000;
+    let mut cabinet = IrCabinet::new(ConvolverType::Fir, max_ir_samples);
+
+    let loader = IrLoader::new(&ir_dir, sample_rate).unwrap();
+    let ir_samples = loader
+        .load_by_name(&format!("test_ir_{ir_length}.wav"))
+        .unwrap();
+
+    let mut convolver = Convolver::new_fir(max_ir_samples);
+    convolver.set_ir(&ir_samples).unwrap();
+    cabinet.swap_convolver(convolver);
+
+    cabinet
+}
+
+fn create_synthetic_ir(path: &Path, length: usize, sample_rate: u32) {
+    let spec = WavSpec {
+        channels: 1,
+        sample_rate,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+
+    let mut writer = WavWriter::create(path, spec).unwrap();
+
+    for i in 0..length {
+        let t = i as f32 / sample_rate as f32;
+        let decay = (-t * 3.0).exp();
+        let freq = 440.0 * 2.0 * std::f32::consts::PI;
+        let sample = (freq * t).sin() * decay;
+        let sample_i16 = (sample * i16::MAX as f32) as i16;
+        writer.write_sample(sample_i16).unwrap();
+    }
+
+    writer.finalize().unwrap();
+}
