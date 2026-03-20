@@ -321,7 +321,9 @@ impl Plugin for RustortionPlugin {
         // Read oversampling from persisted param (clamped to valid range)
         let os_idx = self.params.oversampling_idx.load(Ordering::Relaxed).min(4);
         self.active_oversampling = os_idx;
-        self.shared.oversampling_idx.store(os_idx, Ordering::Relaxed);
+        self.shared
+            .oversampling_idx
+            .store(os_idx, Ordering::Relaxed);
         let oversample_factor = 2.0_f64.powi(i32::from(os_idx));
 
         match Engine::new_for_plugin(
