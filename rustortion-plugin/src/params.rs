@@ -1,5 +1,7 @@
 use nih_plug::prelude::*;
+use rustortion_core::preset::stage_config::StageConfig;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::AtomicU8;
 
 // ---------------------------------------------------------------------------
@@ -37,13 +39,15 @@ impl Default for PreampSlotParams {
                     max: 1.0,
                 },
             ),
-            clipper_type: IntParam::new("Clipper Type", 0, IntRange::Linear { min: 0, max: 3 })
+            clipper_type: IntParam::new("Clipper Type", 0, IntRange::Linear { min: 0, max: 5 })
                 .with_value_to_string(Arc::new(|v| {
                     match v {
                         0 => "Soft",
-                        1 => "Hard",
-                        2 => "Triode",
+                        1 => "Medium",
+                        2 => "Hard",
                         3 => "Asymmetric",
+                        4 => "ClassA",
+                        5 => "Triode",
                         _ => "Unknown",
                     }
                     .to_string()
@@ -508,8 +512,16 @@ pub struct RustortionParams {
     #[id = "lp_cutoff"]
     pub lp_cutoff: FloatParam,
 
+    #[id = "preset_idx"]
+    pub preset_idx: IntParam,
+
     #[persist = "oversampling"]
     pub oversampling_idx: Arc<AtomicU8>,
+
+    /// Serialized stage chain — persisted with DAW project state so user
+    /// modifications (add/remove/reorder stages) survive save/restore.
+    #[persist = "chain_state"]
+    pub chain_state: Arc<Mutex<Option<Vec<StageConfig>>>>,
 
     // Per-stage slot arrays
     #[nested(array, group = "Preamp")]
@@ -603,7 +615,11 @@ impl Default for RustortionParams {
             )
             .with_unit(" Hz"),
 
+            preset_idx: IntParam::new("Preset", 0, IntRange::Linear { min: 0, max: 255 })
+                .non_automatable(),
+
             oversampling_idx: Arc::new(AtomicU8::new(1)), // 1 = 2x oversampling
+            chain_state: Arc::new(Mutex::new(None)),
 
             preamp: Default::default(),
             compressor: Default::default(),
