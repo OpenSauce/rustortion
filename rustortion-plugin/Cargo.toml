@@ -9,6 +9,10 @@ crate-type = ["cdylib"]
 [dependencies]
 rustortion-core = { path = "../rustortion-core" }
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "28b149ec" }
-nih_plug_iced = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "28b149ec", features = ["opengl"] }
+rustortion-ui = { path = "../rustortion-ui" }
+iced_baseview = { git = "https://github.com/OpenSauce/iced_baseview.git" }
+crossbeam = "0.8"
 log = "0.4"
 dirs = "6"
+rust-embed = { version = "8", features = ["include-exclude"] }
+serde_json = "1.0"

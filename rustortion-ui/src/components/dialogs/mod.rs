@@ -1,0 +1,9 @@
+pub mod common;
+pub mod hotkey;
+
+use super::widgets::common::{PADDING_LARGE, SPACING_NORMAL, SPACING_WIDE};
+
+pub const DIALOG_TITLE_SIZE: f32 = 24.0;
+pub const DIALOG_TITLE_ROW_SPACING: f32 = SPACING_NORMAL;
+pub const DIALOG_CONTENT_SPACING: f32 = SPACING_WIDE;
+pub const DIALOG_CONTENT_PADDING: f32 = PADDING_LARGE;

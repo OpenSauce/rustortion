@@ -1,24 +1,44 @@
 use nih_plug::prelude::*;
-use nih_plug_iced::IcedState;
 use rustortion_core::audio::engine::{Engine, EngineHandle};
 use rustortion_core::ir::loader::IrLoader;
-use std::sync::atomic::{AtomicU8, AtomicU32, AtomicUsize, Ordering};
+use rustortion_core::preset::stage_config::StageConfig;
+use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
+mod backend;
 mod editor;
+mod factory;
+mod ir_helper;
+pub mod params;
+
+use params::RustortionParams;
 
 enum PluginTask {
     LoadPreset(String),
     ChangeOversampling(u8),
 }
 
-struct SharedState {
+pub(crate) struct SharedState {
     engine_handle: Mutex<Option<EngineHandle>>,
     ir_loader: Mutex<Option<Arc<IrLoader>>>,
     preset_manager: Mutex<Option<Arc<rustortion_core::preset::Manager>>>,
     sample_rate: AtomicU32,
     max_buffer_size: AtomicU32,
     oversampling_idx: AtomicU8,
+    /// GUI stage chain — survives editor close/reopen within the same session.
+    gui_stages: Mutex<Option<Vec<StageConfig>>>,
+}
+
+impl SharedState {
+    pub(crate) fn store_gui_stages(&self, stages: &[StageConfig]) {
+        if let Ok(mut g) = self.gui_stages.lock() {
+            *g = Some(stages.to_vec());
+        }
+    }
+
+    pub(crate) fn take_gui_stages(&self) -> Option<Vec<StageConfig>> {
+        self.gui_stages.lock().ok()?.clone()
+    }
 }
 
 struct RustortionPlugin {
@@ -30,27 +50,11 @@ struct RustortionPlugin {
     shared: Arc<SharedState>,
     preset_names: Vec<String>,
     editor_preset_names: Arc<Mutex<Vec<String>>>,
-    current_preset_idx: Arc<AtomicUsize>,
-    last_preset_idx: usize,
+    last_preset_idx: i32,
     last_ir_gain: f32,
     active_oversampling: u8,
     input_buf: Vec<f32>,
     output_buf: Vec<f32>,
-}
-
-#[derive(Params)]
-struct RustortionParams {
-    #[persist = "editor-state"]
-    editor_state: Arc<IcedState>,
-
-    #[id = "output_level"]
-    output_level: FloatParam,
-
-    #[id = "ir_gain"]
-    ir_gain: FloatParam,
-
-    #[persist = "oversampling"]
-    oversampling_idx: Arc<AtomicU8>,
 }
 
 impl Default for RustortionPlugin {
@@ -68,50 +72,15 @@ impl Default for RustortionPlugin {
                 sample_rate: AtomicU32::new(0),
                 max_buffer_size: AtomicU32::new(0),
                 oversampling_idx: AtomicU8::new(1),
+                gui_stages: Mutex::new(None),
             }),
             preset_names: Vec::new(),
             editor_preset_names: Arc::new(Mutex::new(Vec::new())),
-            current_preset_idx: Arc::new(AtomicUsize::new(0)),
-            last_preset_idx: 0,
+            last_preset_idx: -1,
             last_ir_gain: util::db_to_gain(-20.0),
             active_oversampling: 1, // 1 = 2x
             input_buf: Vec::new(),
             output_buf: Vec::new(),
-        }
-    }
-}
-
-impl Default for RustortionParams {
-    fn default() -> Self {
-        Self {
-            editor_state: editor::default_state(),
-            output_level: FloatParam::new(
-                "Output Level",
-                util::db_to_gain(0.0),
-                FloatRange::Skewed {
-                    min: util::db_to_gain(-30.0),
-                    max: util::db_to_gain(12.0),
-                    factor: FloatRange::gain_skew_factor(-30.0, 12.0),
-                },
-            )
-            .with_smoother(SmoothingStyle::Logarithmic(50.0))
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            ir_gain: FloatParam::new(
-                "Cabinet Level",
-                util::db_to_gain(-20.0),
-                FloatRange::Skewed {
-                    min: util::db_to_gain(-30.0),
-                    max: util::db_to_gain(6.0),
-                    factor: FloatRange::gain_skew_factor(-30.0, 6.0),
-                },
-            )
-            .with_smoother(SmoothingStyle::Logarithmic(50.0))
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            oversampling_idx: Arc::new(AtomicU8::new(1)), // 1 = 2x oversampling
         }
     }
 }
@@ -152,24 +121,10 @@ fn do_load_preset(
     // Load IR if specified
     if let Some(ir_name) = &preset.ir_name {
         if let Some(loader) = ir_loader {
-            match loader.load_by_name(ir_name) {
-                Ok(ir_samples) => {
-                    // Truncate IR to 35ms for cab sim (no room reverb tail)
-                    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                    let max_ir_len = (sample_rate * 35.0 / 1000.0) as usize;
-                    let truncated_len = ir_samples.len().min(max_ir_len);
-                    let mut convolver =
-                        rustortion_core::ir::convolver::Convolver::new_fir(truncated_len);
-                    if let Err(e) = convolver.set_ir(&ir_samples[..truncated_len]) {
-                        nih_log!("Failed to set IR: {e}");
-                    } else {
-                        handle.swap_ir_convolver(rustortion_core::audio::engine::PreparedIr {
-                            name: ir_name.clone(),
-                            convolver,
-                        });
-                    }
-                }
-                Err(e) => nih_log!("Failed to load IR '{ir_name}': {e}"),
+            if let Some(bytes) = factory::get_factory_ir(ir_name) {
+                ir_helper::load_and_set_ir_from_bytes(handle, loader, ir_name, &bytes, sample_rate);
+            } else {
+                ir_helper::load_and_set_ir(handle, loader, ir_name, sample_rate);
             }
         }
     } else {
@@ -285,15 +240,17 @@ impl Plugin for RustortionPlugin {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        editor::create(
+        // Don't open the editor if the engine isn't initialized yet
+        if self.shared.engine_handle.lock().ok()?.is_none() {
+            return None;
+        }
+        Some(Box::new(editor::PluginEditor::new(
             self.params.clone(),
-            self.params.editor_state.clone(),
-            self.editor_preset_names.clone(),
-            self.current_preset_idx.clone(),
-            self.params.oversampling_idx.clone(),
-        )
+            self.shared.clone(),
+        )))
     }
 
+    #[allow(clippy::too_many_lines)]
     fn initialize(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
@@ -344,8 +301,12 @@ impl Plugin for RustortionPlugin {
                     *h = Some(handle);
                 }
 
-                // Initialize IR loader
-                let ir_dir = find_ir_directory();
+                // Initialize IR loader — used for WAV decoding (resampling, normalization).
+                // Factory IRs are embedded; this also supports user IRs from ~/.config.
+                let ir_dir = dirs::config_dir()
+                    .unwrap_or_default()
+                    .join("rustortion")
+                    .join("impulse_responses");
                 match IrLoader::new(&ir_dir, sample_rate) {
                     Ok(loader) => {
                         let loader = Arc::new(loader);
@@ -356,57 +317,122 @@ impl Plugin for RustortionPlugin {
                     Err(e) => nih_log!("Failed to init IR loader: {e}"),
                 }
 
-                // Load presets
-                let preset_dir = dirs::config_dir().map_or_else(
-                    || {
-                        nih_log!("Could not determine config directory; preset loading may fail");
-                        std::path::PathBuf::from("rustortion").join("presets")
-                    },
-                    |dir| dir.join("rustortion").join("presets"),
-                );
-
-                match rustortion_core::preset::Manager::new(&preset_dir) {
-                    Ok(manager) => {
-                        let names: Vec<String> = manager
-                            .get_presets()
-                            .iter()
-                            .map(|p| p.name.clone())
-                            .collect();
-                        self.preset_names.clone_from(&names);
-                        if let Ok(mut editor_names) = self.editor_preset_names.lock() {
-                            editor_names.clone_from(&names);
-                        }
-                        let manager = Arc::new(manager);
-                        if let Ok(mut m) = self.shared.preset_manager.lock() {
-                            *m = Some(manager);
-                        }
-                    }
-                    Err(e) => nih_log!("Failed to load presets: {e}"),
+                // Load factory presets (embedded in binary)
+                let factory_presets = factory::load_factory_presets();
+                let names: Vec<String> = factory_presets.iter().map(|p| p.name.clone()).collect();
+                self.preset_names.clone_from(&names);
+                if let Ok(mut editor_names) = self.editor_preset_names.lock() {
+                    editor_names.clone_from(&names);
+                }
+                let manager = Arc::new(rustortion_core::preset::Manager::new_from_presets(
+                    factory_presets,
+                ));
+                if let Ok(mut m) = self.shared.preset_manager.lock() {
+                    *m = Some(manager);
                 }
 
                 // Pre-allocate audio buffers
                 self.input_buf.resize(max_buffer_size, 0.0);
                 self.output_buf.resize(max_buffer_size, 0.0);
 
-                // Re-load active preset (handles reactivation)
-                if let Some(name) = self.preset_names.get(self.last_preset_idx).cloned()
-                    && let Some(handle) = &self.engine_handle
-                {
-                    let mgr = self
-                        .shared
-                        .preset_manager
-                        .lock()
-                        .ok()
-                        .and_then(|g| g.clone());
-                    let loader = self.shared.ir_loader.lock().ok().and_then(|g| g.clone());
-                    do_load_preset(
-                        handle,
-                        mgr.as_deref(),
-                        loader.as_deref(),
-                        self.sample_rate,
-                        os_idx,
-                        &name,
-                    );
+                // Re-load chain state: prefer DAW-persisted chain (user may have
+                // added/removed stages), fall back to preset from disk.
+                let restored_idx = self.params.preset_idx.value();
+                self.last_preset_idx = restored_idx;
+
+                // Prefer gui_stages (editor's in-session state) over chain_state
+                // (DAW persist, may be stale due to nih-plug re-deserialization).
+                let persisted_stages = self
+                    .shared
+                    .gui_stages
+                    .lock()
+                    .ok()
+                    .and_then(|g| g.clone())
+                    .or_else(|| self.params.chain_state.lock().ok().and_then(|g| g.clone()));
+
+                if let Some(handle) = &self.engine_handle {
+                    if let Some(stages) = &persisted_stages {
+                        // Restore from DAW-persisted chain state
+                        let effective_sr = self.sample_rate * 2.0_f32.powi(i32::from(os_idx));
+                        let mut chain = rustortion_core::amp::chain::AmplifierChain::new();
+                        for stage_cfg in stages {
+                            chain.add_stage(stage_cfg.to_runtime(effective_sr));
+                        }
+                        for (i, stage_cfg) in stages.iter().enumerate() {
+                            if stage_cfg.bypassed() {
+                                chain.set_bypassed(i, true);
+                            }
+                        }
+                        handle.set_amp_chain(chain);
+
+                        // Also load IR/filters/pitch from preset (those are
+                        // persisted via nih-plug params and applied separately)
+                        #[allow(clippy::cast_sign_loss)]
+                        if let Some(name) = self.preset_names.get(restored_idx as usize).cloned()
+                            && let Some(mgr) = self
+                                .shared
+                                .preset_manager
+                                .lock()
+                                .ok()
+                                .and_then(|g| g.clone())
+                            && let Some(preset) = mgr.get_preset_by_name(&name)
+                        {
+                            if let Some(ir_name) = &preset.ir_name {
+                                let loader =
+                                    self.shared.ir_loader.lock().ok().and_then(|g| g.clone());
+                                if let Some(loader) = &loader {
+                                    if let Some(bytes) = factory::get_factory_ir(ir_name) {
+                                        ir_helper::load_and_set_ir_from_bytes(
+                                            handle,
+                                            loader,
+                                            ir_name,
+                                            &bytes,
+                                            self.sample_rate,
+                                        );
+                                    } else {
+                                        ir_helper::load_and_set_ir(
+                                            handle,
+                                            loader,
+                                            ir_name,
+                                            self.sample_rate,
+                                        );
+                                    }
+                                }
+                            }
+                            handle.set_ir_gain(preset.ir_gain);
+                            handle.set_pitch_shift(preset.pitch_shift_semitones);
+                        }
+                    } else {
+                        // No persisted chain — fall back to loading preset from disk
+                        #[allow(clippy::cast_sign_loss)]
+                        if let Some(name) = self.preset_names.get(restored_idx as usize).cloned() {
+                            let mgr = self
+                                .shared
+                                .preset_manager
+                                .lock()
+                                .ok()
+                                .and_then(|g| g.clone());
+                            let loader = self.shared.ir_loader.lock().ok().and_then(|g| g.clone());
+                            do_load_preset(
+                                handle,
+                                mgr.as_deref(),
+                                loader.as_deref(),
+                                self.sample_rate,
+                                os_idx,
+                                &name,
+                            );
+                        }
+                    }
+
+                    // Seed gui_stages from DAW-persisted chain state only if
+                    // the editor hasn't already stored its own (newer) data.
+                    // nih-plug can re-deserialize chain_state at any time,
+                    // reverting our in-memory writes, so gui_stages is the
+                    // authoritative in-session source of truth.
+                    let gui_already_set = self.shared.gui_stages.lock().is_ok_and(|g| g.is_some());
+                    if !gui_already_set && let Some(stages) = persisted_stages {
+                        self.shared.store_gui_stages(&stages);
+                    }
                 }
 
                 true
@@ -424,12 +450,14 @@ impl Plugin for RustortionPlugin {
         _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        // Check for preset change from the GUI
-        let idx = self.current_preset_idx.load(Ordering::Relaxed);
-        if idx != self.last_preset_idx
-            && let Some(name) = self.preset_names.get(idx)
-        {
-            context.execute_background(PluginTask::LoadPreset(name.clone()));
+        // Check for preset change from the GUI (preset_idx is a nih-plug param,
+        // so it is persisted with DAW project state automatically)
+        let idx = self.params.preset_idx.value();
+        if idx != self.last_preset_idx {
+            #[allow(clippy::cast_sign_loss)]
+            if let Some(name) = self.preset_names.get(idx as usize) {
+                context.execute_background(PluginTask::LoadPreset(name.clone()));
+            }
             self.last_preset_idx = idx;
         }
 
@@ -439,7 +467,8 @@ impl Plugin for RustortionPlugin {
             context.execute_background(PluginTask::ChangeOversampling(os_idx));
             self.active_oversampling = os_idx;
             // Reload preset so time-based stages get the correct effective sample rate
-            if let Some(name) = self.preset_names.get(self.last_preset_idx) {
+            #[allow(clippy::cast_sign_loss)]
+            if let Some(name) = self.preset_names.get(self.last_preset_idx as usize) {
                 context.execute_background(PluginTask::LoadPreset(name.clone()));
             }
         }
@@ -516,35 +545,6 @@ impl Plugin for RustortionPlugin {
             let _ = thread.join();
         }
     }
-}
-
-fn find_ir_directory() -> std::path::PathBuf {
-    // Check env var
-    if let Ok(path) = std::env::var("RUSTORTION_IR_PATH") {
-        let p = std::path::PathBuf::from(path);
-        if p.exists() {
-            return p;
-        }
-    }
-    // Check ~/.config/rustortion/impulse_responses/
-    if let Some(config) = dirs::config_dir() {
-        let p = config.join("rustortion").join("impulse_responses");
-        if p.exists() {
-            return p;
-        }
-    }
-    // Check next to executable
-    if let Ok(exe) = std::env::current_exe() {
-        let bundled = exe.parent().map(|p| p.join("impulse_responses"));
-        if bundled.as_ref().is_some_and(|p| p.exists()) {
-            return bundled.unwrap();
-        }
-    }
-    // Fallback
-    dirs::config_dir()
-        .unwrap_or_default()
-        .join("rustortion")
-        .join("impulse_responses")
 }
 
 impl ClapPlugin for RustortionPlugin {

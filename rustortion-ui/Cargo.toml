@@ -1,0 +1,12 @@
+[package]
+name = "rustortion-ui"
+version = "0.2.0"
+edition = "2024"
+
+[dependencies]
+iced = { version = "0.14", features = ["tokio"] }
+rustortion-core = { path = "../rustortion-core" }
+serde = { version = "1.0", features = ["derive"] }
+anyhow = "1.0"
+log = "0.4"
+serde_json = "1.0"

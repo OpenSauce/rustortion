@@ -24,6 +24,16 @@ impl Manager {
         Ok(manager)
     }
 
+    /// Create a manager from an in-memory list of presets (no filesystem).
+    /// Save/delete operations will return errors.
+    #[allow(clippy::missing_const_for_fn)] // Vec::new() is not const-stable
+    pub fn new_from_presets(presets: Vec<Preset>) -> Self {
+        Self {
+            presets_dir: PathBuf::new(),
+            presets,
+        }
+    }
+
     pub fn load_presets(&mut self) -> Result<()> {
         self.presets.clear();
 
@@ -70,6 +80,9 @@ impl Manager {
     }
 
     pub fn save_preset(&mut self, preset: &Preset) -> Result<()> {
+        if self.presets_dir.as_os_str().is_empty() {
+            return Err(anyhow::anyhow!("Cannot save presets in read-only mode"));
+        }
         let filename = format!("{}.json", sanitize_filename(&preset.name));
         let path = self.presets_dir.join(filename);
 
@@ -84,6 +97,9 @@ impl Manager {
     }
 
     pub fn delete_preset(&mut self, preset_name: &str) -> Result<()> {
+        if self.presets_dir.as_os_str().is_empty() {
+            return Err(anyhow::anyhow!("Cannot delete presets in read-only mode"));
+        }
         let filename = format!("{}.json", sanitize_filename(preset_name));
         let path = self.presets_dir.join(filename);
 

@@ -57,6 +57,16 @@ impl IrLoader {
 
     pub fn load_ir(&self, path: &Path) -> Result<Vec<f32>> {
         let reader = WavReader::open(path).context("Failed to open WAV file")?;
+        self.decode_wav_reader(reader)
+    }
+
+    pub fn load_ir_from_bytes(&self, bytes: &[u8]) -> Result<Vec<f32>> {
+        let cursor = std::io::Cursor::new(bytes);
+        let reader = WavReader::new(cursor).context("Failed to read WAV from bytes")?;
+        self.decode_wav_reader(reader)
+    }
+
+    fn decode_wav_reader<R: std::io::Read>(&self, reader: WavReader<R>) -> Result<Vec<f32>> {
         let spec = reader.spec();
 
         if reader.duration() as u64 > spec.sample_rate as u64 * MAX_IR_LENGTH_SECONDS {
@@ -229,6 +239,36 @@ mod tests {
 
         assert_eq!(output.len(), input.len());
         assert_eq!(output, input);
+        Ok(())
+    }
+
+    #[test]
+    fn test_load_ir_from_bytes() -> anyhow::Result<()> {
+        let tmp = TempDir::new()?;
+        let ir_dir = tmp.path().join("irs");
+        std::fs::create_dir_all(&ir_dir)?;
+
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 48000,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = hound::WavWriter::new(&mut cursor, spec)?;
+            for i in 0..100 {
+                writer.write_sample(((i as f32) / 100.0).sin())?;
+            }
+            writer.finalize()?;
+        }
+        let wav_bytes = cursor.into_inner();
+
+        let loader = IrLoader::new(&ir_dir, 48000)?;
+        let samples = loader.load_ir_from_bytes(&wav_bytes)?;
+
+        assert!(!samples.is_empty());
+        assert!(samples.len() >= 100);
         Ok(())
     }
 }

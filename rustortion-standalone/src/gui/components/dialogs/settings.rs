@@ -1,0 +1,339 @@
+use iced::widget::{button, column, pick_list, row, rule, space, text};
+use iced::{Alignment, Element, Length};
+
+use crate::i18n::{self, LANGUAGES};
+use crate::settings::AudioSettings;
+use crate::tr;
+use rustortion_ui::components::dialogs::common::{
+    dialog_container, dialog_section_container, dialog_title_row,
+};
+use rustortion_ui::components::dialogs::{DIALOG_CONTENT_PADDING, DIALOG_CONTENT_SPACING};
+use rustortion_ui::components::widgets::common::{
+    COLOR_SUBTLE, COLOR_SUCCESS, COLOR_WARNING, PADDING_NORMAL, SPACING_NORMAL, SPACING_TIGHT,
+    TEXT_SIZE_INFO, TEXT_SIZE_LABEL, TEXT_SIZE_SECTION_TITLE, TEXT_SIZE_SMALL,
+};
+use rustortion_ui::messages::SettingsMessage;
+
+/// Actual JACK settings as reported by the server
+#[derive(Debug, Clone, Default)]
+pub struct JackStatus {
+    pub sample_rate: usize,
+    pub buffer_size: usize,
+}
+
+/// User Settings
+pub struct SettingsDialog {
+    temp_settings: AudioSettings,
+    available_inputs: Vec<String>,
+    available_outputs: Vec<String>,
+    show_dialog: bool,
+    jack_status: JackStatus,
+}
+
+impl SettingsDialog {
+    pub fn new(settings: &AudioSettings) -> Self {
+        Self {
+            temp_settings: settings.clone(),
+            available_inputs: Vec::new(),
+            available_outputs: Vec::new(),
+            show_dialog: false,
+            jack_status: JackStatus::default(),
+        }
+    }
+
+    pub fn show(
+        &mut self,
+        current_settings: &AudioSettings,
+        inputs: Vec<String>,
+        outputs: Vec<String>,
+        jack_status: JackStatus,
+    ) {
+        self.temp_settings = current_settings.clone();
+        self.available_inputs = inputs;
+        self.available_outputs = outputs;
+        self.jack_status = jack_status;
+
+        // Add the current selections if they're not in the lists
+        if !self
+            .available_inputs
+            .contains(&self.temp_settings.input_port)
+        {
+            self.available_inputs
+                .push(self.temp_settings.input_port.clone());
+        }
+        if !self
+            .available_outputs
+            .contains(&self.temp_settings.output_left_port)
+        {
+            self.available_outputs
+                .push(self.temp_settings.output_left_port.clone());
+        }
+        if !self
+            .available_outputs
+            .contains(&self.temp_settings.output_right_port)
+        {
+            self.available_outputs
+                .push(self.temp_settings.output_right_port.clone());
+        }
+
+        self.show_dialog = true;
+    }
+
+    pub const fn hide(&mut self) {
+        self.show_dialog = false;
+    }
+
+    pub const fn is_visible(&self) -> bool {
+        self.show_dialog
+    }
+
+    pub fn get_settings(&self) -> AudioSettings {
+        self.temp_settings.clone()
+    }
+
+    pub fn update_temp_settings(&mut self, settings: AudioSettings) {
+        self.temp_settings = settings;
+    }
+
+    pub fn view(&self) -> Option<Element<'static, SettingsMessage>> {
+        if !self.show_dialog {
+            return None;
+        }
+
+        let title_row = dialog_title_row(tr!(audio_settings), SettingsMessage::Close);
+
+        // JACK Status section - show actual values from JACK server
+        let jack_status_section = self.jack_status_view();
+
+        // Language selection
+        let language_section = column![
+            text(tr!(language)).size(TEXT_SIZE_LABEL),
+            pick_list(
+                LANGUAGES,
+                Some(i18n::get_language()),
+                SettingsMessage::LanguageChanged
+            )
+            .width(Length::Fill),
+        ]
+        .spacing(SPACING_TIGHT);
+
+        // Input port selection
+        let input_section = column![
+            text(tr!(input_port)).size(TEXT_SIZE_LABEL),
+            pick_list(
+                self.available_inputs.clone(),
+                Some(self.temp_settings.input_port.clone()),
+                SettingsMessage::InputPortChanged
+            )
+            .width(Length::Fill),
+        ]
+        .spacing(SPACING_TIGHT);
+
+        // Output port selections
+        let output_left_section = column![
+            text(tr!(output_left_port)).size(TEXT_SIZE_LABEL),
+            pick_list(
+                self.available_outputs.clone(),
+                Some(self.temp_settings.output_left_port.clone()),
+                SettingsMessage::OutputLeftPortChanged
+            )
+            .width(Length::Fill),
+        ]
+        .spacing(SPACING_TIGHT);
+
+        let output_right_section = column![
+            text(tr!(output_right_port)).size(TEXT_SIZE_LABEL),
+            pick_list(
+                self.available_outputs.clone(),
+                Some(self.temp_settings.output_right_port.clone()),
+                SettingsMessage::OutputRightPortChanged
+            )
+            .width(Length::Fill),
+        ]
+        .spacing(SPACING_TIGHT);
+
+        // Buffer size selection
+        let buffer_sizes = vec![64u32, 128, 256, 512, 1024, 2048, 4096];
+        let buffer_section = column![
+            text(tr!(buffer_size_requested)).size(TEXT_SIZE_LABEL),
+            pick_list(buffer_sizes, Some(self.temp_settings.buffer_size), |x| {
+                SettingsMessage::BufferSizeChanged(x)
+            })
+            .width(Length::Fill),
+        ]
+        .spacing(SPACING_TIGHT);
+
+        // Sample rate selection
+        let sample_rates = vec![44100u32, 48000, 88200, 96000, 176_400, 192_000];
+        let sample_rate_section = column![
+            text(tr!(sample_rate_requested)).size(TEXT_SIZE_LABEL),
+            pick_list(sample_rates, Some(self.temp_settings.sample_rate), |x| {
+                SettingsMessage::SampleRateChanged(x)
+            })
+            .width(Length::Fill),
+        ]
+        .spacing(SPACING_TIGHT);
+
+        let oversampling_factors = vec![1u32, 2, 4, 8, 16];
+        let oversampling_section = column![
+            text(tr!(oversampling_factor)).size(TEXT_SIZE_LABEL),
+            pick_list(
+                oversampling_factors,
+                Some(self.temp_settings.oversampling_factor),
+                SettingsMessage::OversamplingFactorChanged
+            )
+            .width(Length::Fill),
+        ]
+        .spacing(SPACING_TIGHT);
+
+        // Latency display (based on actual JACK values)
+        let latency =
+            (self.jack_status.buffer_size as f32 / self.jack_status.sample_rate as f32) * 1000.0;
+        let latency_text = text(format!(
+            "{} {:.2} {}",
+            tr!(actual_latency),
+            latency,
+            tr!(ms)
+        ))
+        .size(TEXT_SIZE_INFO)
+        .style(|_theme: &iced::Theme| iced::widget::text::Style {
+            color: Some(COLOR_SUBTLE),
+        });
+
+        // Control buttons
+        let controls = row![
+            button(tr!(refresh_ports)).on_press(SettingsMessage::RefreshPorts),
+            space::horizontal(),
+            button(tr!(apply))
+                .on_press(SettingsMessage::Apply)
+                .style(iced::widget::button::success),
+        ]
+        .spacing(SPACING_NORMAL)
+        .width(Length::Fill);
+
+        let dialog_content = column![
+            title_row,
+            rule::horizontal(1),
+            jack_status_section,
+            rule::horizontal(1),
+            row![
+                column![
+                    language_section,
+                    input_section,
+                    output_left_section,
+                    output_right_section,
+                ]
+                .spacing(SPACING_NORMAL)
+                .padding(SPACING_TIGHT),
+                column![
+                    buffer_section,
+                    sample_rate_section,
+                    oversampling_section,
+                    latency_text,
+                    text(tr!(changes_require_restart))
+                        .size(TEXT_SIZE_SMALL)
+                        .style(|_: &iced::Theme| iced::widget::text::Style {
+                            color: Some(COLOR_WARNING),
+                        }),
+                ]
+                .spacing(SPACING_NORMAL)
+                .padding(SPACING_TIGHT),
+            ]
+            .spacing(SPACING_NORMAL)
+            .padding(SPACING_TIGHT),
+            controls,
+        ]
+        .spacing(DIALOG_CONTENT_SPACING)
+        .padding(DIALOG_CONTENT_PADDING)
+        .width(Length::Fill)
+        .height(Length::Fill);
+
+        Some(dialog_container(dialog_content.into()))
+    }
+
+    /// The view containing JACK server status information
+    fn jack_status_view(&self) -> Element<'static, SettingsMessage> {
+        let header = text(tr!(jack_server_status))
+            .size(TEXT_SIZE_SECTION_TITLE)
+            .style(|theme: &iced::Theme| iced::widget::text::Style {
+                color: Some(theme.palette().text),
+            });
+
+        // Check for mismatches between requested and actual
+        let sample_rate_match =
+            self.jack_status.sample_rate == self.temp_settings.sample_rate as usize;
+        let buffer_size_match =
+            self.jack_status.buffer_size == self.temp_settings.buffer_size as usize;
+
+        let sample_rate_color = if sample_rate_match {
+            COLOR_SUCCESS
+        } else {
+            COLOR_WARNING
+        };
+
+        let buffer_size_color = if buffer_size_match {
+            COLOR_SUCCESS
+        } else {
+            COLOR_WARNING
+        };
+
+        let sample_rate_text = if sample_rate_match {
+            format!("{} {}", self.jack_status.sample_rate, tr!(hz))
+        } else {
+            format!(
+                "{} {} ({} {})",
+                self.jack_status.sample_rate,
+                tr!(hz),
+                tr!(requested),
+                self.temp_settings.sample_rate
+            )
+        };
+
+        let buffer_size_text = if buffer_size_match {
+            format!("{} {}", self.jack_status.buffer_size, tr!(samples))
+        } else {
+            format!(
+                "{} {} ({} {})",
+                self.jack_status.buffer_size,
+                tr!(samples),
+                tr!(requested),
+                self.temp_settings.buffer_size
+            )
+        };
+
+        let sample_rate_row = row![
+            text(tr!(sample_rate)).width(Length::Fixed(120.0)),
+            text(sample_rate_text).style(move |_: &iced::Theme| iced::widget::text::Style {
+                color: Some(sample_rate_color),
+            }),
+        ]
+        .spacing(SPACING_NORMAL)
+        .align_y(Alignment::Center);
+
+        let buffer_size_row = row![
+            text(tr!(buffer_size)).width(Length::Fixed(120.0)),
+            text(buffer_size_text).style(move |_: &iced::Theme| iced::widget::text::Style {
+                color: Some(buffer_size_color),
+            }),
+        ]
+        .spacing(SPACING_NORMAL)
+        .align_y(Alignment::Center);
+
+        let warning = if !sample_rate_match || !buffer_size_match {
+            text(tr!(jack_different_settings))
+                .size(TEXT_SIZE_SMALL)
+                .style(|_: &iced::Theme| iced::widget::text::Style {
+                    color: Some(COLOR_WARNING),
+                })
+        } else {
+            text("")
+        };
+
+        dialog_section_container(
+            column![header, sample_rate_row, buffer_size_row, warning,]
+                .spacing(SPACING_NORMAL)
+                .padding(PADDING_NORMAL)
+                .into(),
+        )
+    }
+}
