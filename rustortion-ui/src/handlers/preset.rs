@@ -32,6 +32,19 @@ impl PresetHandler {
         })
     }
 
+    /// Create a read-only preset handler from a pre-loaded list of presets.
+    /// Used by the plugin to serve embedded factory presets without filesystem access.
+    pub fn new_from_presets(presets: Vec<Preset>) -> Self {
+        let available_presets: Vec<String> = presets.iter().map(|p| p.name.clone()).collect();
+        let selected_preset = available_presets.first().cloned();
+        Self {
+            available_presets,
+            preset_manager: Manager::new_from_presets(presets),
+            selected_preset,
+            preset_bar: PresetBar::new(),
+        }
+    }
+
     pub fn handle(
         &mut self,
         message: crate::messages::PresetMessage,
@@ -92,9 +105,9 @@ impl PresetHandler {
         Task::none()
     }
 
-    pub fn view(&self) -> Element<'static, Message> {
+    pub fn view(&self, read_only: bool) -> Element<'static, Message> {
         self.preset_bar
-            .view(self.selected_preset.clone(), self.available_presets.clone())
+            .view(self.selected_preset.clone(), self.available_presets.clone(), read_only)
     }
 
     pub fn get_selected_preset(&self) -> Option<Preset> {
@@ -106,6 +119,11 @@ impl PresetHandler {
 
     pub fn get_available_presets(&self) -> &[String] {
         &self.available_presets
+    }
+
+    pub fn selected_preset_index(&self) -> Option<usize> {
+        let name = self.selected_preset.as_ref()?;
+        self.available_presets.iter().position(|n| n == name)
     }
 
     pub fn get_preset_by_name(&self, name: &str) -> Option<&Preset> {

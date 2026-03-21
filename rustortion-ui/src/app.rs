@@ -65,6 +65,7 @@ impl<B: ParamBackend> SharedApp<B> {
                 self.stages = stages;
                 self.dirty_params.clear();
                 self.update_processor_chain();
+                self.backend.persist_chain_state(&self.stages);
             }
             Message::SetInputFilters(config) => {
                 self.input_filter_config = config;
@@ -88,20 +89,22 @@ impl<B: ParamBackend> SharedApp<B> {
             }
             Message::RebuildTick => self.flush_dirty_params(),
             Message::AddStage => {
+                self.flush_dirty_params();
                 let new_stage = StageConfig::from(self.selected_stage_type);
                 let category = new_stage.category();
                 let insert_idx = self.category_end_index(category);
                 self.stages.insert(insert_idx, new_stage);
                 self.collapsed_stages.insert(insert_idx, false);
-                self.flush_dirty_params();
                 self.backend.add_stage(insert_idx, &self.stages[insert_idx]);
+                self.backend.persist_chain_state(&self.stages);
             }
             Message::RemoveStage(idx) => {
                 if idx < self.stages.len() {
+                    self.flush_dirty_params();
                     self.stages.remove(idx);
                     self.collapsed_stages.remove(idx);
-                    self.flush_dirty_params();
                     self.backend.remove_stage(idx);
+                    self.backend.persist_chain_state(&self.stages);
                 }
             }
             Message::MoveStageUp(idx) => {
@@ -111,10 +114,11 @@ impl<B: ParamBackend> SharedApp<B> {
                         .rev()
                         .find(|&i| self.stages[i].category() == category)
                     {
+                        self.flush_dirty_params();
                         self.stages.swap(prev, idx);
                         self.collapsed_stages.swap(prev, idx);
-                        self.flush_dirty_params();
                         self.backend.swap_stages(prev, idx);
+                        self.backend.persist_chain_state(&self.stages);
                     }
                 }
             }
@@ -124,10 +128,11 @@ impl<B: ParamBackend> SharedApp<B> {
                     if let Some(next) = (idx + 1..self.stages.len())
                         .find(|&i| self.stages[i].category() == category)
                     {
+                        self.flush_dirty_params();
                         self.stages.swap(idx, next);
                         self.collapsed_stages.swap(idx, next);
-                        self.flush_dirty_params();
                         self.backend.swap_stages(idx, next);
+                        self.backend.persist_chain_state(&self.stages);
                     }
                 }
             }
@@ -162,6 +167,7 @@ impl<B: ParamBackend> SharedApp<B> {
                     let new_state = !stage.bypassed();
                     stage.set_bypassed(new_state);
                     self.backend.set_bypass(idx, new_state);
+                    self.backend.persist_chain_state(&self.stages);
                 }
             }
             Message::StageTypeSelected(stage_type) => {
@@ -189,10 +195,12 @@ impl<B: ParamBackend> SharedApp<B> {
                     match apply_stage_config(stage, stage_msg) {
                         Some(ParamUpdate::Changed(name, value)) => {
                             self.dirty_params.insert((idx, name), value);
+                            self.backend.persist_chain_state(&self.stages);
                         }
                         Some(ParamUpdate::NeedsStageRebuild) => {
                             self.flush_dirty_params();
                             self.backend.rebuild_stage(idx, &self.stages[idx]);
+                            self.backend.persist_chain_state(&self.stages);
                         }
                         None => {}
                     }
@@ -213,14 +221,19 @@ impl<B: ParamBackend> SharedApp<B> {
                 }
             }
             Message::Preset(msg) => {
-                return UpdateResult::Handled(self.preset_handler.handle(
+                let task = self.preset_handler.handle(
                     msg,
                     self.stages.clone(),
                     self.ir_cabinet_control.get_selected_ir(),
                     self.ir_cabinet_control.get_gain(),
                     self.pitch_shift_control.get_semitones(),
                     self.input_filter_config,
-                ));
+                );
+                // Notify backend of the new preset index for DAW state persistence
+                if let Some(idx) = self.preset_handler.selected_preset_index() {
+                    self.backend.set_preset_index(idx);
+                }
+                return UpdateResult::Handled(task);
             }
             other => return UpdateResult::Unhandled(other),
         }
@@ -281,7 +294,7 @@ impl<B: ParamBackend> SharedApp<B> {
 
         column![
             header,
-            self.preset_handler.view(),
+            self.preset_handler.view(!self.backend.capabilities().has_preset_management),
             tab_bar,
             tab_content,
             footer,
@@ -619,7 +632,9 @@ impl<B: ParamBackend> SharedApp<B> {
 
     pub fn flush_dirty_params(&mut self) {
         for ((idx, name), value) in self.dirty_params.drain() {
+            self.backend.begin_edit(idx, name);
             self.backend.set_parameter(idx, name, value);
+            self.backend.end_edit(idx, name);
         }
     }
 

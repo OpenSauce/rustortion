@@ -82,6 +82,7 @@ impl PresetBar {
         &self,
         selected_preset: Option<String>,
         available_presets: Vec<String>,
+        read_only: bool,
     ) -> Element<'static, Message> {
         let preset_selector = row![
             text(tr!(preset)).width(Length::Fixed(80.0)),
@@ -92,6 +93,22 @@ impl PresetBar {
         ]
         .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
+
+        if read_only {
+            return container(
+                row![preset_selector,]
+                    .spacing(SPACING_NORMAL)
+                    .align_y(Alignment::Center)
+                    .width(Length::Fill),
+            )
+            .padding(PADDING_NORMAL)
+            .style(|theme: &iced::Theme| {
+                container::Style::default()
+                    .background(theme.palette().background)
+                    .border(iced::Border::default().rounded(BORDER_RADIUS_CARD))
+            })
+            .into();
+        }
 
         if self.show_overwrite_confirmation {
             let confirmation_controls = row![

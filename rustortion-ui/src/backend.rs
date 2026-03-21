@@ -10,6 +10,7 @@ pub struct Capabilities {
     pub has_recorder: bool,
     pub has_midi_config: bool,
     pub has_jack_settings: bool,
+    pub has_preset_management: bool,
 }
 
 impl Capabilities {
@@ -20,6 +21,7 @@ impl Capabilities {
             has_recorder: true,
             has_midi_config: true,
             has_jack_settings: true,
+            has_preset_management: true,
         }
     }
 
@@ -30,6 +32,7 @@ impl Capabilities {
             has_recorder: false,
             has_midi_config: false,
             has_jack_settings: false,
+            has_preset_management: false,
         }
     }
 }
@@ -67,6 +70,7 @@ pub trait ParamBackend: Send + Sync + 'static {
     fn set_input_filter(&self, filter: &InputFilterConfig);
     fn set_pitch_shift(&self, semitones: i32);
     fn set_oversampling(&self, factor: u32);
+    fn set_preset_index(&self, _index: usize) {}
 
     fn sample_rate(&self) -> u32;
     fn oversampling_factor(&self) -> u32;
@@ -75,4 +79,9 @@ pub trait ParamBackend: Send + Sync + 'static {
 
     fn get_available_irs(&self) -> Vec<String>;
     fn get_peak_meter_info(&self) -> Option<ExternalEvent>;
+
+    /// Called by the shared GUI after any stage mutation (add, remove, reorder,
+    /// param change, preset load) so the backend can persist the chain state.
+    /// Default is a no-op (standalone doesn't need this).
+    fn persist_chain_state(&self, _stages: &[StageConfig]) {}
 }
