@@ -240,6 +240,10 @@ impl Plugin for RustortionPlugin {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
+        // Don't open the editor if the engine isn't initialized yet
+        if self.shared.engine_handle.lock().ok()?.is_none() {
+            return None;
+        }
         Some(Box::new(editor::PluginEditor::new(
             self.params.clone(),
             self.shared.clone(),
