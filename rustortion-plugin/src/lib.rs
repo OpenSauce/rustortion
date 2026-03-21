@@ -320,7 +320,9 @@ impl Plugin for RustortionPlugin {
                 if let Ok(mut editor_names) = self.editor_preset_names.lock() {
                     editor_names.clone_from(&names);
                 }
-                let manager = Arc::new(rustortion_core::preset::Manager::new_from_presets(factory_presets));
+                let manager = Arc::new(rustortion_core::preset::Manager::new_from_presets(
+                    factory_presets,
+                ));
                 if let Ok(mut m) = self.shared.preset_manager.lock() {
                     *m = Some(manager);
                 }
@@ -540,7 +542,6 @@ impl Plugin for RustortionPlugin {
         }
     }
 }
-
 
 impl ClapPlugin for RustortionPlugin {
     const CLAP_ID: &'static str = "com.opensauce.rustortion";
