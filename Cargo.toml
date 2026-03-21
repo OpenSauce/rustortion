@@ -1,8 +1,9 @@
 [workspace]
 members = [
     "rustortion-core",
-    "rustortion-gui",
+    "rustortion-standalone",
     "rustortion-plugin",
+    "rustortion-ui",
     "xtask",
 ]
 resolver = "3"

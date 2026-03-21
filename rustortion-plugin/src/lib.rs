@@ -1,18 +1,21 @@
 use nih_plug::prelude::*;
-use nih_plug_iced::IcedState;
 use rustortion_core::audio::engine::{Engine, EngineHandle};
 use rustortion_core::ir::loader::IrLoader;
 use std::sync::atomic::{AtomicU8, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
+mod backend;
 mod editor;
+pub mod params;
+
+use params::RustortionParams;
 
 enum PluginTask {
     LoadPreset(String),
     ChangeOversampling(u8),
 }
 
-struct SharedState {
+pub(crate) struct SharedState {
     engine_handle: Mutex<Option<EngineHandle>>,
     ir_loader: Mutex<Option<Arc<IrLoader>>>,
     preset_manager: Mutex<Option<Arc<rustortion_core::preset::Manager>>>,
@@ -36,21 +39,6 @@ struct RustortionPlugin {
     active_oversampling: u8,
     input_buf: Vec<f32>,
     output_buf: Vec<f32>,
-}
-
-#[derive(Params)]
-struct RustortionParams {
-    #[persist = "editor-state"]
-    editor_state: Arc<IcedState>,
-
-    #[id = "output_level"]
-    output_level: FloatParam,
-
-    #[id = "ir_gain"]
-    ir_gain: FloatParam,
-
-    #[persist = "oversampling"]
-    oversampling_idx: Arc<AtomicU8>,
 }
 
 impl Default for RustortionPlugin {
@@ -77,41 +65,6 @@ impl Default for RustortionPlugin {
             active_oversampling: 1, // 1 = 2x
             input_buf: Vec::new(),
             output_buf: Vec::new(),
-        }
-    }
-}
-
-impl Default for RustortionParams {
-    fn default() -> Self {
-        Self {
-            editor_state: editor::default_state(),
-            output_level: FloatParam::new(
-                "Output Level",
-                util::db_to_gain(0.0),
-                FloatRange::Skewed {
-                    min: util::db_to_gain(-30.0),
-                    max: util::db_to_gain(12.0),
-                    factor: FloatRange::gain_skew_factor(-30.0, 12.0),
-                },
-            )
-            .with_smoother(SmoothingStyle::Logarithmic(50.0))
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            ir_gain: FloatParam::new(
-                "Cabinet Level",
-                util::db_to_gain(-20.0),
-                FloatRange::Skewed {
-                    min: util::db_to_gain(-30.0),
-                    max: util::db_to_gain(6.0),
-                    factor: FloatRange::gain_skew_factor(-30.0, 6.0),
-                },
-            )
-            .with_smoother(SmoothingStyle::Logarithmic(50.0))
-            .with_unit(" dB")
-            .with_value_to_string(formatters::v2s_f32_gain_to_db(2))
-            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
-            oversampling_idx: Arc::new(AtomicU8::new(1)), // 1 = 2x oversampling
         }
     }
 }
@@ -285,13 +238,10 @@ impl Plugin for RustortionPlugin {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        editor::create(
+        Some(Box::new(editor::PluginEditor::new(
             self.params.clone(),
-            self.params.editor_state.clone(),
-            self.editor_preset_names.clone(),
-            self.current_preset_idx.clone(),
-            self.params.oversampling_idx.clone(),
-        )
+            self.shared.clone(),
+        )))
     }
 
     fn initialize(

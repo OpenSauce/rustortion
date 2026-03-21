@@ -1,226 +1,229 @@
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 
 use nih_plug::prelude::{Editor, GuiContext};
-use nih_plug_iced::widgets as nih_widgets;
-use nih_plug_iced::{
-    Alignment, Button, Column, Command, Element, IcedEditor, IcedState, Length, Row, Text,
-    WindowQueue, alignment, button, create_iced_editor, executor,
-};
 
-use crate::RustortionParams;
+use crate::SharedState;
+use crate::backend::PluginBackend;
+use crate::params::RustortionParams;
 
-const fn oversampling_label(idx: u8) -> &'static str {
-    match idx {
-        0 => "1x",
-        2 => "4x",
-        3 => "8x",
-        4 => "16x",
-        _ => "2x",
-    }
-}
+use rustortion_ui::app::{SharedApp, UpdateResult};
+use rustortion_ui::backend::ParamBackend;
+use rustortion_ui::components::ir_cabinet_control::IrCabinetControl;
+use rustortion_ui::components::peak_meter::PeakMeterDisplay;
+use rustortion_ui::components::pitch_shift_control::PitchShiftControl;
+use rustortion_ui::handlers::hotkey::HotkeyHandler;
+use rustortion_ui::handlers::preset::PresetHandler;
+use rustortion_ui::hotkey::HotkeySettings;
+use rustortion_ui::messages::Message;
+use rustortion_ui::stages::StageType;
+use rustortion_ui::tabs::Tab;
 
-pub fn default_state() -> Arc<IcedState> {
-    IcedState::from_size(400, 300)
-}
+// ---------------------------------------------------------------------------
+// Send wrapper for iced_baseview::WindowHandle
+// ---------------------------------------------------------------------------
 
-pub fn create(
+/// Wrapper around `iced_baseview::WindowHandle` to satisfy nih-plug's
+/// `Box<dyn Any + Send>` requirement for `Editor::spawn`. The window handle
+/// contains raw pointers (X11 window ID, etc.) that are not `Send` by default,
+/// but in practice the handle is only held as a drop guard by the host and is
+/// never moved across threads.
+struct SendWindowHandle<M: 'static + Send>(
+    #[allow(dead_code)] iced_baseview::window::WindowHandle<M>,
+);
+
+// SAFETY: The WindowHandle is only stored as a drop guard. The raw pointers it
+// contains (X11 display, etc.) are not accessed from other threads.
+#[allow(clippy::non_send_fields_in_send_ty)]
+unsafe impl<M: 'static + Send> Send for SendWindowHandle<M> {}
+
+// ---------------------------------------------------------------------------
+// nih-plug Editor implementation
+// ---------------------------------------------------------------------------
+
+pub struct PluginEditor {
     params: Arc<RustortionParams>,
-    editor_state: Arc<IcedState>,
-    preset_names: Arc<Mutex<Vec<String>>>,
-    current_preset_idx: Arc<AtomicUsize>,
-    oversampling_idx: Arc<AtomicU8>,
-) -> Option<Box<dyn Editor>> {
-    create_iced_editor::<RustortionEditor>(
-        editor_state,
-        (params, preset_names, current_preset_idx, oversampling_idx),
-    )
+    shared_state: Arc<SharedState>,
 }
 
-struct RustortionEditor {
-    params: Arc<RustortionParams>,
-    context: Arc<dyn GuiContext>,
-    preset_names: Arc<Mutex<Vec<String>>>,
-    current_preset_idx: Arc<AtomicUsize>,
-    oversampling_idx: Arc<AtomicU8>,
-
-    output_slider_state: nih_widgets::param_slider::State,
-    ir_gain_slider_state: nih_widgets::param_slider::State,
-    prev_button_state: button::State,
-    next_button_state: button::State,
-    os_prev_button_state: button::State,
-    os_next_button_state: button::State,
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Message {
-    ParamUpdate(nih_widgets::ParamMessage),
-    PrevPreset,
-    NextPreset,
-    PrevOversampling,
-    NextOversampling,
-}
-
-impl IcedEditor for RustortionEditor {
-    type Executor = executor::Default;
-    type Message = Message;
-    type InitializationFlags = (
-        Arc<RustortionParams>,
-        Arc<Mutex<Vec<String>>>,
-        Arc<AtomicUsize>,
-        Arc<AtomicU8>,
-    );
-
-    fn new(
-        (params, preset_names, current_preset_idx, oversampling_idx): Self::InitializationFlags,
-        context: Arc<dyn GuiContext>,
-    ) -> (Self, Command<Self::Message>) {
-        let editor = Self {
+impl PluginEditor {
+    pub const fn new(params: Arc<RustortionParams>, shared_state: Arc<SharedState>) -> Self {
+        Self {
             params,
-            context,
-            preset_names,
-            current_preset_idx,
-            oversampling_idx,
-            output_slider_state: nih_widgets::param_slider::State::default(),
-            ir_gain_slider_state: nih_widgets::param_slider::State::default(),
-            prev_button_state: button::State::default(),
-            next_button_state: button::State::default(),
-            os_prev_button_state: button::State::default(),
-            os_next_button_state: button::State::default(),
-        };
-        (editor, Command::none())
-    }
-
-    fn context(&self) -> &dyn GuiContext {
-        self.context.as_ref()
-    }
-
-    fn update(
-        &mut self,
-        _window: &mut WindowQueue,
-        message: Self::Message,
-    ) -> Command<Self::Message> {
-        match message {
-            Message::ParamUpdate(msg) => self.handle_param_message(msg),
-            Message::PrevPreset => {
-                let idx = self.current_preset_idx.load(Ordering::Relaxed);
-                if idx > 0 {
-                    self.current_preset_idx.store(idx - 1, Ordering::Relaxed);
-                }
-            }
-            Message::NextPreset => {
-                let idx = self.current_preset_idx.load(Ordering::Relaxed);
-                let len = self.preset_names.lock().map_or(0, |n| n.len());
-                if idx + 1 < len {
-                    self.current_preset_idx.store(idx + 1, Ordering::Relaxed);
-                }
-            }
-            Message::PrevOversampling => {
-                let idx = self.oversampling_idx.load(Ordering::Relaxed);
-                if idx > 0 {
-                    self.oversampling_idx.store(idx - 1, Ordering::Relaxed);
-                }
-            }
-            Message::NextOversampling => {
-                let idx = self.oversampling_idx.load(Ordering::Relaxed);
-                if idx < 4 {
-                    self.oversampling_idx.store(idx + 1, Ordering::Relaxed);
-                }
-            }
+            shared_state,
         }
-        Command::none()
     }
+}
 
-    fn view(&mut self) -> Element<'_, Self::Message> {
-        let idx = self.current_preset_idx.load(Ordering::Relaxed);
-        let preset_name_owned = self
-            .preset_names
+impl Editor for PluginEditor {
+    fn spawn(
+        &self,
+        parent: nih_plug::editor::ParentWindowHandle,
+        context: Arc<dyn GuiContext>,
+    ) -> Box<dyn std::any::Any + Send> {
+        // Gather engine state for the backend
+        let engine_handle = self
+            .shared_state
+            .engine_handle
             .lock()
             .ok()
-            .and_then(|n| n.get(idx).cloned());
-        let preset_name = preset_name_owned.as_deref().unwrap_or("No Preset");
+            .and_then(|g| g.clone());
+        let ir_loader = self
+            .shared_state
+            .ir_loader
+            .lock()
+            .ok()
+            .and_then(|g| g.clone());
+        let sample_rate = f32::from_bits(
+            self.shared_state
+                .sample_rate
+                .load(std::sync::atomic::Ordering::Relaxed),
+        );
+        let os_idx = self
+            .shared_state
+            .oversampling_idx
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let oversampling_factor = 2_u32.pow(u32::from(os_idx));
 
-        Column::new()
-            .align_items(Alignment::Center)
-            .padding(20)
-            .spacing(10)
-            .push(
-                Text::new("Rustortion")
-                    .size(30)
-                    .width(Length::Fill)
-                    .horizontal_alignment(alignment::Horizontal::Center),
-            )
-            .push(
-                Row::new()
-                    .spacing(10)
-                    .align_items(Alignment::Center)
-                    .push(
-                        Button::new(&mut self.prev_button_state, Text::new("<").size(16))
-                            .on_press(Message::PrevPreset),
-                    )
-                    .push(
-                        Text::new(preset_name)
-                            .size(18)
-                            .horizontal_alignment(alignment::Horizontal::Center),
-                    )
-                    .push(
-                        Button::new(&mut self.next_button_state, Text::new(">").size(16))
-                            .on_press(Message::NextPreset),
-                    ),
-            )
-            .push(
-                Text::new("Output Level")
-                    .size(14)
-                    .width(Length::Fill)
-                    .horizontal_alignment(alignment::Horizontal::Center),
-            )
-            .push(
-                nih_widgets::ParamSlider::new(
-                    &mut self.output_slider_state,
-                    &self.params.output_level,
-                )
-                .map(Message::ParamUpdate),
-            )
-            .push(
-                Text::new("Cabinet Level")
-                    .size(14)
-                    .width(Length::Fill)
-                    .horizontal_alignment(alignment::Horizontal::Center),
-            )
-            .push(
-                nih_widgets::ParamSlider::new(&mut self.ir_gain_slider_state, &self.params.ir_gain)
-                    .map(Message::ParamUpdate),
-            )
-            .push(
-                Row::new()
-                    .spacing(10)
-                    .align_items(Alignment::Center)
-                    .push(Text::new("Oversampling").size(14))
-                    .push(
-                        Button::new(&mut self.os_prev_button_state, Text::new("<").size(14))
-                            .on_press(Message::PrevOversampling),
-                    )
-                    .push(
-                        Text::new(oversampling_label(
-                            self.oversampling_idx.load(Ordering::Relaxed),
-                        ))
-                        .size(16),
-                    )
-                    .push(
-                        Button::new(&mut self.os_next_button_state, Text::new(">").size(14))
-                            .on_press(Message::NextOversampling),
-                    ),
-            )
-            .into()
+        let flags = PluginAppFlags {
+            params: self.params.clone(),
+            context,
+            engine_handle,
+            ir_loader,
+            sample_rate,
+            oversampling_factor,
+        };
+
+        let settings = iced_baseview::Settings {
+            window: iced_baseview::baseview::WindowOpenOptions {
+                title: String::from("Rustortion"),
+                size: iced_baseview::baseview::Size::new(900.0, 700.0),
+                scale: iced_baseview::baseview::WindowScalePolicy::SystemScaleFactor,
+            },
+            graphics_settings: iced_baseview::graphics::Settings::default(),
+            iced_baseview: iced_baseview::settings::IcedBaseviewSettings::default(),
+            ..Default::default()
+        };
+
+        let handle = iced_baseview::open_parented::<PluginApp, _>(&parent, flags, settings);
+
+        Box::new(SendWindowHandle(handle))
     }
 
-    fn background_color(&self) -> nih_plug_iced::Color {
-        nih_plug_iced::Color {
-            r: 0.15,
-            g: 0.15,
-            b: 0.15,
-            a: 1.0,
+    fn size(&self) -> (u32, u32) {
+        (900, 700)
+    }
+
+    fn set_scale_factor(&self, _factor: f32) -> bool {
+        // We use SystemScaleFactor from baseview; accept but don't
+        // manually resize.
+        true
+    }
+
+    fn param_value_changed(&self, _id: &str, _normalized_value: f32) {
+        // SharedApp reads parameter values on each view(); no explicit
+        // notification plumbing needed.
+    }
+
+    fn param_modulation_changed(&self, _id: &str, _modulation_offset: f32) {}
+
+    fn param_values_changed(&self) {}
+}
+
+// ---------------------------------------------------------------------------
+// iced_baseview Application
+// ---------------------------------------------------------------------------
+
+struct PluginAppFlags {
+    params: Arc<RustortionParams>,
+    context: Arc<dyn GuiContext>,
+    engine_handle: Option<rustortion_core::audio::engine::EngineHandle>,
+    ir_loader: Option<Arc<rustortion_core::ir::loader::IrLoader>>,
+    sample_rate: f32,
+    oversampling_factor: u32,
+}
+
+struct PluginApp {
+    shared: SharedApp<PluginBackend>,
+}
+
+impl iced_baseview::Application for PluginApp {
+    type Message = Message;
+    type Theme = iced_baseview::Theme;
+    type Executor = iced_baseview::executor::Default;
+    type Flags = PluginAppFlags;
+
+    fn new(flags: Self::Flags) -> (Self, iced_baseview::Task<Self::Message>) {
+        let engine_handle = flags.engine_handle.expect(
+            "PluginApp::new called without an engine handle; \
+             the plugin must be initialized before the editor opens",
+        );
+
+        let backend = PluginBackend::new(
+            engine_handle,
+            flags.params,
+            flags.context,
+            flags.ir_loader,
+            flags.sample_rate,
+            flags.oversampling_factor,
+        );
+
+        let available_irs = backend.get_available_irs();
+
+        let preset_dir = dirs::config_dir()
+            .unwrap_or_default()
+            .join("rustortion")
+            .join("presets");
+        let preset_handler = PresetHandler::new(&preset_dir)
+            .unwrap_or_else(|_| PresetHandler::new("/dev/null").unwrap());
+
+        let mut ir_cabinet = IrCabinetControl::default();
+        ir_cabinet.set_available_irs(available_irs);
+
+        let shared = SharedApp {
+            backend,
+            stages: Vec::new(),
+            collapsed_stages: Vec::new(),
+            dirty_params: HashMap::new(),
+            active_tab: Tab::Amp,
+            selected_stage_type: StageType::ALL.first().copied().unwrap_or(StageType::Preamp),
+            ir_cabinet_control: ir_cabinet,
+            pitch_shift_control: PitchShiftControl::new(0),
+            preset_handler,
+            peak_meter_display: PeakMeterDisplay::default(),
+            hotkey_handler: HotkeyHandler::new(HotkeySettings::default()),
+            input_filter_config: rustortion_core::preset::InputFilterConfig::default(),
+            is_recording: false,
+        };
+
+        (Self { shared }, iced_baseview::Task::none())
+    }
+
+    fn update(&mut self, message: Self::Message) -> iced_baseview::Task<Self::Message> {
+        match self.shared.update(message) {
+            UpdateResult::Handled(task) => task,
+            UpdateResult::Unhandled(_msg) => {
+                // Standalone-only messages (Settings, Midi, Tuner, Recording)
+                // are silently dropped in plugin mode.
+                iced_baseview::Task::none()
+            }
         }
+    }
+
+    fn view(
+        &self,
+    ) -> iced_baseview::Element<'_, Self::Message, Self::Theme, iced_baseview::Renderer> {
+        self.shared.view()
+    }
+
+    fn theme(&self) -> Self::Theme {
+        iced_baseview::Theme::TokyoNight
+    }
+
+    fn subscription(
+        &self,
+        _window_subs: &mut iced_baseview::WindowSubs<Self::Message>,
+    ) -> iced_baseview::futures::Subscription<Self::Message> {
+        self.shared.subscription()
     }
 }
