@@ -106,8 +106,11 @@ impl PresetHandler {
     }
 
     pub fn view(&self, read_only: bool) -> Element<'static, Message> {
-        self.preset_bar
-            .view(self.selected_preset.clone(), self.available_presets.clone(), read_only)
+        self.preset_bar.view(
+            self.selected_preset.clone(),
+            self.available_presets.clone(),
+            read_only,
+        )
     }
 
     pub fn get_selected_preset(&self) -> Option<Preset> {

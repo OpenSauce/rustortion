@@ -294,7 +294,8 @@ impl<B: ParamBackend> SharedApp<B> {
 
         column![
             header,
-            self.preset_handler.view(!self.backend.capabilities().has_preset_management),
+            self.preset_handler
+                .view(!self.backend.capabilities().has_preset_management),
             tab_bar,
             tab_content,
             footer,
