@@ -4,17 +4,14 @@ use rustortion_core::preset::Preset;
 #[derive(RustEmbed)]
 #[folder = "../presets/"]
 #[include = "*.json"]
-#[allow(dead_code)]
 struct FactoryPresets;
 
 #[derive(RustEmbed)]
 #[folder = "../impulse_responses/"]
 #[include = "*.wav"]
-#[allow(dead_code)]
 struct FactoryIrs;
 
 /// Parse all embedded factory presets, sorted by name.
-#[allow(dead_code)]
 pub fn load_factory_presets() -> Vec<Preset> {
     let mut presets: Vec<Preset> = FactoryPresets::iter()
         .filter_map(|filename| {
@@ -31,7 +28,6 @@ pub fn load_factory_presets() -> Vec<Preset> {
 }
 
 /// List all embedded IR names (relative paths with `/` separators).
-#[allow(dead_code)]
 pub fn factory_ir_names() -> Vec<String> {
     let mut names: Vec<String> = FactoryIrs::iter().map(|f| f.to_string()).collect();
     names.sort();
@@ -39,7 +35,6 @@ pub fn factory_ir_names() -> Vec<String> {
 }
 
 /// Get the raw bytes of an embedded IR file.
-#[allow(dead_code)]
 pub fn get_factory_ir(name: &str) -> Option<Vec<u8>> {
     FactoryIrs::get(name).map(|f| f.data.to_vec())
 }
