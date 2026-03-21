@@ -305,32 +305,16 @@ impl Plugin for RustortionPlugin {
                     Err(e) => nih_log!("Failed to init IR loader: {e}"),
                 }
 
-                // Load presets
-                let preset_dir = dirs::config_dir().map_or_else(
-                    || {
-                        nih_log!("Could not determine config directory; preset loading may fail");
-                        std::path::PathBuf::from("rustortion").join("presets")
-                    },
-                    |dir| dir.join("rustortion").join("presets"),
-                );
-
-                match rustortion_core::preset::Manager::new(&preset_dir) {
-                    Ok(manager) => {
-                        let names: Vec<String> = manager
-                            .get_presets()
-                            .iter()
-                            .map(|p| p.name.clone())
-                            .collect();
-                        self.preset_names.clone_from(&names);
-                        if let Ok(mut editor_names) = self.editor_preset_names.lock() {
-                            editor_names.clone_from(&names);
-                        }
-                        let manager = Arc::new(manager);
-                        if let Ok(mut m) = self.shared.preset_manager.lock() {
-                            *m = Some(manager);
-                        }
-                    }
-                    Err(e) => nih_log!("Failed to load presets: {e}"),
+                // Load factory presets (embedded in binary)
+                let factory_presets = factory::load_factory_presets();
+                let names: Vec<String> = factory_presets.iter().map(|p| p.name.clone()).collect();
+                self.preset_names.clone_from(&names);
+                if let Ok(mut editor_names) = self.editor_preset_names.lock() {
+                    editor_names.clone_from(&names);
+                }
+                let manager = Arc::new(rustortion_core::preset::Manager::new_from_presets(factory_presets));
+                if let Ok(mut m) = self.shared.preset_manager.lock() {
+                    *m = Some(manager);
                 }
 
                 // Pre-allocate audio buffers

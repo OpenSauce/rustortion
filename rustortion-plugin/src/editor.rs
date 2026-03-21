@@ -85,13 +85,17 @@ impl Editor for PluginEditor {
             .load(std::sync::atomic::Ordering::Relaxed);
         let oversampling_factor = 2_u32.pow(u32::from(os_idx));
 
+        let restored_preset_idx = self.params.preset_idx.value();
+
         let flags = PluginAppFlags {
             params: self.params.clone(),
             context,
+            shared_state: self.shared_state.clone(),
             engine_handle,
             ir_loader,
             sample_rate,
             oversampling_factor,
+            restored_preset_idx,
         };
 
         let settings = iced_baseview::Settings {
@@ -137,10 +141,12 @@ impl Editor for PluginEditor {
 struct PluginAppFlags {
     params: Arc<RustortionParams>,
     context: Arc<dyn GuiContext>,
+    shared_state: Arc<crate::SharedState>,
     engine_handle: Option<rustortion_core::audio::engine::EngineHandle>,
     ir_loader: Option<Arc<rustortion_core::ir::loader::IrLoader>>,
     sample_rate: f32,
     oversampling_factor: u32,
+    restored_preset_idx: i32,
 }
 
 struct PluginApp {
@@ -164,21 +170,44 @@ impl iced_baseview::Application for PluginApp {
             flags.params,
             flags.context,
             flags.ir_loader,
+            flags.shared_state.clone(),
             flags.sample_rate,
             flags.oversampling_factor,
         );
 
         let available_irs = backend.get_available_irs();
 
-        let preset_dir = dirs::config_dir()
-            .unwrap_or_default()
-            .join("rustortion")
-            .join("presets");
-        let preset_handler = PresetHandler::new(&preset_dir)
-            .unwrap_or_else(|_| PresetHandler::new("/dev/null").unwrap());
+        let factory_presets = crate::factory::load_factory_presets();
+        let mut preset_handler = PresetHandler::new_from_presets(factory_presets);
 
         let mut ir_cabinet = IrCabinetControl::default();
         ir_cabinet.set_available_irs(available_irs);
+
+        // Check if we have previously stored stages (from a prior editor session
+        // or from DAW-persisted chain state). If so, restore them directly instead
+        // of reloading from the preset file on disk.
+        let stored_stages = flags
+            .shared_state
+            .take_gui_stages()
+            .or_else(|| backend.persisted_chain_state());
+
+        // Determine which preset to load on editor open.
+        // If DAW restored a saved preset index, use that; otherwise use the first preset.
+        #[allow(clippy::cast_sign_loss)]
+        let initial_preset_name = if flags.restored_preset_idx >= 0 {
+            let idx = flags.restored_preset_idx as usize;
+            preset_handler.get_available_presets().get(idx).cloned()
+        } else {
+            preset_handler.get_available_presets().first().cloned()
+        };
+
+        // If we have stored stages, pre-select the preset in the handler
+        // (for display) without reloading its stages from disk.
+        if stored_stages.is_some()
+            && let Some(name) = &initial_preset_name
+        {
+            preset_handler.load_preset_by_name(name);
+        }
 
         let shared = SharedApp {
             backend,
@@ -196,7 +225,20 @@ impl iced_baseview::Application for PluginApp {
             is_recording: false,
         };
 
-        (Self { shared }, iced_baseview::Task::none())
+        // If we have stored stages, restore them directly.
+        // Otherwise, fire a preset select to load from disk.
+        let init_task = stored_stages.map_or_else(
+            || {
+                initial_preset_name.map_or_else(iced_baseview::Task::none, |name| {
+                    iced_baseview::Task::done(Message::Preset(
+                        rustortion_ui::messages::PresetMessage::Select(name),
+                    ))
+                })
+            },
+            |stages| iced_baseview::Task::done(Message::SetStages(stages)),
+        );
+
+        (Self { shared }, init_task)
     }
 
     fn update(&mut self, message: Self::Message) -> iced_baseview::Task<Self::Message> {
