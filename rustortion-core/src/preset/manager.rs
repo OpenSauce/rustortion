@@ -24,6 +24,15 @@ impl Manager {
         Ok(manager)
     }
 
+    /// Create a manager from an in-memory list of presets (no filesystem).
+    /// Save/delete operations will return errors.
+    pub fn new_from_presets(presets: Vec<Preset>) -> Self {
+        Self {
+            presets_dir: PathBuf::new(),
+            presets,
+        }
+    }
+
     pub fn load_presets(&mut self) -> Result<()> {
         self.presets.clear();
 
