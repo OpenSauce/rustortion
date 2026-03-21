@@ -26,6 +26,7 @@ impl Manager {
 
     /// Create a manager from an in-memory list of presets (no filesystem).
     /// Save/delete operations will return errors.
+    #[allow(clippy::missing_const_for_fn)] // Vec::new() is not const-stable
     pub fn new_from_presets(presets: Vec<Preset>) -> Self {
         Self {
             presets_dir: PathBuf::new(),

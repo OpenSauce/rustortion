@@ -14,3 +14,5 @@ iced_baseview = { git = "https://github.com/OpenSauce/iced_baseview.git" }
 crossbeam = "0.8"
 log = "0.4"
 dirs = "6"
+rust-embed = { version = "8", features = ["include-exclude"] }
+serde_json = "1.0"
