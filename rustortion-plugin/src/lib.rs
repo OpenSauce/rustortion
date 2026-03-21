@@ -121,7 +121,11 @@ fn do_load_preset(
     // Load IR if specified
     if let Some(ir_name) = &preset.ir_name {
         if let Some(loader) = ir_loader {
-            ir_helper::load_and_set_ir(handle, loader, ir_name, sample_rate);
+            if let Some(bytes) = factory::get_factory_ir(ir_name) {
+                ir_helper::load_and_set_ir_from_bytes(handle, loader, ir_name, &bytes, sample_rate);
+            } else {
+                ir_helper::load_and_set_ir(handle, loader, ir_name, sample_rate);
+            }
         }
     } else {
         handle.clear_ir();
@@ -293,8 +297,12 @@ impl Plugin for RustortionPlugin {
                     *h = Some(handle);
                 }
 
-                // Initialize IR loader
-                let ir_dir = find_ir_directory();
+                // Initialize IR loader — used for WAV decoding (resampling, normalization).
+                // Factory IRs are embedded; this also supports user IRs from ~/.config.
+                let ir_dir = dirs::config_dir()
+                    .unwrap_or_default()
+                    .join("rustortion")
+                    .join("impulse_responses");
                 match IrLoader::new(&ir_dir, sample_rate) {
                     Ok(loader) => {
                         let loader = Arc::new(loader);
@@ -367,12 +375,22 @@ impl Plugin for RustortionPlugin {
                                 let loader =
                                     self.shared.ir_loader.lock().ok().and_then(|g| g.clone());
                                 if let Some(loader) = &loader {
-                                    ir_helper::load_and_set_ir(
-                                        handle,
-                                        loader,
-                                        ir_name,
-                                        self.sample_rate,
-                                    );
+                                    if let Some(bytes) = factory::get_factory_ir(ir_name) {
+                                        ir_helper::load_and_set_ir_from_bytes(
+                                            handle,
+                                            loader,
+                                            ir_name,
+                                            &bytes,
+                                            self.sample_rate,
+                                        );
+                                    } else {
+                                        ir_helper::load_and_set_ir(
+                                            handle,
+                                            loader,
+                                            ir_name,
+                                            self.sample_rate,
+                                        );
+                                    }
                                 }
                             }
                             handle.set_ir_gain(preset.ir_gain);
@@ -523,34 +541,6 @@ impl Plugin for RustortionPlugin {
     }
 }
 
-fn find_ir_directory() -> std::path::PathBuf {
-    // Check env var
-    if let Ok(path) = std::env::var("RUSTORTION_IR_PATH") {
-        let p = std::path::PathBuf::from(path);
-        if p.exists() {
-            return p;
-        }
-    }
-    // Check ~/.config/rustortion/impulse_responses/
-    if let Some(config) = dirs::config_dir() {
-        let p = config.join("rustortion").join("impulse_responses");
-        if p.exists() {
-            return p;
-        }
-    }
-    // Check next to executable
-    if let Ok(exe) = std::env::current_exe() {
-        let bundled = exe.parent().map(|p| p.join("impulse_responses"));
-        if bundled.as_ref().is_some_and(|p| p.exists()) {
-            return bundled.unwrap();
-        }
-    }
-    // Fallback
-    dirs::config_dir()
-        .unwrap_or_default()
-        .join("rustortion")
-        .join("impulse_responses")
-}
 
 impl ClapPlugin for RustortionPlugin {
     const CLAP_ID: &'static str = "com.opensauce.rustortion";

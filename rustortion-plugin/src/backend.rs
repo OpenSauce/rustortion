@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use nih_plug::prelude::GuiContext;
+use nih_plug::prelude::{GuiContext, Param};
 use rustortion_core::amp::chain::AmplifierChain;
 use rustortion_core::amp::stages::Stage;
 use rustortion_core::amp::stages::filter::{FilterStage, FilterType};
@@ -10,13 +10,14 @@ use rustortion_core::preset::InputFilterConfig;
 use rustortion_core::preset::stage_config::StageConfig;
 use rustortion_ui::backend::{Capabilities, ExternalEvent, ParamBackend};
 
+use crate::SharedState;
 use crate::params::RustortionParams;
-
 pub struct PluginBackend {
     engine_handle: EngineHandle,
     params: Arc<RustortionParams>,
     context: Arc<dyn GuiContext>,
     ir_loader: Option<Arc<IrLoader>>,
+    shared_state: Arc<SharedState>,
     capabilities: Capabilities,
     sample_rate: f32,
     oversampling_factor: u32,
@@ -28,6 +29,7 @@ impl PluginBackend {
         params: Arc<RustortionParams>,
         context: Arc<dyn GuiContext>,
         ir_loader: Option<Arc<IrLoader>>,
+        shared_state: Arc<SharedState>,
         sample_rate: f32,
         oversampling_factor: u32,
     ) -> Self {
@@ -36,15 +38,33 @@ impl PluginBackend {
             params,
             context,
             ir_loader,
+            shared_state,
             capabilities: Capabilities::plugin(),
             sample_rate,
             oversampling_factor,
         }
     }
 
+    /// Read DAW-persisted chain state (from `#[persist]` field).
+    pub fn persisted_chain_state(&self) -> Option<Vec<StageConfig>> {
+        self.params.chain_state.lock().ok()?.clone()
+    }
+
     #[allow(clippy::cast_precision_loss)]
     fn effective_sample_rate(&self) -> f32 {
         self.sample_rate * self.oversampling_factor as f32
+    }
+
+    /// Notify the host that a parameter value changed from the GUI.
+    /// SAFETY: `ptr` must be a valid `ParamPtr` from one of our `RustortionParams` fields.
+    fn notify_host_param_changed(&self, ptr: nih_plug::prelude::ParamPtr, normalized: f32) {
+        // SAFETY: The ParamPtr comes from our own params struct and is valid for the
+        // lifetime of the plugin. The raw_* methods require that the pointer is valid.
+        unsafe {
+            self.context.raw_begin_set_parameter(ptr);
+            self.context.raw_set_parameter_normalized(ptr, normalized);
+            self.context.raw_end_set_parameter(ptr);
+        }
     }
 }
 
@@ -95,38 +115,31 @@ impl ParamBackend for PluginBackend {
         let Some(loader) = &self.ir_loader else {
             return;
         };
-        match loader.load_by_name(name) {
-            Ok(ir_samples) => {
-                // Truncate IR to 35ms for cab sim (no room reverb tail)
-                #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                let max_ir_len = (self.sample_rate * 35.0 / 1000.0) as usize;
-                let truncated_len = ir_samples.len().min(max_ir_len);
-                let mut convolver =
-                    rustortion_core::ir::convolver::Convolver::new_fir(truncated_len);
-                if let Err(e) = convolver.set_ir(&ir_samples[..truncated_len]) {
-                    log::error!("Failed to set IR: {e}");
-                } else {
-                    self.engine_handle.swap_ir_convolver(
-                        rustortion_core::audio::engine::PreparedIr {
-                            name: name.to_string(),
-                            convolver,
-                        },
-                    );
-                }
-            }
-            Err(e) => log::error!("Failed to load IR '{name}': {e}"),
+        // Try embedded factory IR first
+        if let Some(bytes) = crate::factory::get_factory_ir(name) {
+            crate::ir_helper::load_and_set_ir_from_bytes(
+                &self.engine_handle,
+                loader,
+                name,
+                &bytes,
+                self.sample_rate,
+            );
+        } else {
+            // Fall back to filesystem (user-added IRs)
+            crate::ir_helper::load_and_set_ir(&self.engine_handle, loader, name, self.sample_rate);
         }
     }
 
     fn set_ir_bypass(&self, bypassed: bool) {
         self.engine_handle.set_ir_bypass(bypassed);
+        let param = &self.params.ir_bypass;
+        self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(bypassed));
     }
 
     fn set_ir_gain(&self, gain: f32) {
         self.engine_handle.set_ir_gain(gain);
-        // Also update the nih-plug parameter for DAW automation
-        let _ = &self.params;
-        let _ = &self.context;
+        let param = &self.params.ir_gain;
+        self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(gain));
     }
 
     fn set_input_filter(&self, filter: &InputFilterConfig) {
@@ -149,10 +162,29 @@ impl ParamBackend for PluginBackend {
             None
         };
         self.engine_handle.set_input_filters(hp, lp);
+
+        // Sync filter params to host
+        let p = &self.params.hp_enabled;
+        self.notify_host_param_changed(p.as_ptr(), p.preview_normalized(filter.hp_enabled));
+        let p = &self.params.hp_cutoff;
+        self.notify_host_param_changed(p.as_ptr(), p.preview_normalized(filter.hp_cutoff));
+        let p = &self.params.lp_enabled;
+        self.notify_host_param_changed(p.as_ptr(), p.preview_normalized(filter.lp_enabled));
+        let p = &self.params.lp_cutoff;
+        self.notify_host_param_changed(p.as_ptr(), p.preview_normalized(filter.lp_cutoff));
     }
 
     fn set_pitch_shift(&self, semitones: i32) {
         self.engine_handle.set_pitch_shift(semitones);
+        let param = &self.params.pitch_shift;
+        self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(semitones));
+    }
+
+    fn set_preset_index(&self, index: usize) {
+        let param = &self.params.preset_idx;
+        #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+        let idx = index as i32;
+        self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(idx));
     }
 
     fn set_oversampling(&self, _factor: u32) {
@@ -176,14 +208,36 @@ impl ParamBackend for PluginBackend {
     }
 
     fn get_available_irs(&self) -> Vec<String> {
-        self.ir_loader
-            .as_ref()
-            .map_or_else(Vec::new, |loader| loader.available_ir_names())
+        let mut names = crate::factory::factory_ir_names();
+        // Also include any user IRs from filesystem
+        if let Some(loader) = &self.ir_loader {
+            for name in loader.available_ir_names() {
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+        }
+        names
     }
 
     fn get_peak_meter_info(&self) -> Option<ExternalEvent> {
         // Plugin mode does not poll peak meters from the GUI; the DAW
         // provides its own metering.
         None
+    }
+
+    fn persist_chain_state(&self, stages: &[StageConfig]) {
+        // Store in SharedState for editor close/reopen within same session
+        self.shared_state.store_gui_stages(stages);
+        // Store in nih-plug persist field for DAW project save/restore
+        if let Ok(mut cs) = self.params.chain_state.lock() {
+            *cs = Some(stages.to_vec());
+        }
+        // Touch preset_idx with its current value to notify the host that
+        // state changed. #[persist] fields are serialized passively and
+        // don't mark the session dirty on their own.
+        let param = &self.params.preset_idx;
+        let current = param.modulated_normalized_value();
+        self.notify_host_param_changed(param.as_ptr(), current);
     }
 }
