@@ -1,6 +1,10 @@
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use log::error;
 use rustortion_core::amp::chain::AmplifierChain;
 use rustortion_core::amp::stages::Stage;
 use rustortion_core::amp::stages::filter::{FilterStage, FilterType};
+use rustortion_core::audio::samplers::Samplers;
 use rustortion_core::preset::InputFilterConfig;
 use rustortion_core::preset::stage_config::StageConfig;
 use rustortion_ui::backend::{Capabilities, ExternalEvent, ParamBackend};
@@ -10,13 +14,16 @@ use crate::audio::manager::Manager;
 pub struct StandaloneBackend {
     manager: Manager,
     capabilities: Capabilities,
+    oversampling_factor: AtomicU32,
 }
 
 impl StandaloneBackend {
     pub const fn new(manager: Manager) -> Self {
+        let factor = manager.current_oversampling_factor();
         Self {
             manager,
             capabilities: Capabilities::standalone(),
+            oversampling_factor: AtomicU32::new(factor),
         }
     }
 
@@ -119,10 +126,16 @@ impl ParamBackend for StandaloneBackend {
         self.manager.engine().set_pitch_shift(semitones);
     }
 
-    fn set_oversampling(&self, _factor: u32) {
-        // Oversampling changes in standalone mode are handled through
-        // SettingsHandler which rebuilds via Manager. This trait method is
-        // primarily used by the plugin backend.
+    fn set_oversampling(&self, factor: u32) {
+        let sample_rate = self.manager.sample_rate();
+        let buffer_size = self.manager.buffer_size();
+        match Samplers::new(buffer_size, f64::from(factor), sample_rate) {
+            Ok(samplers) => {
+                self.manager.engine().set_samplers(samplers);
+                self.oversampling_factor.store(factor, Ordering::Relaxed);
+            }
+            Err(e) => error!("Failed to create samplers for {factor}x oversampling: {e}"),
+        }
     }
 
     fn sample_rate(&self) -> u32 {
@@ -130,7 +143,7 @@ impl ParamBackend for StandaloneBackend {
     }
 
     fn oversampling_factor(&self) -> u32 {
-        self.manager().current_oversampling_factor()
+        self.oversampling_factor.load(Ordering::Relaxed)
     }
 
     fn capabilities(&self) -> &Capabilities {

@@ -68,8 +68,8 @@ impl SettingsHandler {
             SettingsMessage::SampleRateChanged(x) => {
                 self.with_temp_settings(|s| s.sample_rate = x);
             }
-            SettingsMessage::OversamplingFactorChanged(x) => {
-                self.with_temp_settings(|s| s.oversampling_factor = x);
+            SettingsMessage::OversamplingFactorChanged(_) => {
+                // Oversampling is now handled in the shared IO tab
             }
             SettingsMessage::LanguageChanged(lang) => {
                 i18n::set_language(lang);

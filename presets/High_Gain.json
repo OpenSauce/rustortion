@@ -4,62 +4,126 @@
   "author": null,
   "stages": [
     {
+      "NoiseGate": {
+        "threshold_db": -40.0,
+        "ratio": 10.0,
+        "attack_ms": 0.5,
+        "hold_ms": 80.0,
+        "release_ms": 150.0,
+        "bypassed": false
+      }
+    },
+    {
       "Preamp": {
-        "gain": 6.7000003,
-        "bias": 0.0,
-        "clipper_type": "ClassA"
+        "gain": 3.5,
+        "bias": 0.05,
+        "clipper_type": "Triode",
+        "bypassed": false
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 5.2000003,
+        "bias": 0.40000004,
+        "clipper_type": "Triode",
+        "bypassed": false
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 4.2,
+        "bias": -0.1,
+        "clipper_type": "Triode",
+        "bypassed": false
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 5.0,
+        "bias": 0.15,
+        "clipper_type": "Triode",
+        "bypassed": false
+      }
+    },
+    {
+      "Preamp": {
+        "gain": 5.8,
+        "bias": -0.05,
+        "clipper_type": "Triode",
+        "bypassed": false
       }
     },
     {
       "ToneStack": {
-        "model": "British",
-        "bass": 0.75,
+        "model": "American",
+        "bass": 0.90000004,
         "mid": 1.0,
-        "treble": 0.95,
-        "presence": 0.65000004
+        "treble": 1.0,
+        "presence": 0.65000004,
+        "bypassed": false
       }
     },
     {
-      "Compressor": {
-        "attack_ms": 1.0,
-        "release_ms": 80.0,
-        "threshold_db": -16.0,
-        "ratio": 4.0,
-        "makeup_db": 16.7
+      "PowerAmp": {
+        "drive": 0.15,
+        "amp_type": "ClassAB",
+        "sag": 0.3,
+        "sag_release": 120.0,
+        "bypassed": false
       }
     },
     {
-      "Preamp": {
-        "gain": 6.8,
-        "bias": 1.4901161e-08,
-        "clipper_type": "Hard"
+      "MultibandSaturator": {
+        "low_drive": 0.06,
+        "mid_drive": 0.16,
+        "high_drive": 0.099999994,
+        "low_level": 0.72999996,
+        "mid_level": 0.87,
+        "high_level": 0.84,
+        "low_freq": 347.0,
+        "high_freq": 2810.0,
+        "bypassed": false
       }
     },
     {
-      "Level": {
-        "gain": 0.5
+      "Eq": {
+        "gains": [
+          -7.7999997,
+          -5.9,
+          -3.1999998,
+          -3.4999998,
+          -1.9999999,
+          -1.0999998,
+          -0.09999982,
+          0.5000002,
+          0.0,
+          -1.5999999,
+          1.7881393e-7,
+          -0.79999983,
+          0.0,
+          -1.5999999,
+          -2.6999998,
+          -3.4999998
+        ],
+        "bypassed": false
       }
     },
     {
-      "NoiseGate": {
-        "threshold_db": -13.0,
-        "ratio": 10.0,
-        "attack_ms": 3.7,
-        "hold_ms": 10.0,
-        "release_ms": 100.0
-      }
-    },
-    {
-      "Level": {
-        "gain": 1.0
+      "Reverb": {
+        "room_size": 0.22,
+        "damping": 0.72999996,
+        "mix": 0.2,
+        "bypassed": false
       }
     }
   ],
-  "ir_name": "Jesterdyne/Engl/sc450-left-01.wav",
+  "ir_name": "Science Amplification/4x12/G12H-150/SM57 Darker.wav",
+  "ir_gain": 0.21,
+  "pitch_shift_semitones": 0,
   "input_filters": {
     "hp_enabled": true,
-    "hp_cutoff": 187.0,
+    "hp_cutoff": 80.0,
     "lp_enabled": true,
-    "lp_cutoff": 9913.0
+    "lp_cutoff": 9000.0
   }
 }

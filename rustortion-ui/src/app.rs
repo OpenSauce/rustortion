@@ -49,6 +49,7 @@ pub struct SharedApp<B: ParamBackend> {
     pub peak_meter_display: PeakMeterDisplay,
     pub hotkey_handler: HotkeyHandler,
     pub input_filter_config: InputFilterConfig,
+    pub oversampling_factor: u32,
     /// Whether recording is active — set by standalone, displayed in header.
     pub is_recording: bool,
 }
@@ -189,6 +190,12 @@ impl<B: ParamBackend> SharedApp<B> {
             Message::PitchShiftChanged(semitones) => {
                 self.pitch_shift_control.set_semitones(semitones);
                 self.backend.set_pitch_shift(semitones);
+            }
+            Message::OversamplingChanged(factor) => {
+                self.oversampling_factor = factor;
+                self.backend.set_oversampling(factor);
+                self.flush_dirty_params();
+                self.backend.set_amp_chain(&self.stages);
             }
             Message::Stage(idx, stage_msg) => {
                 if let Some(stage) = self.stages.get_mut(idx) {
@@ -560,8 +567,27 @@ impl<B: ParamBackend> SharedApp<B> {
             .into(),
         );
 
+        let oversampling_factors = vec![1u32, 2, 4, 8, 16];
+        let oversampling_section = section_container(
+            column![
+                section_title(tr!(oversampling_factor)),
+                row![
+                    pick_list(
+                        oversampling_factors,
+                        Some(self.oversampling_factor),
+                        Message::OversamplingChanged,
+                    ),
+                    text(format!("({}x)", self.oversampling_factor)),
+                ]
+                .spacing(SPACING_NORMAL)
+                .align_y(Alignment::Center),
+            ]
+            .spacing(SPACING_NORMAL)
+            .into(),
+        );
+
         let content = scrollable(
-            column![input_filters_section, pitch_section,]
+            column![input_filters_section, pitch_section, oversampling_section,]
                 .spacing(SPACING_NORMAL)
                 .padding(PADDING_NORMAL),
         )

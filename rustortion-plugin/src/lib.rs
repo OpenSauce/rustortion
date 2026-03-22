@@ -24,7 +24,7 @@ pub(crate) struct SharedState {
     preset_manager: Mutex<Option<Arc<rustortion_core::preset::Manager>>>,
     sample_rate: AtomicU32,
     max_buffer_size: AtomicU32,
-    oversampling_idx: AtomicU8,
+    oversampling_exp: AtomicU8,
     /// GUI stage chain — survives editor close/reopen within the same session.
     gui_stages: Mutex<Option<Vec<StageConfig>>>,
 }
@@ -71,14 +71,14 @@ impl Default for RustortionPlugin {
                 preset_manager: Mutex::new(None),
                 sample_rate: AtomicU32::new(0),
                 max_buffer_size: AtomicU32::new(0),
-                oversampling_idx: AtomicU8::new(1),
+                oversampling_exp: AtomicU8::new(0),
                 gui_stages: Mutex::new(None),
             }),
             preset_names: Vec::new(),
             editor_preset_names: Arc::new(Mutex::new(Vec::new())),
             last_preset_idx: -1,
             last_ir_gain: util::db_to_gain(-20.0),
-            active_oversampling: 1, // 1 = 2x
+            active_oversampling: 0, // 0 = 1x (no oversampling)
             input_buf: Vec::new(),
             output_buf: Vec::new(),
         }
@@ -90,7 +90,7 @@ fn do_load_preset(
     manager: Option<&rustortion_core::preset::Manager>,
     ir_loader: Option<&IrLoader>,
     sample_rate: f32,
-    oversampling_idx: u8,
+    oversampling_exp: u8,
     name: &str,
 ) {
     let Some(manager) = manager else {
@@ -101,7 +101,7 @@ fn do_load_preset(
     };
 
     // Stages in the amp chain run at the oversampled rate
-    let effective_sr = sample_rate * 2.0_f32.powi(i32::from(oversampling_idx));
+    let effective_sr = sample_rate * 2.0_f32.powi(i32::from(oversampling_exp));
 
     // Build amp chain from preset stages
     let mut chain = rustortion_core::amp::chain::AmplifierChain::new();
@@ -209,7 +209,7 @@ impl Plugin for RustortionPlugin {
                     let mgr = shared.preset_manager.lock().ok().and_then(|g| g.clone());
                     let loader = shared.ir_loader.lock().ok().and_then(|g| g.clone());
                     let sample_rate = f32::from_bits(shared.sample_rate.load(Ordering::Relaxed));
-                    let os_idx = shared.oversampling_idx.load(Ordering::Relaxed);
+                    let os_idx = shared.oversampling_exp.load(Ordering::Relaxed);
                     do_load_preset(
                         &handle,
                         mgr.as_deref(),
@@ -233,17 +233,13 @@ impl Plugin for RustortionPlugin {
                         Ok(samplers) => handle.set_samplers(samplers),
                         Err(e) => nih_log!("Failed to create samplers: {e}"),
                     }
-                    shared.oversampling_idx.store(idx, Ordering::Relaxed);
+                    shared.oversampling_exp.store(idx, Ordering::Relaxed);
                 }
             }
         })
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        // Don't open the editor if the engine isn't initialized yet
-        if self.shared.engine_handle.lock().ok()?.is_none() {
-            return None;
-        }
         Some(Box::new(editor::PluginEditor::new(
             self.params.clone(),
             self.shared.clone(),
@@ -276,10 +272,10 @@ impl Plugin for RustortionPlugin {
         );
 
         // Read oversampling from persisted param (clamped to valid range)
-        let os_idx = self.params.oversampling_idx.load(Ordering::Relaxed).min(4);
+        let os_idx = self.params.oversampling_exp.load(Ordering::Relaxed).min(4);
         self.active_oversampling = os_idx;
         self.shared
-            .oversampling_idx
+            .oversampling_exp
             .store(os_idx, Ordering::Relaxed);
         let oversample_factor = 2.0_f64.powi(i32::from(os_idx));
 
@@ -461,8 +457,8 @@ impl Plugin for RustortionPlugin {
             self.last_preset_idx = idx;
         }
 
-        // Check for oversampling change
-        let os_idx = self.params.oversampling_idx.load(Ordering::Relaxed).min(4);
+        // Check for oversampling change (read from SharedState, written by GUI)
+        let os_idx = self.shared.oversampling_exp.load(Ordering::Relaxed).min(4);
         if os_idx != self.active_oversampling {
             context.execute_background(PluginTask::ChangeOversampling(os_idx));
             self.active_oversampling = os_idx;

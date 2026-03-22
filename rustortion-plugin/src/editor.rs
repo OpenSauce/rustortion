@@ -79,12 +79,6 @@ impl Editor for PluginEditor {
                 .sample_rate
                 .load(std::sync::atomic::Ordering::Relaxed),
         );
-        let os_idx = self
-            .shared_state
-            .oversampling_idx
-            .load(std::sync::atomic::Ordering::Relaxed);
-        let oversampling_factor = 2_u32.pow(u32::from(os_idx));
-
         let restored_preset_idx = self.params.preset_idx.value();
 
         let flags = PluginAppFlags {
@@ -94,7 +88,6 @@ impl Editor for PluginEditor {
             engine_handle,
             ir_loader,
             sample_rate,
-            oversampling_factor,
             restored_preset_idx,
         };
 
@@ -145,7 +138,6 @@ struct PluginAppFlags {
     engine_handle: Option<rustortion_core::audio::engine::EngineHandle>,
     ir_loader: Option<Arc<rustortion_core::ir::loader::IrLoader>>,
     sample_rate: f32,
-    oversampling_factor: u32,
     restored_preset_idx: i32,
 }
 
@@ -172,7 +164,6 @@ impl iced_baseview::Application for PluginApp {
             flags.ir_loader,
             flags.shared_state.clone(),
             flags.sample_rate,
-            flags.oversampling_factor,
         );
 
         let available_irs = backend.get_available_irs();
@@ -209,6 +200,7 @@ impl iced_baseview::Application for PluginApp {
             preset_handler.load_preset_by_name(name);
         }
 
+        let oversampling_factor = backend.oversampling_factor();
         let shared = SharedApp {
             backend,
             stages: Vec::new(),
@@ -222,6 +214,7 @@ impl iced_baseview::Application for PluginApp {
             peak_meter_display: PeakMeterDisplay::default(),
             hotkey_handler: HotkeyHandler::new(HotkeySettings::default()),
             input_filter_config: rustortion_core::preset::InputFilterConfig::default(),
+            oversampling_factor,
             is_recording: false,
         };
 

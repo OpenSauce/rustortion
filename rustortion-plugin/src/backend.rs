@@ -20,7 +20,6 @@ pub struct PluginBackend {
     shared_state: Arc<SharedState>,
     capabilities: Capabilities,
     sample_rate: f32,
-    oversampling_factor: u32,
 }
 
 impl PluginBackend {
@@ -31,7 +30,6 @@ impl PluginBackend {
         ir_loader: Option<Arc<IrLoader>>,
         shared_state: Arc<SharedState>,
         sample_rate: f32,
-        oversampling_factor: u32,
     ) -> Self {
         Self {
             engine_handle,
@@ -41,7 +39,6 @@ impl PluginBackend {
             shared_state,
             capabilities: Capabilities::plugin(),
             sample_rate,
-            oversampling_factor,
         }
     }
 
@@ -52,7 +49,7 @@ impl PluginBackend {
 
     #[allow(clippy::cast_precision_loss)]
     fn effective_sample_rate(&self) -> f32 {
-        self.sample_rate * self.oversampling_factor as f32
+        self.sample_rate * self.oversampling_factor() as f32
     }
 
     /// Notify the host that a parameter value changed from the GUI.
@@ -187,10 +184,16 @@ impl ParamBackend for PluginBackend {
         self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(idx));
     }
 
-    fn set_oversampling(&self, _factor: u32) {
-        // Oversampling changes in plugin mode are handled through the
-        // nih-plug parameter system and the process() loop. This trait
-        // method is a no-op for the plugin backend.
+    fn set_oversampling(&self, factor: u32) {
+        // Compute the oversampling exponent (log2 of factor): 1=0, 2=1, 4=2, 8=3, 16=4
+        let idx = factor.trailing_zeros().min(4) as u8;
+        self.shared_state
+            .oversampling_exp
+            .store(idx, std::sync::atomic::Ordering::Relaxed);
+        // Also sync to params for DAW project persistence
+        self.params
+            .oversampling_exp
+            .store(idx, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn sample_rate(&self) -> u32 {
@@ -200,7 +203,11 @@ impl ParamBackend for PluginBackend {
     }
 
     fn oversampling_factor(&self) -> u32 {
-        self.oversampling_factor
+        let idx = self
+            .shared_state
+            .oversampling_exp
+            .load(std::sync::atomic::Ordering::Relaxed);
+        2_u32.pow(u32::from(idx))
     }
 
     fn capabilities(&self) -> &Capabilities {

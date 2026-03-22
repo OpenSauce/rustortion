@@ -516,7 +516,7 @@ pub struct RustortionParams {
     pub preset_idx: IntParam,
 
     #[persist = "oversampling"]
-    pub oversampling_idx: Arc<AtomicU8>,
+    pub oversampling_exp: Arc<AtomicU8>,
 
     /// Serialized stage chain — persisted with DAW project state so user
     /// modifications (add/remove/reorder stages) survive save/restore.
@@ -618,7 +618,7 @@ impl Default for RustortionParams {
             preset_idx: IntParam::new("Preset", 0, IntRange::Linear { min: 0, max: 255 })
                 .non_automatable(),
 
-            oversampling_idx: Arc::new(AtomicU8::new(1)), // 1 = 2x oversampling
+            oversampling_exp: Arc::new(AtomicU8::new(0)), // 0 = 1x (no oversampling)
             chain_state: Arc::new(Mutex::new(None)),
 
             preamp: Default::default(),
