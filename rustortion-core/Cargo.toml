@@ -15,7 +15,7 @@ log = "0.4"
 anyhow = "1.0"
 rustfft = "6.4"
 realfft = "3.5"
-arc-swap = "1.8"
+arc-swap = "1.9"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
