@@ -2,7 +2,7 @@ use nih_plug::prelude::*;
 use rustortion_core::audio::engine::{Engine, EngineHandle};
 use rustortion_core::ir::loader::IrLoader;
 use rustortion_core::preset::stage_config::StageConfig;
-use std::sync::atomic::{AtomicU8, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 mod backend;
@@ -15,7 +15,12 @@ use params::RustortionParams;
 
 enum PluginTask {
     LoadPreset(String),
-    ChangeOversampling(u8),
+    /// Combined task: create new samplers at the given factor, then reload the
+    /// preset so time-based stages are rebuilt at the correct effective rate.
+    ChangeOversamplingAndReload {
+        factor: u32,
+        preset_name: Option<String>,
+    },
 }
 
 pub(crate) struct SharedState {
@@ -24,7 +29,14 @@ pub(crate) struct SharedState {
     preset_manager: Mutex<Option<Arc<rustortion_core::preset::Manager>>>,
     sample_rate: AtomicU32,
     max_buffer_size: AtomicU32,
-    oversampling_idx: AtomicU8,
+    /// Oversampling factor requested by the GUI (1, 2, 4, 8, 16).
+    /// Written by GUI thread, read by process thread to detect changes.
+    requested_oversampling: AtomicU32,
+    /// Oversampling factor currently applied to the engine's samplers.
+    /// Written by background task after samplers are created, read by
+    /// `PluginBackend::effective_sample_rate()` so chain rebuilds match
+    /// the actual sampler state.
+    active_oversampling: AtomicU32,
     /// GUI stage chain — survives editor close/reopen within the same session.
     gui_stages: Mutex<Option<Vec<StageConfig>>>,
 }
@@ -52,7 +64,7 @@ struct RustortionPlugin {
     editor_preset_names: Arc<Mutex<Vec<String>>>,
     last_preset_idx: i32,
     last_ir_gain: f32,
-    active_oversampling: u8,
+    active_oversampling: u32,
     input_buf: Vec<f32>,
     output_buf: Vec<f32>,
 }
@@ -71,14 +83,15 @@ impl Default for RustortionPlugin {
                 preset_manager: Mutex::new(None),
                 sample_rate: AtomicU32::new(0),
                 max_buffer_size: AtomicU32::new(0),
-                oversampling_idx: AtomicU8::new(1),
+                requested_oversampling: AtomicU32::new(1),
+                active_oversampling: AtomicU32::new(1),
                 gui_stages: Mutex::new(None),
             }),
             preset_names: Vec::new(),
             editor_preset_names: Arc::new(Mutex::new(Vec::new())),
             last_preset_idx: -1,
             last_ir_gain: util::db_to_gain(-20.0),
-            active_oversampling: 1, // 1 = 2x
+            active_oversampling: 1, // 1x (no oversampling)
             input_buf: Vec::new(),
             output_buf: Vec::new(),
         }
@@ -90,7 +103,7 @@ fn do_load_preset(
     manager: Option<&rustortion_core::preset::Manager>,
     ir_loader: Option<&IrLoader>,
     sample_rate: f32,
-    oversampling_idx: u8,
+    oversampling_factor: u32,
     name: &str,
 ) {
     let Some(manager) = manager else {
@@ -101,7 +114,8 @@ fn do_load_preset(
     };
 
     // Stages in the amp chain run at the oversampled rate
-    let effective_sr = sample_rate * 2.0_f32.powi(i32::from(oversampling_idx));
+    #[allow(clippy::cast_precision_loss)]
+    let effective_sr = sample_rate * oversampling_factor as f32;
 
     // Build amp chain from preset stages
     let mut chain = rustortion_core::amp::chain::AmplifierChain::new();
@@ -209,41 +223,72 @@ impl Plugin for RustortionPlugin {
                     let mgr = shared.preset_manager.lock().ok().and_then(|g| g.clone());
                     let loader = shared.ir_loader.lock().ok().and_then(|g| g.clone());
                     let sample_rate = f32::from_bits(shared.sample_rate.load(Ordering::Relaxed));
-                    let os_idx = shared.oversampling_idx.load(Ordering::Relaxed);
+                    let os_factor = shared.active_oversampling.load(Ordering::Relaxed);
                     do_load_preset(
                         &handle,
                         mgr.as_deref(),
                         loader.as_deref(),
                         sample_rate,
-                        os_idx,
+                        os_factor,
                         &name,
                     );
                 }
-                PluginTask::ChangeOversampling(idx) => {
+                PluginTask::ChangeOversamplingAndReload {
+                    factor,
+                    preset_name,
+                } => {
                     let sample_rate = f32::from_bits(shared.sample_rate.load(Ordering::Relaxed));
                     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                     let sample_rate_usize = sample_rate as usize;
                     let max_buf = shared.max_buffer_size.load(Ordering::Relaxed) as usize;
-                    let factor = 2.0_f64.powi(i32::from(idx));
                     match rustortion_core::audio::samplers::Samplers::new(
                         max_buf,
-                        factor,
+                        f64::from(factor),
                         sample_rate_usize,
                     ) {
-                        Ok(samplers) => handle.set_samplers(samplers),
+                        Ok(samplers) => {
+                            handle.set_samplers(samplers);
+                            // Update active oversampling AFTER samplers are set,
+                            // so effective_sample_rate() stays consistent.
+                            shared.active_oversampling.store(factor, Ordering::Relaxed);
+
+                            // Rebuild the amp chain at the new effective rate.
+                            // Prefer gui_stages (in-session edits) over reloading
+                            // from disk, which would wipe user modifications.
+                            #[allow(clippy::cast_precision_loss)]
+                            let effective_sr = sample_rate * factor as f32;
+                            let stages = shared.take_gui_stages().or_else(|| {
+                                shared.preset_manager.lock().ok().and_then(|g| {
+                                    g.as_ref().and_then(|mgr| {
+                                        preset_name.as_deref().and_then(|name| {
+                                            mgr.get_preset_by_name(name).map(|p| p.stages.clone())
+                                        })
+                                    })
+                                })
+                            });
+                            if let Some(stages) = &stages {
+                                let mut chain = rustortion_core::amp::chain::AmplifierChain::new();
+                                for cfg in stages {
+                                    chain.add_stage(cfg.to_runtime(effective_sr));
+                                }
+                                for (i, cfg) in stages.iter().enumerate() {
+                                    if cfg.bypassed() {
+                                        chain.set_bypassed(i, true);
+                                    }
+                                }
+                                handle.set_amp_chain(chain);
+                                // Re-store gui_stages since take_gui_stages consumed them
+                                shared.store_gui_stages(stages);
+                            }
+                        }
                         Err(e) => nih_log!("Failed to create samplers: {e}"),
                     }
-                    shared.oversampling_idx.store(idx, Ordering::Relaxed);
                 }
             }
         })
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        // Don't open the editor if the engine isn't initialized yet
-        if self.shared.engine_handle.lock().ok()?.is_none() {
-            return None;
-        }
         Some(Box::new(editor::PluginEditor::new(
             self.params.clone(),
             self.shared.clone(),
@@ -275,13 +320,25 @@ impl Plugin for RustortionPlugin {
             max_ir_samples,
         );
 
-        // Read oversampling from persisted param (clamped to valid range)
-        let os_idx = self.params.oversampling_idx.load(Ordering::Relaxed).min(4);
-        self.active_oversampling = os_idx;
+        // Read oversampling factor from persisted param, normalized to a valid
+        // power-of-two in {1, 2, 4, 8, 16}. Corrupted/legacy values are rounded
+        // down to the nearest supported factor.
+        let raw_os = self.params.oversampling_factor.load(Ordering::Relaxed);
+        let os_factor = match raw_os {
+            16.. => 16,
+            8..=15 => 8,
+            4..=7 => 4,
+            2..=3 => 2,
+            _ => 1,
+        };
+        self.active_oversampling = os_factor;
         self.shared
-            .oversampling_idx
-            .store(os_idx, Ordering::Relaxed);
-        let oversample_factor = 2.0_f64.powi(i32::from(os_idx));
+            .requested_oversampling
+            .store(os_factor, Ordering::Relaxed);
+        self.shared
+            .active_oversampling
+            .store(os_factor, Ordering::Relaxed);
+        let oversample_factor = f64::from(os_factor);
 
         match Engine::new_for_plugin(
             sample_rate,
@@ -353,7 +410,8 @@ impl Plugin for RustortionPlugin {
                 if let Some(handle) = &self.engine_handle {
                     if let Some(stages) = &persisted_stages {
                         // Restore from DAW-persisted chain state
-                        let effective_sr = self.sample_rate * 2.0_f32.powi(i32::from(os_idx));
+                        #[allow(clippy::cast_precision_loss)]
+                        let effective_sr = self.sample_rate * os_factor as f32;
                         let mut chain = rustortion_core::amp::chain::AmplifierChain::new();
                         for stage_cfg in stages {
                             chain.add_stage(stage_cfg.to_runtime(effective_sr));
@@ -418,7 +476,7 @@ impl Plugin for RustortionPlugin {
                                 mgr.as_deref(),
                                 loader.as_deref(),
                                 self.sample_rate,
-                                os_idx,
+                                os_factor,
                                 &name,
                             );
                         }
@@ -461,16 +519,23 @@ impl Plugin for RustortionPlugin {
             self.last_preset_idx = idx;
         }
 
-        // Check for oversampling change
-        let os_idx = self.params.oversampling_idx.load(Ordering::Relaxed).min(4);
-        if os_idx != self.active_oversampling {
-            context.execute_background(PluginTask::ChangeOversampling(os_idx));
-            self.active_oversampling = os_idx;
-            // Reload preset so time-based stages get the correct effective sample rate
+        // Check for oversampling change (read from SharedState, written by GUI)
+        let requested_os = self
+            .shared
+            .requested_oversampling
+            .load(Ordering::Relaxed)
+            .clamp(1, 16);
+        if requested_os != self.active_oversampling {
             #[allow(clippy::cast_sign_loss)]
-            if let Some(name) = self.preset_names.get(self.last_preset_idx as usize) {
-                context.execute_background(PluginTask::LoadPreset(name.clone()));
-            }
+            let preset_name = self
+                .preset_names
+                .get(self.last_preset_idx as usize)
+                .cloned();
+            context.execute_background(PluginTask::ChangeOversamplingAndReload {
+                factor: requested_os,
+                preset_name,
+            });
+            self.active_oversampling = requested_os;
         }
 
         // Apply IR gain from DAW parameter

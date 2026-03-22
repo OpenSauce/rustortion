@@ -174,18 +174,6 @@ impl SettingsDialog {
         ]
         .spacing(SPACING_TIGHT);
 
-        let oversampling_factors = vec![1u32, 2, 4, 8, 16];
-        let oversampling_section = column![
-            text(tr!(oversampling_factor)).size(TEXT_SIZE_LABEL),
-            pick_list(
-                oversampling_factors,
-                Some(self.temp_settings.oversampling_factor),
-                SettingsMessage::OversamplingFactorChanged
-            )
-            .width(Length::Fill),
-        ]
-        .spacing(SPACING_TIGHT);
-
         // Latency display (based on actual JACK values)
         let latency =
             (self.jack_status.buffer_size as f32 / self.jack_status.sample_rate as f32) * 1000.0;
@@ -228,7 +216,6 @@ impl SettingsDialog {
                 column![
                     buffer_section,
                     sample_rate_section,
-                    oversampling_section,
                     latency_text,
                     text(tr!(changes_require_restart))
                         .size(TEXT_SIZE_SMALL)

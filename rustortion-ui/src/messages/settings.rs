@@ -11,6 +11,5 @@ pub enum SettingsMessage {
     OutputRightPortChanged(String),
     BufferSizeChanged(u32),
     SampleRateChanged(u32),
-    OversamplingFactorChanged(u32),
     LanguageChanged(Language),
 }

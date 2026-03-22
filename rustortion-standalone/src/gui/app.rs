@@ -126,6 +126,7 @@ impl AmplifierApp {
         // Build and send initial chain
         backend.set_amp_chain(&preset.stages);
 
+        let oversampling_factor = backend.oversampling_factor();
         let shared = SharedApp {
             backend,
             stages: preset.stages,
@@ -139,6 +140,7 @@ impl AmplifierApp {
             peak_meter_display: PeakMeterDisplay::new(),
             hotkey_handler,
             input_filter_config,
+            oversampling_factor,
             is_recording: false,
         };
 
@@ -275,6 +277,12 @@ impl AmplifierApp {
             self.save_settings();
         }
 
+        // Persist oversampling changes from the shared IO tab
+        if self.shared.oversampling_factor != self.settings.audio.oversampling_factor {
+            self.settings.audio.oversampling_factor = self.shared.oversampling_factor;
+            self.save_settings();
+        }
+
         if is_preset_select_or_save && let Some(name) = preset_name_for_persist {
             self.settings.selected_preset = Some(name);
             self.save_settings();
@@ -316,17 +324,11 @@ impl AmplifierApp {
                 debug!("Recording stopped");
             }
             Message::Settings(msg) => {
-                let old_oversampling = self.settings.audio.oversampling_factor;
-                let task = self.settings_handler.handle(
+                return self.settings_handler.handle(
                     msg,
                     &mut self.settings,
                     self.shared.backend.manager_mut(),
                 );
-                if self.settings.audio.oversampling_factor != old_oversampling {
-                    self.shared.dirty_params.clear();
-                    self.shared.backend.set_amp_chain(&self.shared.stages);
-                }
-                return task;
             }
             Message::Tuner(msg) => {
                 return self

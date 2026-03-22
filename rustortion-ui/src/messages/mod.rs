@@ -61,6 +61,9 @@ pub enum Message {
     // Pitch shift messages
     PitchShiftChanged(i32),
 
+    // Oversampling messages
+    OversamplingChanged(u32),
+
     // Stage-specific messages
     Stage(usize, StageMessage),
 

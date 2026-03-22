@@ -2,7 +2,7 @@ use nih_plug::prelude::*;
 use rustortion_core::preset::stage_config::StageConfig;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::atomic::AtomicU8;
+use std::sync::atomic::AtomicU32;
 
 // ---------------------------------------------------------------------------
 // Per-slot parameter structs
@@ -515,8 +515,8 @@ pub struct RustortionParams {
     #[id = "preset_idx"]
     pub preset_idx: IntParam,
 
-    #[persist = "oversampling"]
-    pub oversampling_idx: Arc<AtomicU8>,
+    #[persist = "oversampling_factor"]
+    pub oversampling_factor: Arc<AtomicU32>,
 
     /// Serialized stage chain — persisted with DAW project state so user
     /// modifications (add/remove/reorder stages) survive save/restore.
@@ -618,7 +618,7 @@ impl Default for RustortionParams {
             preset_idx: IntParam::new("Preset", 0, IntRange::Linear { min: 0, max: 255 })
                 .non_automatable(),
 
-            oversampling_idx: Arc::new(AtomicU8::new(1)), // 1 = 2x oversampling
+            oversampling_factor: Arc::new(AtomicU32::new(1)), // 1 = 1x (no oversampling)
             chain_state: Arc::new(Mutex::new(None)),
 
             preamp: Default::default(),
