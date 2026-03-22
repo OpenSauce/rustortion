@@ -47,9 +47,16 @@ impl PluginBackend {
         self.params.chain_state.lock().ok()?.clone()
     }
 
+    /// Effective sample rate using the *active* (applied) oversampling factor,
+    /// not the requested one. This ensures chain rebuilds match the current
+    /// sampler state.
     #[allow(clippy::cast_precision_loss)]
     fn effective_sample_rate(&self) -> f32 {
-        self.sample_rate * self.oversampling_factor() as f32
+        let active = self
+            .shared_state
+            .active_oversampling
+            .load(std::sync::atomic::Ordering::Relaxed);
+        self.sample_rate * active as f32
     }
 
     /// Notify the host that a parameter value changed from the GUI.
@@ -185,15 +192,22 @@ impl ParamBackend for PluginBackend {
     }
 
     fn set_oversampling(&self, factor: u32) {
-        // Compute the oversampling exponent (log2 of factor): 1=0, 2=1, 4=2, 8=3, 16=4
-        let idx = factor.trailing_zeros().min(4) as u8;
+        debug_assert!(
+            factor.is_power_of_two() && factor > 0 && factor <= 16,
+            "oversampling factor must be a power of two in [1, 16], got {factor}"
+        );
         self.shared_state
-            .oversampling_exp
-            .store(idx, std::sync::atomic::Ordering::Relaxed);
-        // Also sync to params for DAW project persistence
+            .requested_oversampling
+            .store(factor, std::sync::atomic::Ordering::Relaxed);
+        // Sync to params for DAW project persistence
         self.params
-            .oversampling_exp
-            .store(idx, std::sync::atomic::Ordering::Relaxed);
+            .oversampling_factor
+            .store(factor, std::sync::atomic::Ordering::Relaxed);
+        // Mark DAW session dirty so the new value is saved with the project.
+        // #[persist] fields are serialized passively and don't trigger a save.
+        let param = &self.params.preset_idx;
+        let current = param.modulated_normalized_value();
+        self.notify_host_param_changed(param.as_ptr(), current);
     }
 
     fn sample_rate(&self) -> u32 {
@@ -203,11 +217,9 @@ impl ParamBackend for PluginBackend {
     }
 
     fn oversampling_factor(&self) -> u32 {
-        let idx = self
-            .shared_state
-            .oversampling_exp
-            .load(std::sync::atomic::Ordering::Relaxed);
-        2_u32.pow(u32::from(idx))
+        self.shared_state
+            .requested_oversampling
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     fn capabilities(&self) -> &Capabilities {

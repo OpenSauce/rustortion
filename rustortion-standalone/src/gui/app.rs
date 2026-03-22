@@ -277,6 +277,12 @@ impl AmplifierApp {
             self.save_settings();
         }
 
+        // Persist oversampling changes from the shared IO tab
+        if self.shared.oversampling_factor != self.settings.audio.oversampling_factor {
+            self.settings.audio.oversampling_factor = self.shared.oversampling_factor;
+            self.save_settings();
+        }
+
         if is_preset_select_or_save && let Some(name) = preset_name_for_persist {
             self.settings.selected_preset = Some(name);
             self.save_settings();
