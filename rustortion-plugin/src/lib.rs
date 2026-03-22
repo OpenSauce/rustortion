@@ -251,18 +251,34 @@ impl Plugin for RustortionPlugin {
                             // Update active oversampling AFTER samplers are set,
                             // so effective_sample_rate() stays consistent.
                             shared.active_oversampling.store(factor, Ordering::Relaxed);
-                            // Reload preset at the new effective rate
-                            if let Some(name) = preset_name {
-                                let mgr = shared.preset_manager.lock().ok().and_then(|g| g.clone());
-                                let loader = shared.ir_loader.lock().ok().and_then(|g| g.clone());
-                                do_load_preset(
-                                    &handle,
-                                    mgr.as_deref(),
-                                    loader.as_deref(),
-                                    sample_rate,
-                                    factor,
-                                    &name,
-                                );
+
+                            // Rebuild the amp chain at the new effective rate.
+                            // Prefer gui_stages (in-session edits) over reloading
+                            // from disk, which would wipe user modifications.
+                            #[allow(clippy::cast_precision_loss)]
+                            let effective_sr = sample_rate * factor as f32;
+                            let stages = shared.take_gui_stages().or_else(|| {
+                                shared.preset_manager.lock().ok().and_then(|g| {
+                                    g.as_ref().and_then(|mgr| {
+                                        preset_name.as_deref().and_then(|name| {
+                                            mgr.get_preset_by_name(name).map(|p| p.stages.clone())
+                                        })
+                                    })
+                                })
+                            });
+                            if let Some(stages) = &stages {
+                                let mut chain = rustortion_core::amp::chain::AmplifierChain::new();
+                                for cfg in stages {
+                                    chain.add_stage(cfg.to_runtime(effective_sr));
+                                }
+                                for (i, cfg) in stages.iter().enumerate() {
+                                    if cfg.bypassed() {
+                                        chain.set_bypassed(i, true);
+                                    }
+                                }
+                                handle.set_amp_chain(chain);
+                                // Re-store gui_stages since take_gui_stages consumed them
+                                shared.store_gui_stages(stages);
                             }
                         }
                         Err(e) => nih_log!("Failed to create samplers: {e}"),
@@ -304,12 +320,17 @@ impl Plugin for RustortionPlugin {
             max_ir_samples,
         );
 
-        // Read oversampling factor from persisted param (clamped to valid range)
-        let os_factor = self
-            .params
-            .oversampling_factor
-            .load(Ordering::Relaxed)
-            .clamp(1, 16);
+        // Read oversampling factor from persisted param, normalized to a valid
+        // power-of-two in {1, 2, 4, 8, 16}. Corrupted/legacy values are rounded
+        // down to the nearest supported factor.
+        let raw_os = self.params.oversampling_factor.load(Ordering::Relaxed);
+        let os_factor = match raw_os {
+            16.. => 16,
+            8..=15 => 8,
+            4..=7 => 4,
+            2..=3 => 2,
+            _ => 1,
+        };
         self.active_oversampling = os_factor;
         self.shared
             .requested_oversampling

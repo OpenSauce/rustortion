@@ -515,7 +515,7 @@ pub struct RustortionParams {
     #[id = "preset_idx"]
     pub preset_idx: IntParam,
 
-    #[persist = "oversampling"]
+    #[persist = "oversampling_factor"]
     pub oversampling_factor: Arc<AtomicU32>,
 
     /// Serialized stage chain — persisted with DAW project state so user
