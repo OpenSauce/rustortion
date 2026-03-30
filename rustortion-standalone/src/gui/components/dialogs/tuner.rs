@@ -159,7 +159,6 @@ impl TunerDisplay {
 
             column![
                 text(bar_str)
-                    .font(iced::Font::MONOSPACE)
                     .size(24)
                     .style(move |_: &iced::Theme| iced::widget::text::Style { color: Some(color) }),
                 row![
@@ -188,7 +187,6 @@ impl TunerDisplay {
         } else {
             column![
                 text("\u{2502}")
-                    .font(iced::Font::MONOSPACE)
                     .size(24)
                     .style(|_: &iced::Theme| iced::widget::text::Style {
                         color: Some(Color::from_rgb(0.3, 0.3, 0.3)),
