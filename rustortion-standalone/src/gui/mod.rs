@@ -6,6 +6,7 @@ pub use app::AmplifierApp;
 pub use rustortion_ui::messages::Message;
 
 use crate::settings::Settings;
+use rustortion_ui::font::{EMBEDDED_FONT, EMBEDDED_FONT_BYTES};
 
 pub fn start(settings: Settings) -> iced::Result {
     iced::application(
@@ -19,6 +20,8 @@ pub fn start(settings: Settings) -> iced::Result {
         min_size: Some(iced::Size::new(800.0, 600.0)),
         ..iced::window::Settings::default()
     })
+    .font(EMBEDDED_FONT_BYTES)
+    .default_font(EMBEDDED_FONT)
     .theme(AmplifierApp::theme)
     .title("Rustortion")
     .run()
