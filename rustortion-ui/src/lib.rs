@@ -32,6 +32,7 @@
 pub mod app;
 pub mod backend;
 pub mod components;
+pub mod font;
 pub mod handlers;
 pub mod hotkey;
 pub mod i18n;
