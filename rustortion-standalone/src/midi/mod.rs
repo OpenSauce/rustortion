@@ -239,12 +239,10 @@ impl MidiManager {
         };
 
         // Find the port by name
-        let port = midi_in.ports().into_iter().find(|p| {
-            midi_in
-                .port_name(p)
-                .map(|n| n == device_name)
-                .unwrap_or(false)
-        });
+        let port = midi_in
+            .ports()
+            .into_iter()
+            .find(|p| midi_in.port_name(p).is_ok_and(|n| n == device_name));
 
         let Some(port) = port else {
             error!("MIDI device not found: {device_name}");
