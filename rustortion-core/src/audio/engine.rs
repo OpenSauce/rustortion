@@ -378,7 +378,9 @@ impl Engine {
             shifter.set_semitones(semitones as f32);
             debug!("Pitch shift set to {semitones} semitones");
         } else {
-            self.pitch_shifter = Some(PitchShifter::new(semitones as f32));
+            // FIXME(no_alloc): PitchShifter::new allocates FFT scratch buffers
+            // — see audio/pitch_shifter.rs.
+            self.pitch_shifter = Some(permit_alloc(|| PitchShifter::new(semitones as f32)));
             debug!("Pitch shift set to {semitones} semitones");
         }
     }

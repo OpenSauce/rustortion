@@ -11,9 +11,7 @@
 //! work that runs *before* the assert scope) is fine and noted in the per-test
 //! comment.
 
-use assert_no_alloc::{
-    AllocDisabler, assert_no_alloc, permit_alloc, reset_violation_count, violation_count,
-};
+use assert_no_alloc::{AllocDisabler, assert_no_alloc, reset_violation_count, violation_count};
 use hound::{WavSpec, WavWriter};
 
 use rustortion_core::amp::chain::AmplifierChain;
@@ -32,7 +30,6 @@ use rustortion_core::amp::stages::reverb::ReverbStage;
 use rustortion_core::amp::stages::tonestack::{ToneStackModel, ToneStackStage};
 use rustortion_core::audio::engine::{Engine, EngineHandle};
 use rustortion_core::audio::peak_meter::PeakMeter;
-use rustortion_core::audio::recorder::Recorder;
 use rustortion_core::audio::rt_drop::{RtDropHandle, RtDropReceiver};
 use rustortion_core::audio::samplers::Samplers;
 use rustortion_core::ir::cabinet::{ConvolverType, DEFAULT_MAX_IR_MS, IrCabinet};
@@ -56,6 +53,9 @@ const BUFFER_SIZE: usize = 128;
 /// that were recorded. With the `warn_debug` feature on, `assert_no_alloc`
 /// counts allocation attempts instead of aborting — so we can panic with a
 /// useful message at the test boundary instead of killing the test binary.
+///
+/// Always check the returned count and panic if non-zero — calling
+/// `assert_no_alloc` directly would silently swallow regressions.
 fn check_no_alloc<F: FnOnce()>(body: F) -> u32 {
     reset_violation_count();
     assert_no_alloc(body);
@@ -64,8 +64,15 @@ fn check_no_alloc<F: FnOnce()>(body: F) -> u32 {
 
 /// Run `engine.process()` `iters` times inside an `assert_no_alloc` scope
 /// after one warm-up call. Panics if any allocation was observed.
+///
+/// Tests using this helper should ensure the message channel is fully drained
+/// before calling: the warm-up `process()` happens *outside* the assertion,
+/// so any allocation triggered while draining a queued `EngineMessage` (e.g.
+/// `PitchShifter::new` from `SetPitchShift`) is invisible to the audit. Send
+/// such messages inside the asserted scope instead.
 fn assert_engine_alloc_free(engine: &mut Engine, input: &[f32], output: &mut [f32], iters: usize) {
-    // Warm up once outside the assertion to amortise any first-call setup.
+    // Warm up once outside the assertion to amortise any first-call setup
+    // (also drains any pending crossbeam message — see doc comment above).
     engine.process(input, output).unwrap();
 
     let violations = check_no_alloc(|| {
@@ -362,9 +369,9 @@ mod ir_cabinet {
     fn ir_cabinet_via_loader_does_not_allocate() {
         // Sanity check: WAV-loaded FIR cabinet behaves the same as the
         // synthesised one. Loading happens before the assert scope.
-        let dir = std::env::temp_dir().join("rustortion_no_alloc_ir");
-        let _ = write_test_ir(&dir, "tiny.wav", 1024);
-        let loader = IrLoader::new(&dir, SAMPLE_RATE).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let _ = write_test_ir(dir.path(), "tiny.wav", 1024);
+        let loader = IrLoader::new(dir.path(), SAMPLE_RATE).unwrap();
         let ir_samples = loader.load_by_name("tiny.wav").unwrap();
 
         let max_ir_samples = (SAMPLE_RATE * DEFAULT_MAX_IR_MS) / 1000;
@@ -393,9 +400,11 @@ mod extras {
     #[test]
     fn full_engine_does_not_allocate() {
         // Covers: Engine::new path with tuner (disabled), metronome
-        // (disabled), and peak meter (always-on once present). The peak meter
-        // allocates internally; engine.rs wraps that call in permit_alloc with
-        // a FIXME pointing to peak_meter.rs:62.
+        // (disabled), and peak meter (always-on once present).
+        //
+        // The peak meter does allocate per block; engine.rs gates that call
+        // with permit_alloc + FIXME (peak_meter.rs:62). This test asserts the
+        // *rest* of the full-engine path is alloc-free given that gate.
         let (mut engine, _handle) = full_engine(1.0, None);
         let (input, mut output) = buffers();
         assert_engine_alloc_free(&mut engine, &input, &mut output, 32);
@@ -426,14 +435,27 @@ mod extras {
 
     #[test]
     fn pitch_shifter_does_not_allocate() {
-        // Covers: PitchShifter process_block on the hot loop. The shifter
-        // allocates internally; engine.rs wraps that call in permit_alloc with
-        // a FIXME pointing to pitch_shifter.rs.
+        // Covers: PitchShifter::new (one-shot at SetPitchShift drain) AND
+        // process_block (per audio block). Both allocate; engine.rs gates
+        // them with permit_alloc + FIXME (pitch_shifter.rs).
+        //
+        // We send `set_pitch_shift` *inside* the assert scope so the
+        // construction is observed — the warm-up call would otherwise drain
+        // the message before the assertion starts.
         let (mut engine, handle, _rx) = plugin_engine(1.0);
-        handle.set_pitch_shift(7);
-
         let (input, mut output) = buffers();
-        assert_engine_alloc_free(&mut engine, &input, &mut output, 32);
+        engine.process(&input, &mut output).unwrap();
+
+        let violations = check_no_alloc(|| {
+            handle.set_pitch_shift(7);
+            for _ in 0..16 {
+                engine.process(&input, &mut output).unwrap();
+            }
+        });
+        assert_eq!(
+            violations, 0,
+            "pitch shifter path allocated {violations} time(s)"
+        );
     }
 
     #[test]
@@ -441,18 +463,12 @@ mod extras {
         // Covers: Recorder::record_block called from Engine::process under
         // lightweight=false. The recorder allocates internally; engine.rs
         // wraps that call in permit_alloc with a FIXME pointing to
-        // recorder.rs:47. Recorder::new opens a WAV file + spawns a thread,
-        // which is one-shot setup wrapped in permit_alloc here.
+        // recorder.rs:47.
         let (mut engine, handle) = full_engine(1.0, None);
-        let tmp = std::env::temp_dir().join("rustortion_no_alloc_rec");
-        let recorder =
-            permit_alloc(|| Recorder::new(SAMPLE_RATE as u32, tmp.to_str().unwrap()).unwrap());
+        let tmp = tempfile::tempdir().unwrap();
         handle
-            .start_recording(SAMPLE_RATE, tmp.to_str().unwrap())
+            .start_recording(SAMPLE_RATE, tmp.path().to_str().unwrap())
             .unwrap();
-        // Drop the locally-built recorder; the engine will use the one it
-        // created from the StartRecording message.
-        drop(recorder);
 
         let (input, mut output) = buffers();
         assert_engine_alloc_free(&mut engine, &input, &mut output, 32);
