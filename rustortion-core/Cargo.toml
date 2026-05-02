@@ -16,6 +16,7 @@ anyhow = "1.0"
 rustfft = "6.4"
 realfft = "3.5"
 arc-swap = "1.8"
+assert_no_alloc = { version = "1.1", features = ["warn_debug"] }
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }

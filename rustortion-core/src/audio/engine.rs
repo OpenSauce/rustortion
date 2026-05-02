@@ -1,4 +1,5 @@
 use anyhow::Result;
+use assert_no_alloc::permit_alloc;
 use crossbeam::channel::{Receiver, Sender, bounded};
 use log::{debug, error};
 
@@ -161,7 +162,9 @@ impl Engine {
         }
 
         if let Some(ref mut shifter) = self.pitch_shifter {
-            shifter.process_block(output);
+            // FIXME(no_alloc): PitchShifter::process_block uses Vec scratch
+            // buffers internally — see audio/pitch_shifter.rs.
+            permit_alloc(|| shifter.process_block(output));
         }
 
         if let Some(ref mut cab) = self.ir_cabinet {
@@ -169,13 +172,17 @@ impl Engine {
         }
 
         if let Some(ref mut peak_meter) = self.peak_meter {
-            peak_meter.process(output);
+            // FIXME(no_alloc): PeakMeter::process does Arc::new(PeakMeterInfo)
+            // every block — see audio/peak_meter.rs:62.
+            permit_alloc(|| peak_meter.process(output));
         }
 
         if !self.lightweight
             && let Some(recorder) = self.recorder.as_mut()
         {
-            recorder.record_block(output)?;
+            // FIXME(no_alloc): Recorder::record_block does Vec::with_capacity
+            // per block — see audio/recorder.rs:47.
+            permit_alloc(|| recorder.record_block(output))?;
         }
 
         Ok(())
@@ -293,7 +300,7 @@ impl Engine {
                     if let Some(ref mut cab) = self.ir_cabinet {
                         debug!("IR convolver swapped: {}", prepared.name);
                         let old = cab.swap_convolver(prepared.convolver);
-                        self.rt_drop.retire(Box::new(old));
+                        permit_alloc(|| self.rt_drop.retire(Box::new(old)));
                     }
                 }
                 EngineMessage::ClearIr => {
@@ -330,7 +337,7 @@ impl Engine {
                 }
                 EngineMessage::SetSamplers(new_samplers) => {
                     let old = std::mem::replace(&mut self.samplers, *new_samplers);
-                    self.rt_drop.retire(Box::new(old));
+                    permit_alloc(|| self.rt_drop.retire(Box::new(old)));
                     debug!("Samplers swapped");
                 }
             }
@@ -371,7 +378,9 @@ impl Engine {
             shifter.set_semitones(semitones as f32);
             debug!("Pitch shift set to {semitones} semitones");
         } else {
-            self.pitch_shifter = Some(PitchShifter::new(semitones as f32));
+            // FIXME(no_alloc): PitchShifter::new allocates FFT scratch buffers
+            // — see audio/pitch_shifter.rs.
+            self.pitch_shifter = Some(permit_alloc(|| PitchShifter::new(semitones as f32)));
             debug!("Pitch shift set to {semitones} semitones");
         }
     }
