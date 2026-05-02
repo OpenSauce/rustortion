@@ -1,6 +1,7 @@
 #![allow(clippy::pedantic, clippy::nursery)]
 
 use anyhow::Result;
+use assert_no_alloc::{AllocDisabler, assert_no_alloc, reset_violation_count, violation_count};
 use rustortion_core::amp::chain::AmplifierChain;
 use rustortion_core::amp::stages::level::LevelStage;
 use rustortion_core::audio::engine::Engine;
@@ -9,6 +10,22 @@ use rustortion_core::audio::rt_drop::RtDropHandle;
 use rustortion_core::audio::samplers::Samplers;
 use rustortion_core::metronome::Metronome;
 use rustortion_core::tuner::Tuner;
+
+#[global_allocator]
+static A: AllocDisabler = AllocDisabler;
+
+/// Run `body` inside `assert_no_alloc` and return the violation count. With
+/// the `warn_debug` feature on, allocations are counted instead of aborting,
+/// so we can panic with a useful message at the test boundary.
+///
+/// Engine::process internally permits a handful of known offenders
+/// (peak_meter, recorder, pitch_shifter) — see the FIXME comments in
+/// audio/engine.rs. Anything else allocating on the RT path is a regression.
+fn check_no_alloc<F: FnOnce()>(body: F) -> u32 {
+    reset_violation_count();
+    assert_no_alloc(body);
+    violation_count()
+}
 
 #[test]
 fn engine_processes_non_zero_signal() -> Result<()> {
@@ -35,6 +52,13 @@ fn engine_processes_non_zero_signal() -> Result<()> {
     engine.process(&input, &mut output)?;
 
     assert!(output.iter().any(|&x| x != 0.0), "expected non-zero output");
+
+    let violations = check_no_alloc(|| {
+        for _ in 0..16 {
+            engine.process(&input, &mut output).unwrap();
+        }
+    });
+    assert_eq!(violations, 0, "engine.process allocated on RT path");
 
     Ok(())
 }
@@ -84,6 +108,16 @@ fn engine_handles_buffer_size_change() -> Result<()> {
         output.len(),
         NEW_BUFFER_SIZE,
         "output length should match new buffer size"
+    );
+
+    let violations = check_no_alloc(|| {
+        for _ in 0..16 {
+            engine.process(&input, &mut output).unwrap();
+        }
+    });
+    assert_eq!(
+        violations, 0,
+        "engine.process allocated on RT path after buffer resize"
     );
 
     Ok(())
@@ -165,6 +199,16 @@ fn engine_applies_amp_chain() -> Result<()> {
     assert!(
         chain_rms < baseline_rms,
         "expected 0.5x level to attenuate: baseline_rms={baseline_rms}, chain_rms={chain_rms}"
+    );
+
+    let violations = check_no_alloc(|| {
+        for _ in 0..16 {
+            engine.process(&input, &mut output).unwrap();
+        }
+    });
+    assert_eq!(
+        violations, 0,
+        "engine.process allocated on RT path with amp chain installed"
     );
 
     Ok(())
@@ -293,6 +337,17 @@ fn engine_set_parameter_updates_live_stage() -> Result<()> {
         (after - before * 0.5).abs() < 0.01,
         "expected ~{}, got {after}",
         before * 0.5
+    );
+
+    let violations = check_no_alloc(|| {
+        for i in 0..16 {
+            handle.set_parameter(0, "gain", 0.1 + (i as f32) * 0.05);
+            engine.process(&input, &mut output).unwrap();
+        }
+    });
+    assert_eq!(
+        violations, 0,
+        "engine.process + set_parameter allocated on RT path"
     );
 
     Ok(())
