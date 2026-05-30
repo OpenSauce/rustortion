@@ -34,7 +34,7 @@ macro_rules! gui_stage_registry {
             }
         }
 
-        pub const fn apply_stage_config(cfg: &mut StageConfig, msg: StageMessage) -> Option<ParamUpdate> {
+        pub fn apply_stage_config(cfg: &mut StageConfig, msg: StageMessage) -> Option<ParamUpdate> {
             match (cfg, msg) {
                 $(
                     (StageConfig::$Variant(c), StageMessage::$Variant(m)) => {
@@ -61,6 +61,7 @@ gui_stage_registry! {
     Level              => level,                LevelMessage,              stage_level;
     NoiseGate          => noise_gate,           NoiseGateMessage,          stage_noise_gate;
     MultibandSaturator => multiband_saturator,  MultibandSaturatorMessage, stage_multiband_saturator;
+    Nam                => nam,                  NamMessage,                stage_nam;
     Delay              => delay,                DelayMessage,              stage_delay;
     Reverb             => reverb,               ReverbMessage,             stage_reverb;
     Eq                 => eq,                   EqMessage,                 stage_eq;

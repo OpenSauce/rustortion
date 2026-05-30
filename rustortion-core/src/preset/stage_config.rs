@@ -8,6 +8,7 @@ use crate::amp::stages::delay::DelayConfig;
 use crate::amp::stages::eq::EqConfig;
 use crate::amp::stages::level::LevelConfig;
 use crate::amp::stages::multiband_saturator::MultibandSaturatorConfig;
+use crate::amp::stages::nam::NamConfig;
 use crate::amp::stages::noise_gate::NoiseGateConfig;
 use crate::amp::stages::poweramp::PowerAmpConfig;
 use crate::amp::stages::preamp::PreampConfig;
@@ -30,6 +31,7 @@ pub enum StageType {
     Level,
     NoiseGate,
     MultibandSaturator,
+    Nam,
     Delay,
     Reverb,
     Eq,
@@ -44,6 +46,7 @@ impl StageType {
         Self::Level,
         Self::NoiseGate,
         Self::MultibandSaturator,
+        Self::Nam,
         Self::Delay,
         Self::Reverb,
         Self::Eq,
@@ -57,7 +60,8 @@ impl StageType {
             | Self::PowerAmp
             | Self::Level
             | Self::NoiseGate
-            | Self::MultibandSaturator => StageCategory::Amp,
+            | Self::MultibandSaturator
+            | Self::Nam => StageCategory::Amp,
             Self::Delay | Self::Reverb | Self::Eq => StageCategory::Effect,
         }
     }
@@ -81,6 +85,7 @@ impl Display for StageType {
             Self::Level => write!(f, "Level"),
             Self::NoiseGate => write!(f, "Noise Gate"),
             Self::MultibandSaturator => write!(f, "Multiband Saturator"),
+            Self::Nam => write!(f, "NAM"),
             Self::Delay => write!(f, "Delay"),
             Self::Reverb => write!(f, "Reverb"),
             Self::Eq => write!(f, "EQ"),
@@ -97,6 +102,7 @@ pub enum StageConfig {
     Level(LevelConfig),
     NoiseGate(NoiseGateConfig),
     MultibandSaturator(MultibandSaturatorConfig),
+    Nam(NamConfig),
     Delay(DelayConfig),
     Reverb(ReverbConfig),
     Eq(EqConfig),
@@ -114,6 +120,7 @@ impl From<StageType> for StageConfig {
             StageType::MultibandSaturator => {
                 Self::MultibandSaturator(MultibandSaturatorConfig::default())
             }
+            StageType::Nam => Self::Nam(NamConfig::default()),
             StageType::Delay => Self::Delay(DelayConfig::default()),
             StageType::Reverb => Self::Reverb(ReverbConfig::default()),
             StageType::Eq => Self::Eq(EqConfig::default()),
@@ -131,6 +138,7 @@ impl StageConfig {
             Self::Level(cfg) => Box::new(cfg.to_stage(sample_rate)),
             Self::NoiseGate(cfg) => Box::new(cfg.to_stage(sample_rate)),
             Self::MultibandSaturator(cfg) => Box::new(cfg.to_stage(sample_rate)),
+            Self::Nam(cfg) => Box::new(cfg.to_stage(sample_rate)),
             Self::Delay(cfg) => Box::new(cfg.to_stage(sample_rate)),
             Self::Reverb(cfg) => Box::new(cfg.to_stage(sample_rate)),
             Self::Eq(cfg) => Box::new(cfg.to_stage(sample_rate)),
@@ -146,6 +154,7 @@ impl StageConfig {
             Self::Level(_) => StageType::Level,
             Self::NoiseGate(_) => StageType::NoiseGate,
             Self::MultibandSaturator(_) => StageType::MultibandSaturator,
+            Self::Nam(_) => StageType::Nam,
             Self::Delay(_) => StageType::Delay,
             Self::Reverb(_) => StageType::Reverb,
             Self::Eq(_) => StageType::Eq,
@@ -165,6 +174,7 @@ impl StageConfig {
             Self::Level(cfg) => cfg.bypassed,
             Self::NoiseGate(cfg) => cfg.bypassed,
             Self::MultibandSaturator(cfg) => cfg.bypassed,
+            Self::Nam(cfg) => cfg.bypassed,
             Self::Delay(cfg) => cfg.bypassed,
             Self::Reverb(cfg) => cfg.bypassed,
             Self::Eq(cfg) => cfg.bypassed,
@@ -180,6 +190,7 @@ impl StageConfig {
             Self::Level(cfg) => cfg.bypassed = bypassed,
             Self::NoiseGate(cfg) => cfg.bypassed = bypassed,
             Self::MultibandSaturator(cfg) => cfg.bypassed = bypassed,
+            Self::Nam(cfg) => cfg.bypassed = bypassed,
             Self::Delay(cfg) => cfg.bypassed = bypassed,
             Self::Reverb(cfg) => cfg.bypassed = bypassed,
             Self::Eq(cfg) => cfg.bypassed = bypassed,

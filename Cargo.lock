@@ -2615,6 +2615,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "nam-rs"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97a2bedcceead65147c900244ce77cb1da4f5b33686a991999f1ab435090e0a2"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "ndk"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3778,6 +3789,7 @@ dependencies = [
  "crossbeam",
  "hound",
  "log",
+ "nam-rs",
  "realfft",
  "rubato",
  "rustfft",

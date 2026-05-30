@@ -71,6 +71,10 @@ pub struct MidiSettings {
     pub mappings: Vec<MidiMapping>,
 }
 
+fn default_nam_dir() -> String {
+    "./nam".to_string()
+}
+
 #[allow(clippy::unsafe_derive_deserialize)] // unsafe is only for set_var, unrelated to Deserialize
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
@@ -78,6 +82,8 @@ pub struct Settings {
     pub midi: MidiSettings,
     pub recording_dir: String,
     pub ir_dir: String,
+    #[serde(default = "default_nam_dir")]
+    pub nam_dir: String,
     pub preset_dir: String,
     pub ir_bypassed: bool,
     pub selected_preset: Option<String>,
@@ -105,6 +111,7 @@ impl std::fmt::Display for Settings {
         writeln!(f, "Settings:")?;
         writeln!(f, "Recording Directory: {}", self.recording_dir)?;
         writeln!(f, "Impulse Response Directory: {}", self.ir_dir)?;
+        writeln!(f, "NAM Directory: {}", self.nam_dir)?;
         writeln!(f, "Preset Directory: {}", self.preset_dir)?;
         writeln!(f, "IR Bypassed: {}", self.ir_bypassed)?;
         writeln!(
@@ -124,6 +131,7 @@ impl Default for Settings {
             midi: MidiSettings::default(),
             recording_dir: "./recordings".to_string(),
             ir_dir: "./impulse_responses".to_string(),
+            nam_dir: default_nam_dir(),
             preset_dir: "./presets".to_string(),
             ir_bypassed: false,
             selected_preset: None,

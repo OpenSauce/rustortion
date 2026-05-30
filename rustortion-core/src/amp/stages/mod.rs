@@ -6,6 +6,7 @@ pub mod eq;
 pub mod filter;
 pub mod level;
 pub mod multiband_saturator;
+pub mod nam;
 pub mod noise_gate;
 pub mod poweramp;
 pub mod preamp;

@@ -481,6 +481,45 @@ impl Default for EqSlotParams {
     }
 }
 
+#[derive(Params)]
+pub struct NamSlotParams {
+    #[id = "input_gain_db"]
+    pub input_gain_db: FloatParam,
+    #[id = "output_gain_db"]
+    pub output_gain_db: FloatParam,
+    #[id = "mix"]
+    pub mix: FloatParam,
+    #[id = "bypassed"]
+    pub bypassed: BoolParam,
+}
+
+impl Default for NamSlotParams {
+    fn default() -> Self {
+        Self {
+            input_gain_db: FloatParam::new(
+                "Input",
+                0.0,
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
+            )
+            .with_unit(" dB"),
+            output_gain_db: FloatParam::new(
+                "Output",
+                0.0,
+                FloatRange::Linear {
+                    min: -24.0,
+                    max: 24.0,
+                },
+            )
+            .with_unit(" dB"),
+            mix: FloatParam::new("Mix", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 }),
+            bypassed: BoolParam::new("Bypassed", false),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Main plugin parameters
 // ---------------------------------------------------------------------------
@@ -544,6 +583,9 @@ pub struct RustortionParams {
 
     #[nested(array, group = "MultibandSaturator")]
     pub multiband_saturator: [MultibandSaturatorSlotParams; 8],
+
+    #[nested(array, group = "NAM")]
+    pub nam: [NamSlotParams; 8],
 
     #[nested(array, group = "Delay")]
     pub delay: [DelaySlotParams; 8],
@@ -628,6 +670,7 @@ impl Default for RustortionParams {
             level: Default::default(),
             noise_gate: Default::default(),
             multiband_saturator: Default::default(),
+            nam: Default::default(),
             delay: Default::default(),
             reverb: Default::default(),
             eq: Default::default(),

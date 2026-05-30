@@ -17,6 +17,7 @@ use rustortion_core::ir::cabinet::{ConvolverType, DEFAULT_MAX_IR_MS, IrCabinet};
 use rustortion_core::ir::load_service::{self, IrLoadHandle};
 use rustortion_core::ir::loader::IrLoader;
 use rustortion_core::metronome::Metronome;
+use rustortion_core::nam::{NamLoader, registry as nam_registry};
 use rustortion_core::tuner::{Tuner, TunerHandle};
 
 pub struct Manager {
@@ -64,6 +65,14 @@ impl Manager {
                     (None, Vec::new())
                 }
             };
+
+        match NamLoader::new(std::path::Path::new(&settings.nam_dir)) {
+            Ok(loader) => {
+                info!("Loaded {} NAM model(s)", loader.available_names().len());
+                nam_registry::init_from_loader(&loader);
+            }
+            Err(e) => warn!("Failed to load NAM directory: {e}"),
+        }
 
         let ir_cabinet = Some(IrCabinet::new(convolver_type, max_ir_samples));
 
