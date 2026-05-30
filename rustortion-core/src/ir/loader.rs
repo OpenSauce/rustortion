@@ -4,8 +4,10 @@ use log::{debug, warn};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use rubato::audioadapter_buffers::direct::SequentialSliceOfVecs;
 use rubato::{
-    Resampler, SincFixedIn, SincInterpolationParameters, SincInterpolationType, WindowFunction,
+    Async, FixedAsync, Resampler, SincInterpolationParameters, SincInterpolationType,
+    WindowFunction,
 };
 
 const MAX_IR_LENGTH_SECONDS: u64 = 5;
@@ -184,15 +186,27 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
         window: WindowFunction::BlackmanHarris2,
     };
 
-    let mut resampler = SincFixedIn::<f32>::new(ratio, 1.0, params, samples.len(), 1)?;
+    let mut resampler =
+        Async::<f32>::new_sinc(ratio, 1.0, &params, samples.len(), 1, FixedAsync::Input)?;
 
     let input = vec![samples.to_vec()];
-    let output = resampler.process(&input, None)?;
+    let input_adapter = SequentialSliceOfVecs::new(&input, 1, samples.len())
+        .map_err(|e| anyhow!("resampler input adapter: {e:?}"))?;
 
-    output
+    let out_frames = resampler.output_frames_next();
+    let mut output = vec![vec![0.0f32; out_frames]; 1];
+    let mut output_adapter = SequentialSliceOfVecs::new_mut(&mut output, 1, out_frames)
+        .map_err(|e| anyhow!("resampler output adapter: {e:?}"))?;
+
+    let (_, frames_written) =
+        resampler.process_into_buffer(&input_adapter, &mut output_adapter, None)?;
+
+    let mut resampled = output
         .into_iter()
         .next()
-        .ok_or_else(|| anyhow!("Resampling failed"))
+        .ok_or_else(|| anyhow!("Resampling failed"))?;
+    resampled.truncate(frames_written);
+    Ok(resampled)
 }
 
 #[cfg(test)]
