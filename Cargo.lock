@@ -2616,11 +2616,13 @@ dependencies = [
 
 [[package]]
 name = "nam-rs"
-version = "0.0.0"
-source = "git+https://github.com/OpenSauce/nam-rs?branch=main#9244fcd945a42b509aa0c9d113660c84d4643d0e"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97a2bedcceead65147c900244ce77cb1da4f5b33686a991999f1ab435090e0a2"
 dependencies = [
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
