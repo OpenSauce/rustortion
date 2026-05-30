@@ -16,10 +16,36 @@ use super::{ParamUpdate, StageMessage};
 
 #[derive(Debug, Clone)]
 pub enum NamMessage {
-    ModelSelected(String),
+    ModelSelected(Option<String>),
     InputGainChanged(f32),
     OutputGainChanged(f32),
     MixChanged(f32),
+}
+
+/// A pick-list entry: either a named model or an explicit "no model" choice that
+/// clears the selection back to passthrough.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum NamModelChoice {
+    None,
+    Model(String),
+}
+
+impl NamModelChoice {
+    fn into_option(self) -> Option<String> {
+        match self {
+            Self::None => None,
+            Self::Model(name) => Some(name),
+        }
+    }
+}
+
+impl std::fmt::Display for NamModelChoice {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::None => f.write_str(tr!(nam_no_model)),
+            Self::Model(name) => f.write_str(name),
+        }
+    }
 }
 
 // --- Apply ---
@@ -27,7 +53,7 @@ pub enum NamMessage {
 pub fn apply(cfg: &mut NamConfig, msg: NamMessage) -> Option<ParamUpdate> {
     match msg {
         NamMessage::ModelSelected(name) => {
-            cfg.model_name = Some(name);
+            cfg.model_name = name;
             // Selecting a model is a non-float change: rebuild the stage.
             Some(ParamUpdate::NeedsStageRebuild)
         }
@@ -55,12 +81,20 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
     let mix = cfg.mix;
 
     stage_card(tr!(stage_nam), idx, state, move || {
-        let models = registry::available_names();
+        // "(None)" first so a selected model can be cleared back to passthrough.
+        let mut choices = vec![NamModelChoice::None];
+        choices.extend(registry::available_names().into_iter().map(NamModelChoice::Model));
+        let selected = model_name
+            .clone()
+            .map_or(NamModelChoice::None, NamModelChoice::Model);
 
         let model_selector = row![
             text(tr!(nam_model)).width(Length::FillPortion(3)),
-            pick_list(models, model_name.clone(), move |name| {
-                Message::Stage(idx, StageMessage::Nam(NamMessage::ModelSelected(name)))
+            pick_list(choices, Some(selected), move |choice| {
+                Message::Stage(
+                    idx,
+                    StageMessage::Nam(NamMessage::ModelSelected(choice.into_option())),
+                )
             })
             .placeholder(tr!(nam_no_model))
             .width(Length::FillPortion(7)),
@@ -68,7 +102,9 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
 
-        // Read-only model info: native rate / mismatch warning.
+        // Read-only info: the selected model's native sample rate (or "not found").
+        // A mismatch against the engine rate is logged at build time; the engine rate
+        // isn't available in this view, so it isn't shown here.
         let info_line: Element<'_, Message> = match model_name.as_deref() {
             Some(name) => match registry::get(name) {
                 Some(model) => {

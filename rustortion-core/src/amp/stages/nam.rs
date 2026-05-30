@@ -3,12 +3,12 @@ use nam_rs::WaveNet;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::Stage;
+use crate::amp::stages::common::db_to_lin;
 use crate::nam::registry;
 
-/// Convert decibels to a linear amplitude multiplier.
-fn db_to_linear(db: f32) -> f32 {
-    10.0_f32.powf(db / 20.0)
-}
+/// Valid range for the input/output gain knobs, matching the UI and plugin params.
+const GAIN_DB_MIN: f32 = -24.0;
+const GAIN_DB_MAX: f32 = 24.0;
 
 /// A Neural Amp Modeler stage running a WaveNet `.nam` model.
 ///
@@ -50,12 +50,20 @@ impl Stage for NamStage {
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "input_gain_db" => {
-                self.input_gain = db_to_linear(value);
-                Ok(())
+                if (GAIN_DB_MIN..=GAIN_DB_MAX).contains(&value) {
+                    self.input_gain = db_to_lin(value);
+                    Ok(())
+                } else {
+                    Err("Input gain must be between -24 and 24 dB")
+                }
             }
             "output_gain_db" => {
-                self.output_gain = db_to_linear(value);
-                Ok(())
+                if (GAIN_DB_MIN..=GAIN_DB_MAX).contains(&value) {
+                    self.output_gain = db_to_lin(value);
+                    Ok(())
+                } else {
+                    Err("Output gain must be between -24 and 24 dB")
+                }
             }
             "mix" => {
                 if (0.0..=1.0).contains(&value) {
@@ -113,16 +121,17 @@ impl NamConfig {
     /// allocates the `WaveNet` here (off the real-time thread). On any failure the
     /// stage falls back to passthrough with a warning.
     pub fn to_stage(&self, sample_rate: f32) -> NamStage {
-        let input_gain = db_to_linear(self.input_gain_db);
-        let output_gain = db_to_linear(self.output_gain_db);
+        let input_gain = db_to_lin(self.input_gain_db.clamp(GAIN_DB_MIN, GAIN_DB_MAX));
+        let output_gain = db_to_lin(self.output_gain_db.clamp(GAIN_DB_MIN, GAIN_DB_MAX));
+        let mix = self.mix.clamp(0.0, 1.0);
 
         let Some(name) = self.model_name.as_deref() else {
-            return NamStage::passthrough(input_gain, output_gain, self.mix);
+            return NamStage::passthrough(input_gain, output_gain, mix);
         };
 
         let Some(model) = registry::get(name) else {
             warn!("NAM model '{name}' not found in registry; using passthrough");
-            return NamStage::passthrough(input_gain, output_gain, self.mix);
+            return NamStage::passthrough(input_gain, output_gain, mix);
         };
 
         let native_sample_rate = model.sample_rate() as f32;
@@ -139,13 +148,13 @@ impl NamConfig {
                 wavenet: Some(wavenet),
                 input_gain,
                 output_gain,
-                mix: self.mix,
+                mix,
                 native_sample_rate,
                 sample_rate_mismatch,
             },
             Err(e) => {
                 warn!("Failed to build NAM model '{name}': {e}; using passthrough");
-                NamStage::passthrough(input_gain, output_gain, self.mix)
+                NamStage::passthrough(input_gain, output_gain, mix)
             }
         }
     }
@@ -175,5 +184,10 @@ mod tests {
 
         assert!(stage.set_parameter("mix", 2.0).is_err());
         assert!(stage.set_parameter("native_sample_rate", 1.0).is_err());
+
+        // Gains outside ±24 dB (and NaN) are rejected.
+        assert!(stage.set_parameter("input_gain_db", 30.0).is_err());
+        assert!(stage.set_parameter("output_gain_db", -30.0).is_err());
+        assert!(stage.set_parameter("input_gain_db", f32::NAN).is_err());
     }
 }

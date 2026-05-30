@@ -35,7 +35,14 @@ impl NamLoader {
         let entries = std::fs::read_dir(directory)
             .with_context(|| format!("Failed to read NAM directory '{}'", directory.display()))?;
 
-        for entry in entries.flatten() {
+        for entry in entries {
+            let entry = match entry {
+                Ok(entry) => entry,
+                Err(e) => {
+                    warn!("Skipping unreadable entry in NAM directory: {e}");
+                    continue;
+                }
+            };
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) != Some("nam") {
                 continue;
