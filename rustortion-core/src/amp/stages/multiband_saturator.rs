@@ -480,8 +480,8 @@ mod tests {
             let output = stage.process(input);
 
             if i >= settle {
-                input_rms_sum += (input as f64) * (input as f64);
-                output_rms_sum += (output as f64) * (output as f64);
+                input_rms_sum = (input as f64).mul_add(input as f64, input_rms_sum);
+                output_rms_sum = (output as f64).mul_add(output as f64, output_rms_sum);
                 measurement_samples += 1;
             }
         }

@@ -181,7 +181,7 @@ impl TwoStageConvolver {
         let mut idx = self.head_write_pos;
 
         for &coeff in &self.head_coeffs {
-            head_out += coeff * self.head_ring[idx];
+            head_out = coeff.mul_add(self.head_ring[idx], head_out);
             if idx == 0 {
                 idx = HEAD_LEN - 1;
             } else {
@@ -291,7 +291,7 @@ impl TwoStageConvolver {
 
         for i in 0..self.block_size {
             let pos = (base + i) % self.block_size;
-            self.ola_buffer[pos] += self.time_scratch[i] * scale;
+            self.ola_buffer[pos] = self.time_scratch[i].mul_add(scale, self.ola_buffer[pos]);
         }
 
         self.ola_write = (self.ola_write + self.partition_size) % self.block_size;

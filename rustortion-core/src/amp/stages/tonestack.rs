@@ -74,7 +74,7 @@ impl ToneStackStage {
 
     #[inline]
     fn one_pole_lp(alpha: f32, state: &mut f32, x: f32) -> f32 {
-        *state += alpha * (x - *state);
+        *state = alpha.mul_add(x - *state, *state);
         *state
     }
 
@@ -134,7 +134,7 @@ impl Stage for ToneStackStage {
         // 5. Presence -- high-shelf (+-6 dB, dB-mapped)
         // ---------------------------------------------------------
         let pres_alpha = self.alpha(presence_f);
-        self.presence_lp += pres_alpha * (y - self.presence_lp);
+        self.presence_lp = pres_alpha.mul_add(y - self.presence_lp, self.presence_lp);
         let pres_db = (self.presence - 1.0) * 6.0;
         let pres_lin = 10.0_f32.powf(pres_db / 20.0);
         let shelf = (y - self.presence_lp).mul_add(pres_lin, self.presence_lp);

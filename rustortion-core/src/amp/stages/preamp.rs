@@ -142,8 +142,8 @@ mod tests {
             for i in 0..n {
                 let input = (i as f32 * 0.1).sin() * 0.3;
                 let out = stage.process(input);
-                sum_in2 += input * input;
-                sum_diff2 += (out - input) * (out - input);
+                sum_in2 = input.mul_add(input, sum_in2);
+                sum_diff2 = (out - input).mul_add(out - input, sum_diff2);
             }
             let in_rms = (sum_in2 / n as f32).sqrt();
             if in_rms < 1e-10 {

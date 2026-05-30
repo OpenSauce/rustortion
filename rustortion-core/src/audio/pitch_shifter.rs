@@ -7,7 +7,7 @@ use rustfft::num_complex::Complex;
 /// Interpolate between two phases using shortest-path unwrapping.
 fn lerp_phase(ph0: f64, ph1: f64, t: f64) -> f64 {
     let mut d = ph1 - ph0;
-    d -= (d / (2.0 * PI)).round() * 2.0 * PI;
+    d = ((d / (2.0 * PI)).round() * 2.0).mul_add(-PI, d);
     d.mul_add(t, ph0)
 }
 
@@ -189,7 +189,7 @@ impl PitchShifter {
             self.last_phase[k] = phase;
 
             // Wrap to [-π, π]
-            diff -= (diff / (2.0 * PI)).round() * 2.0 * PI;
+            diff = ((diff / (2.0 * PI)).round() * 2.0).mul_add(-PI, diff);
 
             self.analysis_mag[k] = mag;
             self.analysis_freq[k] = (k as f64).mul_add(expected_step, diff);
@@ -228,7 +228,8 @@ impl PitchShifter {
             }
 
             // Wrap to [0, 2π) to prevent precision loss over long sessions
-            self.accum_phase[j] -= (self.accum_phase[j] / (2.0 * PI)).floor() * 2.0 * PI;
+            self.accum_phase[j] = ((self.accum_phase[j] / (2.0 * PI)).floor() * 2.0)
+                .mul_add(-PI, self.accum_phase[j]);
 
             self.shifted_mag[j] = mag;
             self.shifted_phase[j] = self.accum_phase[j];
@@ -292,7 +293,8 @@ impl PitchShifter {
         let scale = self.output_scale;
         for i in 0..FFT_SIZE {
             let pos = (self.output_write + i) % OUTPUT_SIZE;
-            self.output_accum[pos] += self.synth_frame[i] * self.window[i] * scale;
+            self.output_accum[pos] =
+                (self.synth_frame[i] * self.window[i]).mul_add(scale, self.output_accum[pos]);
         }
         self.output_write = (self.output_write + HOP_SIZE) % OUTPUT_SIZE;
     }
