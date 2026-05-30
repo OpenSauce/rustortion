@@ -33,5 +33,6 @@ pub mod amp;
 pub mod audio;
 pub mod ir;
 pub mod metronome;
+pub mod nam;
 pub mod preset;
 pub mod tuner;

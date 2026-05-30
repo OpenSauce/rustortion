@@ -15,6 +15,7 @@ const fn stage_abbreviation(cfg: &StageConfig) -> &'static str {
         StageConfig::Level(_) => "Lvl",
         StageConfig::NoiseGate(_) => "NG",
         StageConfig::MultibandSaturator(_) => "MBS",
+        StageConfig::Nam(_) => "NAM",
         StageConfig::Delay(_) => "Dly",
         StageConfig::Reverb(_) => "Rev",
         StageConfig::Eq(_) => "EQ",

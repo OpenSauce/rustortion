@@ -374,6 +374,20 @@ impl Plugin for RustortionPlugin {
                     Err(e) => nih_log!("Failed to init IR loader: {e}"),
                 }
 
+                // Load user NAM models from ~/.config/rustortion/nam into the
+                // process-global registry so the NAM stage can resolve models.
+                let nam_dir = dirs::config_dir()
+                    .unwrap_or_default()
+                    .join("rustortion")
+                    .join("nam");
+                match rustortion_core::nam::NamLoader::new(&nam_dir) {
+                    Ok(loader) => {
+                        nih_log!("Loaded {} NAM model(s)", loader.available_names().len());
+                        rustortion_core::nam::registry::init_from_loader(&loader);
+                    }
+                    Err(e) => nih_log!("Failed to init NAM loader: {e}"),
+                }
+
                 // Load factory presets (embedded in binary)
                 let factory_presets = factory::load_factory_presets();
                 let names: Vec<String> = factory_presets.iter().map(|p| p.name.clone()).collect();
