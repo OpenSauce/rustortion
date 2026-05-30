@@ -11,6 +11,10 @@ pub struct Samplers {
     input_buffer: Vec<Vec<f32>>,
     upsampled_buffer: Vec<Vec<f32>>,
     downsampled_buffer: Vec<Vec<f32>>,
+    /// Number of frames the last `upsample()` call actually produced. The
+    /// chain processes exactly this many frames in place, so `downsample()`
+    /// must feed back exactly this many — not the full buffer capacity.
+    upsampled_frames: usize,
     oversample_factor: f64,
     sample_rate: usize,
 }
@@ -42,6 +46,7 @@ impl Samplers {
         let input_buffer = vec![input_vec];
         let upsampled_buffer = vec![vec![0.0; upsampler.output_frames_max()]; CHANNELS];
         let downsampled_buffer = vec![vec![0.0; downsampler.output_frames_max()]; CHANNELS];
+        let upsampled_frames = upsampled_buffer[0].len();
 
         Ok(Self {
             upsampler,
@@ -49,6 +54,7 @@ impl Samplers {
             input_buffer,
             upsampled_buffer,
             downsampled_buffer,
+            upsampled_frames,
             oversample_factor,
             sample_rate,
         })
@@ -85,12 +91,15 @@ impl Samplers {
             .upsampler
             .process_into_buffer(&input, &mut output, None)
             .context("Upsampler failed")?;
+        self.upsampled_frames = upsampled_frames;
 
         Ok(&mut self.upsampled_buffer[0][..upsampled_frames])
     }
 
     pub fn downsample(&mut self) -> Result<&mut [f32]> {
-        let in_frames = self.upsampled_buffer[0].len();
+        // Feed back exactly the frames the chain just processed in place,
+        // not the full buffer capacity, so no stale tail can leak through.
+        let in_frames = self.upsampled_frames;
         let out_frames = self.downsampled_buffer[0].len();
 
         let input = SequentialSliceOfVecs::new(&self.upsampled_buffer, CHANNELS, in_frames)
@@ -130,6 +139,7 @@ impl Samplers {
         )
         .context("failed to recreate upsampler")?;
         self.upsampled_buffer = vec![vec![0.0; self.upsampler.output_frames_max()]; CHANNELS];
+        self.upsampled_frames = self.upsampled_buffer[0].len();
 
         self.downsampler = Fft::<f32>::new(
             self.sample_rate * self.oversample_factor as usize,

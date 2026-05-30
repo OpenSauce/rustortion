@@ -204,23 +204,27 @@ fn create_fft(factor: usize) -> ResamplerPair {
 // Benchmarks
 // ============================================================================
 
-fn run_roundtrip(pair: &mut ResamplerPair, input: &[Vec<f32>]) {
+/// Run one up/downsample round trip. The output buffers are passed in and
+/// reused so this hot path only times `process_into_buffer` plus the cheap
+/// (allocation-free) adapter wrapping — never per-iteration heap allocation.
+fn run_roundtrip(
+    pair: &mut ResamplerPair,
+    input: &[Vec<f32>],
+    up_buf: &mut [Vec<f32>],
+    down_buf: &mut [Vec<f32>],
+) {
     let in_frames = input[0].len();
-    let up_cap = pair.up.output_frames_max();
-    let down_cap = pair.down.output_frames_max();
-
-    let mut up_buf = vec![vec![0.0f32; up_cap]; CHANNELS];
-    let mut down_buf = vec![vec![0.0f32; down_cap]; CHANNELS];
+    let up_cap = up_buf[0].len();
+    let down_cap = down_buf[0].len();
 
     let in_adapter = SequentialSliceOfVecs::new(black_box(input), CHANNELS, in_frames).unwrap();
-    let mut up_adapter = SequentialSliceOfVecs::new_mut(&mut up_buf, CHANNELS, up_cap).unwrap();
+    let mut up_adapter = SequentialSliceOfVecs::new_mut(up_buf, CHANNELS, up_cap).unwrap();
     pair.up
         .process_into_buffer(&in_adapter, &mut up_adapter, None)
         .unwrap();
 
-    let up_in = SequentialSliceOfVecs::new(&up_buf, CHANNELS, up_cap).unwrap();
-    let mut down_adapter =
-        SequentialSliceOfVecs::new_mut(&mut down_buf, CHANNELS, down_cap).unwrap();
+    let up_in = SequentialSliceOfVecs::new(&*up_buf, CHANNELS, up_cap).unwrap();
+    let mut down_adapter = SequentialSliceOfVecs::new_mut(down_buf, CHANNELS, down_cap).unwrap();
     pair.down
         .process_into_buffer(&up_in, &mut down_adapter, None)
         .unwrap();
@@ -249,7 +253,9 @@ fn bench_resampler_roundtrip(c: &mut Criterion) {
                 &factor,
                 |b, &factor| {
                     let mut pair = create(factor);
-                    b.iter(|| run_roundtrip(&mut pair, &input));
+                    let mut up_buf = vec![vec![0.0f32; pair.up.output_frames_max()]; CHANNELS];
+                    let mut down_buf = vec![vec![0.0f32; pair.down.output_frames_max()]; CHANNELS];
+                    b.iter(|| run_roundtrip(&mut pair, &input, &mut up_buf, &mut down_buf));
                 },
             );
         }
