@@ -52,7 +52,7 @@ impl FirConvolver {
         let mut idx = self.write_pos;
 
         for &coeff in &self.coefficients {
-            output += self.input_buffer[idx] * coeff;
+            output = self.input_buffer[idx].mul_add(coeff, output);
             if idx == 0 {
                 idx = len - 1;
             } else {
