@@ -36,6 +36,24 @@ impl NamStage {
             sample_rate_mismatch: false,
         }
     }
+
+    /// Passthrough used when the model's native rate mismatches the engine rate.
+    /// Carries the real native rate so the UI/params can report the bypass reason.
+    const fn bypassed_for_mismatch(
+        input_gain: f32,
+        output_gain: f32,
+        mix: f32,
+        native_sample_rate: f32,
+    ) -> Self {
+        Self {
+            wavenet: None,
+            input_gain,
+            output_gain,
+            mix,
+            native_sample_rate,
+            sample_rate_mismatch: true,
+        }
+    }
 }
 
 impl Stage for NamStage {
@@ -135,11 +153,18 @@ impl NamConfig {
         };
 
         let native_sample_rate = model.sample_rate() as f32;
-        let sample_rate_mismatch = (native_sample_rate - sample_rate).abs() > 1.0;
-        if sample_rate_mismatch {
+        if (native_sample_rate - sample_rate).abs() > 1.0 {
+            // Resampling is intentionally avoided (too expensive on the RT path), so a
+            // rate mismatch bypasses the model entirely: pass the dry signal through.
             warn!(
                 "NAM model '{name}' native rate {native_sample_rate} Hz differs from engine \
-                 rate {sample_rate} Hz; tone may be affected"
+                 rate {sample_rate} Hz; bypassing model (dry passthrough)"
+            );
+            return NamStage::bypassed_for_mismatch(
+                input_gain,
+                output_gain,
+                mix,
+                native_sample_rate,
             );
         }
 
@@ -150,7 +175,8 @@ impl NamConfig {
                 output_gain,
                 mix,
                 native_sample_rate,
-                sample_rate_mismatch,
+                // Rates match (mismatch returned early above).
+                sample_rate_mismatch: false,
             },
             Err(e) => {
                 warn!("Failed to build NAM model '{name}': {e}; using passthrough");
@@ -171,6 +197,25 @@ mod tests {
         for x in [-1.0, 0.0, 0.25, 0.9] {
             assert_eq!(stage.process(x), x);
         }
+    }
+
+    #[test]
+    fn mismatch_bypass_is_dry_passthrough() {
+        // A rate-mismatch stage is built without a WaveNet but records the real native
+        // rate and the mismatch flag. We construct it directly here because building a
+        // real `WaveNet` requires loading a `.nam` model into the registry, which unit
+        // tests can't do; this still verifies the RT-path passthrough contract and the
+        // params reported to the UI.
+        let mut stage =
+            NamStage::bypassed_for_mismatch(db_to_lin(6.0), db_to_lin(-3.0), 0.5, 44_100.0);
+
+        // No model runs: output is the dry input, with no gain or mix applied.
+        for x in [-1.0, 0.0, 0.25, 0.9] {
+            assert_eq!(stage.process(x), x);
+        }
+
+        assert!((stage.get_parameter("native_sample_rate").unwrap() - 44_100.0).abs() < 1e-3);
+        assert!((stage.get_parameter("sample_rate_mismatch").unwrap() - 1.0).abs() < 1e-6);
     }
 
     #[test]

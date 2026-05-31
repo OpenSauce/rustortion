@@ -433,6 +433,7 @@ impl<B: ParamBackend> SharedApp<B> {
                     can_move_up,
                     can_move_down,
                     bypassed,
+                    engine_sample_rate: self.backend.sample_rate(),
                 },
             ));
         }

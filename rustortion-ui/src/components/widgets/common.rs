@@ -104,6 +104,8 @@ pub struct StageViewState {
     pub can_move_up: bool,
     pub can_move_down: bool,
     pub bypassed: bool,
+    /// Engine sample rate (Hz), used by stages (e.g. NAM) to detect rate mismatches.
+    pub engine_sample_rate: u32,
 }
 
 fn stage_header(stage_name: &str, idx: usize, state: StageViewState) -> Element<'_, Message> {
