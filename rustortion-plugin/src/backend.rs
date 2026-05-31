@@ -245,6 +245,17 @@ impl ParamBackend for PluginBackend {
         None
     }
 
+    fn nam_models_dir(&self) -> Option<std::path::PathBuf> {
+        Some(crate::user_nam_dir())
+    }
+
+    fn rescan_nam_models(&self) -> Result<usize, String> {
+        let dir = crate::user_nam_dir();
+        let loader = rustortion_core::nam::NamLoader::new(&dir).map_err(|e| e.to_string())?;
+        rustortion_core::nam::registry::init_from_loader(&loader);
+        Ok(loader.available_names().len())
+    }
+
     fn persist_chain_state(&self, stages: &[StageConfig]) {
         // Store in SharedState for editor close/reopen within same session
         self.shared_state.store_gui_stages(stages);

@@ -209,6 +209,14 @@ impl<B: ParamBackend> SharedApp<B> {
                             self.backend.rebuild_stage(idx, &self.stages[idx]);
                             self.backend.persist_chain_state(&self.stages);
                         }
+                        Some(ParamUpdate::RescanNamModels) => {
+                            // The pick-list refreshes automatically because the NAM
+                            // view reads `registry::available_names()` live.
+                            match self.backend.rescan_nam_models() {
+                                Ok(count) => log::info!("Rescanned NAM models: {count} found"),
+                                Err(e) => log::error!("Failed to rescan NAM models: {e}"),
+                            }
+                        }
                         None => {}
                     }
                 }
@@ -433,6 +441,8 @@ impl<B: ParamBackend> SharedApp<B> {
                     can_move_up,
                     can_move_down,
                     bypassed,
+                    // NAM-specific: where the NAM stage card shows users to drop models.
+                    nam_models_dir: self.backend.nam_models_dir(),
                 },
             ));
         }

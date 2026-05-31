@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::{Context, Result};
@@ -29,6 +30,10 @@ pub struct Manager {
     xrun_count: Arc<AtomicU64>,
     available_irs: Vec<String>,
     ir_load_handle: Option<IrLoadHandle>,
+    /// Live NAM models directory — the single source of truth the NAM stage
+    /// card displays and rescans. Updated whenever a rescan succeeds (from the
+    /// settings dialog or the stage card) so the displayed path never drifts.
+    nam_dir: Mutex<String>,
 }
 
 impl Manager {
@@ -111,6 +116,7 @@ impl Manager {
 
         let manager = Self {
             active_client,
+            nam_dir: Mutex::new(settings.nam_dir.clone()),
             current_settings: settings.clone(),
             tuner_handle,
             engine_handle,
@@ -247,6 +253,12 @@ impl Manager {
     pub fn rescan_nam_models(&self, dir: &str) -> Result<usize, String> {
         match load_nam_models(dir) {
             Ok(count) => {
+                // Keep the live directory in sync so `nam_dir()` (the source of
+                // truth the NAM stage card displays/rescans) reflects the path
+                // that was just scanned.
+                if let Ok(mut d) = self.nam_dir.lock() {
+                    *d = dir.to_string();
+                }
                 info!("Rescanned NAM directory '{dir}': {count} model(s) loaded");
                 Ok(count)
             }
@@ -256,6 +268,15 @@ impl Manager {
                 Err(msg)
             }
         }
+    }
+
+    /// The NAM models directory currently in use — the same source of truth the
+    /// settings dialog edits and rescans against. Returns the last successfully
+    /// scanned directory (or the configured default if none has been scanned).
+    pub fn nam_dir(&self) -> String {
+        self.nam_dir
+            .lock()
+            .map_or_else(|_| self.current_settings.nam_dir.clone(), |d| d.clone())
     }
 
     pub fn sample_rate(&self) -> usize {
