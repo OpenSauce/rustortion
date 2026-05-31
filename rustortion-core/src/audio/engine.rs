@@ -202,10 +202,7 @@ impl Engine {
     }
 
     fn process_without_upsampling(&mut self, output: &mut [f32]) -> Result<()> {
-        let chain = self.chain.as_mut();
-        for s in output.iter_mut() {
-            *s = chain.process(*s);
-        }
+        self.chain.as_mut().process_block(output);
 
         Ok(())
     }
@@ -215,10 +212,7 @@ impl Engine {
 
         let upsampled = self.samplers.upsample()?;
 
-        let chain = self.chain.as_mut();
-        for s in upsampled.iter_mut() {
-            *s = chain.process(*s);
-        }
+        self.chain.as_mut().process_block(upsampled);
 
         let downsampled = self.samplers.downsample()?;
 
