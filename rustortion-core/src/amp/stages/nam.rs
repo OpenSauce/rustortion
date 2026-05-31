@@ -24,6 +24,10 @@ pub struct NamStage {
     native_sample_rate: f32,
     /// True if the model's native rate differs from the engine rate.
     sample_rate_mismatch: bool,
+    /// Scratch buffer holding the dry signal during block processing, so the
+    /// in-place `process_buffer` output can be blended back with `mix`. Grown on
+    /// demand (first block of a given size); steady-state processing never allocates.
+    dry: Vec<f32>,
 }
 
 impl NamStage {
@@ -35,6 +39,7 @@ impl NamStage {
             mix,
             native_sample_rate: 0.0,
             sample_rate_mismatch: false,
+            dry: Vec::new(),
         }
     }
 
@@ -53,7 +58,14 @@ impl NamStage {
             mix,
             native_sample_rate,
             sample_rate_mismatch: true,
+            dry: Vec::new(),
         }
+    }
+
+    /// True when a model is loaded and running (not a passthrough or rate-mismatch bypass).
+    #[must_use]
+    pub const fn is_active(&self) -> bool {
+        self.model.is_some()
     }
 }
 
@@ -64,6 +76,35 @@ impl Stage for NamStage {
         };
         let wet = model.process_sample(input * self.input_gain) * self.output_gain;
         self.mix.mul_add(wet - input, input)
+    }
+
+    fn process_block(&mut self, input: &mut [f32]) {
+        // No model → dry passthrough (matches `process`'s early return).
+        if self.model.is_none() {
+            return;
+        }
+
+        // Stash the dry signal, then scale the buffer by input gain in place so the
+        // model's batched `process_buffer` runs over the gained signal. `resize` only
+        // allocates the first time a given block size is seen; steady state is alloc-free.
+        if self.dry.len() < input.len() {
+            self.dry.resize(input.len(), 0.0);
+        }
+        let dry = &mut self.dry[..input.len()];
+        for (d, x) in dry.iter_mut().zip(input.iter_mut()) {
+            *d = *x;
+            *x *= self.input_gain;
+        }
+
+        // Borrow the model only here (after the `self.dry` borrow above is done being set up).
+        let model = self.model.as_mut().expect("model present (checked above)");
+        model.process_buffer(input);
+
+        // Apply output gain and blend wet/dry per sample — same formula as `process`.
+        for (x, &d) in input.iter_mut().zip(self.dry[..].iter()) {
+            let wet = *x * self.output_gain;
+            *x = self.mix.mul_add(wet - d, d);
+        }
     }
 
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
@@ -178,6 +219,7 @@ impl NamConfig {
                 native_sample_rate,
                 // Rates match (mismatch returned early above).
                 sample_rate_mismatch: false,
+                dry: Vec::new(),
             },
             Err(e) => {
                 warn!("Failed to build NAM model '{name}': {e}; using passthrough");
@@ -235,5 +277,60 @@ mod tests {
         assert!(stage.set_parameter("input_gain_db", 30.0).is_err());
         assert!(stage.set_parameter("output_gain_db", -30.0).is_err());
         assert!(stage.set_parameter("input_gain_db", f32::NAN).is_err());
+    }
+
+    /// `process_block` (batched `process_buffer` + gain/mix wrapper) must match the
+    /// per-sample `process` path bit-for-bit (within float tolerance). Uses the vendored
+    /// MIT reference model in `tests/fixtures/`, so this runs in CI.
+    #[test]
+    fn block_matches_per_sample_with_real_model() {
+        use crate::nam::{NamLoader, registry};
+        use std::path::Path;
+
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let Ok(loader) = NamLoader::new(&dir) else {
+            return;
+        };
+        registry::init_from_loader(&loader);
+        let Some(name) = registry::available_names().into_iter().next() else {
+            eprintln!("skipping NAM parity test: no model available");
+            return;
+        };
+
+        let config = NamConfig {
+            model_name: Some(name),
+            input_gain_db: 6.0,
+            output_gain_db: -3.0,
+            mix: 0.5,
+            bypassed: false,
+        };
+
+        // Two stages from the same config evolve identical internal state given the
+        // same input, so per-sample and block paths should agree.
+        let mut per_sample = config.to_stage(48_000.0);
+        let mut block = config.to_stage(48_000.0);
+        if !per_sample.is_active() {
+            eprintln!("skipping NAM parity test: model bypassed at 48 kHz");
+            return;
+        }
+
+        // A non-trivial signal so gain/mix differences would show up.
+        let input: Vec<f32> = (0..256)
+            .map(|i| {
+                let t = i as f32;
+                0.3f32.mul_add((t * 0.05).sin(), 0.1 * (t * 0.31).cos())
+            })
+            .collect();
+
+        let expected: Vec<f32> = input.iter().map(|&x| per_sample.process(x)).collect();
+        let mut got = input; // moved: input is not needed after this
+        block.process_block(&mut got);
+
+        for (i, (e, g)) in expected.iter().zip(got.iter()).enumerate() {
+            assert!(
+                (e - g).abs() < 1e-5,
+                "mismatch at {i}: per-sample={e}, block={g}"
+            );
+        }
     }
 }
