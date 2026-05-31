@@ -213,7 +213,18 @@ impl<B: ParamBackend> SharedApp<B> {
                             // The pick-list refreshes automatically because the NAM
                             // view reads `registry::available_names()` live.
                             match self.backend.rescan_nam_models() {
-                                Ok(count) => log::info!("Rescanned NAM models: {count} found"),
+                                Ok(count) => {
+                                    log::info!("Rescanned NAM models: {count} found");
+                                    // Rescan replaces the global registry, but already-built
+                                    // NamStage instances own their loaded model — rebuild the
+                                    // live NAM stages so an in-place `.nam` edit takes effect
+                                    // immediately (and re-selecting the same name still works).
+                                    for idx in 0..self.stages.len() {
+                                        if self.stages[idx].stage_type() == StageType::Nam {
+                                            self.backend.rebuild_stage(idx, &self.stages[idx]);
+                                        }
+                                    }
+                                }
                                 Err(e) => log::error!("Failed to rescan NAM models: {e}"),
                             }
                         }
