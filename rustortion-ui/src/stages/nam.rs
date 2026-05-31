@@ -87,6 +87,8 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         .nam_models_dir
         .as_ref()
         .map(|p| p.display().to_string());
+    // Effective engine rate, read out before `state` is moved into the card closure.
+    let engine_rate = state.engine_sample_rate;
 
     stage_card(tr!(stage_nam), idx, state, move || {
         // "(None)" first so a selected model can be cleared back to passthrough.
@@ -111,13 +113,20 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         .align_y(Alignment::Center);
 
         // Read-only info: the selected model's native sample rate (or "not found").
-        // A mismatch against the engine rate is logged at build time; the engine rate
-        // isn't available in this view, so it isn't shown here.
+        // When the native rate mismatches the engine rate the model is bypassed (dry
+        // passthrough, no resampling) — surface that here using both rates.
         let info_line: Element<'_, Message> = match model_name.as_deref() {
             Some(name) => match registry::get(name) {
                 Some(model) => {
-                    let rate = model.sample_rate() as u32;
-                    text(format!("{}: {rate} Hz", tr!(nam_native_rate)))
+                    let native_rate = model.sample_rate() as u32;
+                    if native_rate.abs_diff(engine_rate) > 1 {
+                        text(format!(
+                            "{}: {native_rate} Hz · {engine_rate} Hz",
+                            tr!(nam_rate_mismatch_bypassed)
+                        ))
+                    } else {
+                        text(format!("{}: {native_rate} Hz", tr!(nam_native_rate)))
+                    }
                 }
                 None => text(tr!(nam_model_not_found)),
             }

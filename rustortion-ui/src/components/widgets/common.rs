@@ -104,6 +104,10 @@ pub struct StageViewState {
     pub can_move_up: bool,
     pub can_move_down: bool,
     pub bypassed: bool,
+    /// Effective engine sample rate in Hz — the device rate times the oversampling
+    /// factor, i.e. the rate stages are actually built and run at. Used by stages
+    /// (e.g. NAM) to detect rate mismatches, so it must match what `to_stage` sees.
+    pub engine_sample_rate: u32,
     /// NAM-specific: directory the NAM stage loads `.nam` models from, shown on
     /// the NAM stage card so users know where to drop model files. `None` if the
     /// backend has no NAM directory. Ignored by all other stage views.
