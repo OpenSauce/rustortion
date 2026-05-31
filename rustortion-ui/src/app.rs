@@ -433,6 +433,10 @@ impl<B: ParamBackend> SharedApp<B> {
                     can_move_up,
                     can_move_down,
                     bypassed,
+                    // Effective rate (device × oversampling) — the rate stages are
+                    // built at, so NAM's mismatch check compares against the right value.
+                    engine_sample_rate: self.backend.sample_rate()
+                        * self.backend.oversampling_factor(),
                 },
             ));
         }
