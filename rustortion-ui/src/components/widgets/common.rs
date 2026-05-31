@@ -104,7 +104,9 @@ pub struct StageViewState {
     pub can_move_up: bool,
     pub can_move_down: bool,
     pub bypassed: bool,
-    /// Engine sample rate (Hz), used by stages (e.g. NAM) to detect rate mismatches.
+    /// Effective engine sample rate in Hz — the device rate times the oversampling
+    /// factor, i.e. the rate stages are actually built and run at. Used by stages
+    /// (e.g. NAM) to detect rate mismatches, so it must match what `to_stage` sees.
     pub engine_sample_rate: u32,
 }
 
