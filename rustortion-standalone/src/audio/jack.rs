@@ -64,6 +64,11 @@ impl ProcessHandler {
 
 impl jack::ProcessHandler for ProcessHandler {
     fn process(&mut self, _client: &jack::Client, ps: &jack::ProcessScope) -> jack::Control {
+        // Denormals are extremely slow (esp. on ARM/Pi) and the IR convolver + filter
+        // tails can produce them as signals decay. The plugin gets FTZ from nih-plug;
+        // the standalone must set it on its own RT thread. Idempotent and cheap.
+        crate::audio::denormals::enable_flush_to_zero();
+
         let input = self.ports.get_input(ps);
 
         if let Err(e) = self.audio_engine.process(input, self.buffer.as_mut_slice()) {
