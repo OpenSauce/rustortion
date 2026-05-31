@@ -481,6 +481,15 @@ impl Default for EqSlotParams {
     }
 }
 
+/// Per-slot NAM params — intentionally **no** `model` parameter here.
+///
+/// The selected model is stored by NAME in `NamConfig.model_name` inside the
+/// serialized `chain_state`, so it persists with and recalls from the DAW project
+/// (the chain is rebuilt and each NAM stage resolves its model by name on load).
+/// Name-based recall is robust against the model list reordering. Exposing model
+/// choice as a host-automatable param is deferred — it needs a general slot<->stage
+/// param pump (and a background reload, since switching models loads a neural net
+/// off the audio thread), with no clean NAM-only slice.
 #[derive(Params)]
 pub struct NamSlotParams {
     #[id = "input_gain_db"]
