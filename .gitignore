@@ -4,6 +4,16 @@
 
 /claude
 
+# Local working material (not part of the repo)
+/docs
+/dsp_reference
+/.superpowers
+/.claude
+
+# NAM model files are user-provided; only the placeholder is tracked
+/nam/*
+!/nam/.gitkeep
+
 impulse_responses/*
 !/impulse_responses/Misc
 !/impulse_responses/Jesterdyne
