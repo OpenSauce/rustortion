@@ -230,9 +230,12 @@ mod tests {
             panic!("expected a NAM stage at index 0");
         };
         assert_eq!(cfg.model_name.as_deref(), Some("S-[AMP] Divine Sheep #04"));
-        assert!((cfg.input_gain_db - 3.0).abs() < f32::EPSILON);
-        assert!((cfg.output_gain_db - (-2.0)).abs() < f32::EPSILON);
-        assert!((cfg.mix - 0.75).abs() < f32::EPSILON);
+        // Small fixed tolerance — `f32::EPSILON` is the spacing near 1.0, not a
+        // general-purpose comparison bound.
+        const TOL: f32 = 1e-6;
+        assert!((cfg.input_gain_db - 3.0).abs() < TOL);
+        assert!((cfg.output_gain_db - (-2.0)).abs() < TOL);
+        assert!((cfg.mix - 0.75).abs() < TOL);
         assert!(cfg.bypassed);
 
         let StageConfig::Nam(cfg) = &restored[1] else {
