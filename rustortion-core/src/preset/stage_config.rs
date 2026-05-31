@@ -197,3 +197,47 @@ impl StageConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The plugin persists its chain as `Vec<StageConfig>` JSON in `chain_state`
+    /// (nih-plug `#[persist]`), and a NAM stage stores its model BY NAME. This is
+    /// the exact path that recalls a selected model when a DAW project reopens, so
+    /// guard it: the model name (and the other NAM fields) must survive a JSON
+    /// round-trip. See NAM-6.
+    #[test]
+    fn nam_model_name_survives_chain_state_round_trip() {
+        let chain = vec![
+            StageConfig::Nam(NamConfig {
+                model_name: Some("S-[AMP] Divine Sheep #04".to_owned()),
+                input_gain_db: 3.0,
+                output_gain_db: -2.0,
+                mix: 0.75,
+                bypassed: true,
+            }),
+            // A passthrough NAM stage (no model) must round-trip as `None`, not "".
+            StageConfig::Nam(NamConfig::default()),
+        ];
+
+        let json = serde_json::to_string(&chain).expect("serialize chain_state");
+        let restored: Vec<StageConfig> =
+            serde_json::from_str(&json).expect("deserialize chain_state");
+
+        assert_eq!(restored.len(), 2);
+        let StageConfig::Nam(cfg) = &restored[0] else {
+            panic!("expected a NAM stage at index 0");
+        };
+        assert_eq!(cfg.model_name.as_deref(), Some("S-[AMP] Divine Sheep #04"));
+        assert!((cfg.input_gain_db - 3.0).abs() < f32::EPSILON);
+        assert!((cfg.output_gain_db - (-2.0)).abs() < f32::EPSILON);
+        assert!((cfg.mix - 0.75).abs() < f32::EPSILON);
+        assert!(cfg.bypassed);
+
+        let StageConfig::Nam(cfg) = &restored[1] else {
+            panic!("expected a NAM stage at index 1");
+        };
+        assert_eq!(cfg.model_name, None);
+    }
+}
