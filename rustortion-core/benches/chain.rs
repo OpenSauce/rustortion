@@ -127,7 +127,7 @@ fn load_first_nam_model() -> Option<String> {
 
 fn bench_nam_sample_vs_block(c: &mut Criterion) {
     let Some(model_name) = load_first_nam_model() else {
-        eprintln!("skipping NAM bench: no .nam model found in workspace nam/ directory");
+        eprintln!("skipping NAM bench: no .nam model found in tests/fixtures");
         return;
     };
 
