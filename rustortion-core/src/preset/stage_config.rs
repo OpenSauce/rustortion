@@ -206,7 +206,7 @@ mod tests {
     /// (nih-plug `#[persist]`), and a NAM stage stores its model BY NAME. This is
     /// the exact path that recalls a selected model when a DAW project reopens, so
     /// guard it: the model name (and the other NAM fields) must survive a JSON
-    /// round-trip. See NAM-6.
+    /// round-trip.
     #[test]
     fn nam_model_name_survives_chain_state_round_trip() {
         let chain = vec![
