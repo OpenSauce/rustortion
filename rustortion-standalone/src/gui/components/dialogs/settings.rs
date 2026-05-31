@@ -1,4 +1,4 @@
-use iced::widget::{button, column, pick_list, row, rule, space, text};
+use iced::widget::{button, column, pick_list, row, rule, space, text, text_input};
 use iced::{Alignment, Element, Length};
 
 use crate::i18n::{self, LANGUAGES};
@@ -24,6 +24,8 @@ pub struct JackStatus {
 /// User Settings
 pub struct SettingsDialog {
     temp_settings: AudioSettings,
+    /// Working copy of the NAM models directory, staged until Apply/Rescan.
+    temp_nam_dir: String,
     available_inputs: Vec<String>,
     available_outputs: Vec<String>,
     show_dialog: bool,
@@ -34,6 +36,7 @@ impl SettingsDialog {
     pub fn new(settings: &AudioSettings) -> Self {
         Self {
             temp_settings: settings.clone(),
+            temp_nam_dir: String::new(),
             available_inputs: Vec::new(),
             available_outputs: Vec::new(),
             show_dialog: false,
@@ -44,11 +47,13 @@ impl SettingsDialog {
     pub fn show(
         &mut self,
         current_settings: &AudioSettings,
+        nam_dir: String,
         inputs: Vec<String>,
         outputs: Vec<String>,
         jack_status: JackStatus,
     ) {
         self.temp_settings = current_settings.clone();
+        self.temp_nam_dir = nam_dir;
         self.available_inputs = inputs;
         self.available_outputs = outputs;
         self.jack_status = jack_status;
@@ -93,6 +98,14 @@ impl SettingsDialog {
 
     pub fn update_temp_settings(&mut self, settings: AudioSettings) {
         self.temp_settings = settings;
+    }
+
+    pub fn get_nam_dir(&self) -> String {
+        self.temp_nam_dir.clone()
+    }
+
+    pub fn set_nam_dir(&mut self, dir: String) {
+        self.temp_nam_dir = dir;
     }
 
     pub fn view(&self) -> Option<Element<'static, SettingsMessage>> {
@@ -188,6 +201,20 @@ impl SettingsDialog {
             color: Some(COLOR_SUBTLE),
         });
 
+        // NAM models directory + rescan (no restart required)
+        let nam_section = column![
+            text(tr!(nam_models_dir)).size(TEXT_SIZE_LABEL),
+            row![
+                text_input(tr!(nam_models_dir), &self.temp_nam_dir)
+                    .on_input(SettingsMessage::NamDirChanged)
+                    .width(Length::Fill),
+                button(tr!(nam_rescan_models)).on_press(SettingsMessage::RescanNamModels),
+            ]
+            .spacing(SPACING_NORMAL)
+            .align_y(Alignment::Center),
+        ]
+        .spacing(SPACING_TIGHT);
+
         // Control buttons
         let controls = row![
             button(tr!(refresh_ports)).on_press(SettingsMessage::RefreshPorts),
@@ -228,6 +255,8 @@ impl SettingsDialog {
             ]
             .spacing(SPACING_NORMAL)
             .padding(SPACING_TIGHT),
+            rule::horizontal(1),
+            nam_section,
             controls,
         ]
         .spacing(DIALOG_CONTENT_SPACING)

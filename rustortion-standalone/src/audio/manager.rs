@@ -66,11 +66,8 @@ impl Manager {
                 }
             };
 
-        match NamLoader::new(std::path::Path::new(&settings.nam_dir)) {
-            Ok(loader) => {
-                info!("Loaded {} NAM model(s)", loader.available_names().len());
-                nam_registry::init_from_loader(&loader);
-            }
+        match load_nam_models(&settings.nam_dir) {
+            Ok(count) => info!("Loaded {count} NAM model(s)"),
             Err(e) => warn!("Failed to load NAM directory: {e}"),
         }
 
@@ -242,6 +239,25 @@ impl Manager {
         self.current_settings.audio.oversampling_factor
     }
 
+    /// Re-scan `dir` for `*.nam` files and re-register them in the global NAM
+    /// registry, replacing any previously loaded models. Runs off the real-time
+    /// thread (settings dialog action), so scanning/parsing here is fine.
+    ///
+    /// Returns the number of models now available, or an error string on failure.
+    pub fn rescan_nam_models(&self, dir: &str) -> Result<usize, String> {
+        match load_nam_models(dir) {
+            Ok(count) => {
+                info!("Rescanned NAM directory '{dir}': {count} model(s) loaded");
+                Ok(count)
+            }
+            Err(e) => {
+                let msg = format!("Failed to rescan NAM directory '{dir}': {e}");
+                error!("{msg}");
+                Err(msg)
+            }
+        }
+    }
+
     pub fn sample_rate(&self) -> usize {
         self.active_client.as_client().sample_rate() as usize
     }
@@ -249,6 +265,16 @@ impl Manager {
     pub fn buffer_size(&self) -> usize {
         self.active_client.as_client().buffer_size() as usize
     }
+}
+
+/// Build a fresh [`NamLoader`] from `dir` and re-populate the global NAM
+/// registry. Rebuilding the loader is the rescan idiom: `init_from_loader`
+/// clears and repopulates the registry. Returns the number of models loaded.
+fn load_nam_models(dir: &str) -> Result<usize> {
+    let loader = NamLoader::new(std::path::Path::new(dir))?;
+    let count = loader.available_names().len();
+    nam_registry::init_from_loader(&loader);
+    Ok(count)
 }
 
 fn try_connect(client: &Client, src: &str, dst: &str) {
