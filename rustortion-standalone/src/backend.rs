@@ -154,6 +154,15 @@ impl ParamBackend for StandaloneBackend {
         self.manager.get_available_irs()
     }
 
+    fn nam_models_dir(&self) -> Option<std::path::PathBuf> {
+        Some(std::path::PathBuf::from(self.manager.nam_dir()))
+    }
+
+    fn rescan_nam_models(&self) -> Result<usize, String> {
+        let dir = self.manager.nam_dir();
+        self.manager.rescan_nam_models(&dir)
+    }
+
     fn get_peak_meter_info(&self) -> Option<ExternalEvent> {
         let info = self.manager.peak_meter().get_info();
         let xrun_count = self.manager.xrun_count();

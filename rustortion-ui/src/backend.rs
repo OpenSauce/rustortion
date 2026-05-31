@@ -80,6 +80,12 @@ pub trait ParamBackend: Send + Sync + 'static {
     fn get_available_irs(&self) -> Vec<String>;
     fn get_peak_meter_info(&self) -> Option<ExternalEvent>;
 
+    /// Directory the NAM stage loads `.nam` models from (for display), if any.
+    fn nam_models_dir(&self) -> Option<std::path::PathBuf>;
+    /// Re-scan the NAM models directory and re-register the global registry.
+    /// Returns the number of models now available, or an error string.
+    fn rescan_nam_models(&self) -> Result<usize, String>;
+
     /// Called by the shared GUI after any stage mutation (add, remove, reorder,
     /// param change, preset load) so the backend can persist the chain state.
     /// Default is a no-op (standalone doesn't need this).

@@ -97,7 +97,7 @@ pub fn icon_button(
 }
 
 /// View state for a stage card — groups the boolean flags to avoid excessive parameters.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 #[allow(clippy::struct_excessive_bools)]
 pub struct StageViewState {
     pub is_collapsed: bool,
@@ -108,9 +108,17 @@ pub struct StageViewState {
     /// factor, i.e. the rate stages are actually built and run at. Used by stages
     /// (e.g. NAM) to detect rate mismatches, so it must match what `to_stage` sees.
     pub engine_sample_rate: u32,
+    /// NAM-specific: directory the NAM stage loads `.nam` models from, shown on
+    /// the NAM stage card so users know where to drop model files. `None` if the
+    /// backend has no NAM directory. Ignored by all other stage views.
+    pub nam_models_dir: Option<std::path::PathBuf>,
 }
 
-fn stage_header(stage_name: &str, idx: usize, state: StageViewState) -> Element<'_, Message> {
+fn stage_header<'a>(
+    stage_name: &'a str,
+    idx: usize,
+    state: &StageViewState,
+) -> Element<'a, Message> {
     let header_text = format!("{} {}", stage_name, idx + 1);
 
     let collapse_icon = if state.is_collapsed { "▶" } else { "▼" };
@@ -179,7 +187,7 @@ pub fn stage_card<'a>(
     state: StageViewState,
     body: impl FnOnce() -> Element<'a, Message>,
 ) -> Element<'a, Message> {
-    let header = stage_header(stage_name, idx, state);
+    let header = stage_header(stage_name, idx, &state);
 
     let mut content = column![header].spacing(SPACING_TIGHT);
 

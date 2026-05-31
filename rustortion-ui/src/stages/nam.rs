@@ -1,4 +1,4 @@
-use iced::widget::{column, pick_list, row, text};
+use iced::widget::{button, column, pick_list, row, text};
 use iced::{Alignment, Element, Length};
 
 use rustortion_core::amp::stages::nam::NamConfig;
@@ -20,6 +20,8 @@ pub enum NamMessage {
     InputGainChanged(f32),
     OutputGainChanged(f32),
     MixChanged(f32),
+    /// Re-scan the NAM models directory and refresh the model pick-list.
+    Rescan,
 }
 
 /// A pick-list entry: either a named model or an explicit "no model" choice that
@@ -69,6 +71,7 @@ pub fn apply(cfg: &mut NamConfig, msg: NamMessage) -> Option<ParamUpdate> {
             cfg.mix = v;
             Some(ParamUpdate::Changed("mix", v))
         }
+        NamMessage::Rescan => Some(ParamUpdate::RescanNamModels),
     }
 }
 
@@ -79,6 +82,13 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
     let input_gain_db = cfg.input_gain_db;
     let output_gain_db = cfg.output_gain_db;
     let mix = cfg.mix;
+    // The folder where `.nam` files live, shown so users know where to drop models.
+    let models_dir = state
+        .nam_models_dir
+        .as_ref()
+        .map(|p| p.display().to_string());
+    // Effective engine rate, read out before `state` is moved into the card closure.
+    let engine_rate = state.engine_sample_rate;
 
     stage_card(tr!(stage_nam), idx, state, move || {
         // "(None)" first so a selected model can be cleared back to passthrough.
@@ -105,7 +115,6 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         // Read-only info: the selected model's native sample rate (or "not found").
         // When the native rate mismatches the engine rate the model is bypassed (dry
         // passthrough, no resampling) — surface that here using both rates.
-        let engine_rate = state.engine_sample_rate;
         let info_line: Element<'_, Message> = match model_name.as_deref() {
             Some(name) => match registry::get(name) {
                 Some(model) => {
@@ -125,8 +134,23 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
             None => text(String::new()).into(),
         };
 
+        // Folder location + a Rescan button so users can drop new `.nam` files
+        // and pick them up without restarting the host.
+        let dir_text = models_dir.map_or_else(
+            || format!("{}: —", tr!(nam_models_dir)),
+            |dir| format!("{}: {dir}", tr!(nam_models_dir)),
+        );
+        let folder_row = row![
+            text(dir_text).width(Length::Fill),
+            button(text(tr!(nam_rescan_models)))
+                .on_press(Message::Stage(idx, StageMessage::Nam(NamMessage::Rescan))),
+        ]
+        .spacing(SPACING_NORMAL)
+        .align_y(Alignment::Center);
+
         column![
             model_selector,
+            folder_row,
             info_line,
             labeled_slider(
                 tr!(nam_input_gain),

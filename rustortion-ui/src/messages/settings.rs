@@ -12,4 +12,6 @@ pub enum SettingsMessage {
     BufferSizeChanged(u32),
     SampleRateChanged(u32),
     LanguageChanged(Language),
+    NamDirChanged(String),
+    RescanNamModels,
 }

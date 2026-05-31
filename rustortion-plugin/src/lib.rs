@@ -13,6 +13,17 @@ pub mod params;
 
 use params::RustortionParams;
 
+/// Directory the plugin loads user-provided `.nam` models from:
+/// `~/.config/rustortion/nam`. Shared by the init-time loader and the backend's
+/// rescan so the two can never drift to different paths.
+#[must_use]
+pub fn user_nam_dir() -> std::path::PathBuf {
+    dirs::config_dir()
+        .unwrap_or_default()
+        .join("rustortion")
+        .join("nam")
+}
+
 enum PluginTask {
     LoadPreset(String),
     /// Combined task: create new samplers at the given factor, then reload the
@@ -376,10 +387,7 @@ impl Plugin for RustortionPlugin {
 
                 // Load user NAM models from ~/.config/rustortion/nam into the
                 // process-global registry so the NAM stage can resolve models.
-                let nam_dir = dirs::config_dir()
-                    .unwrap_or_default()
-                    .join("rustortion")
-                    .join("nam");
+                let nam_dir = user_nam_dir();
                 match rustortion_core::nam::NamLoader::new(&nam_dir) {
                     Ok(loader) => {
                         nih_log!("Loaded {} NAM model(s)", loader.available_names().len());

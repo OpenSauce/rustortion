@@ -32,8 +32,13 @@ impl SettingsHandler {
                     sample_rate: audio_manager.sample_rate(),
                     buffer_size: audio_manager.buffer_size(),
                 };
-                self.dialog
-                    .show(&settings.audio, inputs, outputs, jack_status);
+                self.dialog.show(
+                    &settings.audio,
+                    settings.nam_dir.clone(),
+                    inputs,
+                    outputs,
+                    jack_status,
+                );
             }
             SettingsMessage::Close => {
                 self.dialog.hide();
@@ -41,6 +46,7 @@ impl SettingsHandler {
             SettingsMessage::Apply => {
                 let new_audio_settings = self.dialog.get_settings();
                 settings.audio = new_audio_settings.clone();
+                settings.nam_dir = self.dialog.get_nam_dir();
 
                 if let Err(e) = audio_manager.apply_settings(new_audio_settings) {
                     error!("Failed to apply audio settings: {e}");
@@ -67,6 +73,23 @@ impl SettingsHandler {
             }
             SettingsMessage::SampleRateChanged(x) => {
                 self.with_temp_settings(|s| s.sample_rate = x);
+            }
+            SettingsMessage::NamDirChanged(dir) => {
+                self.dialog.set_nam_dir(dir);
+            }
+            SettingsMessage::RescanNamModels => {
+                let nam_dir = self.dialog.get_nam_dir();
+                match audio_manager.rescan_nam_models(&nam_dir) {
+                    Ok(count) => {
+                        // Persist the directory so the new path survives a restart.
+                        settings.nam_dir = nam_dir;
+                        if let Err(e) = settings.save() {
+                            error!("Failed to save settings after NAM rescan: {e}");
+                        }
+                        debug!("Rescanned NAM models: {count} found");
+                    }
+                    Err(e) => error!("{e}"),
+                }
             }
             SettingsMessage::LanguageChanged(lang) => {
                 i18n::set_language(lang);
