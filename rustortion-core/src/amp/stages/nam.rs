@@ -1,5 +1,5 @@
 use log::warn;
-use nam_rs::WaveNet;
+use nam_rs::Model;
 use serde::{Deserialize, Serialize};
 
 use crate::amp::stages::Stage;
@@ -10,12 +10,13 @@ use crate::nam::registry;
 const GAIN_DB_MIN: f32 = -24.0;
 const GAIN_DB_MAX: f32 = 24.0;
 
-/// A Neural Amp Modeler stage running a WaveNet `.nam` model.
+/// A Neural Amp Modeler stage running a `.nam` model of any supported architecture
+/// (WaveNet or LSTM), via the architecture-agnostic [`nam_rs::Model`].
 ///
 /// With no model loaded the stage is a passthrough. Input/output gain are applied
 /// around the model and the wet output is blended with the dry signal via `mix`.
 pub struct NamStage {
-    wavenet: Option<WaveNet>,
+    model: Option<Model>,
     input_gain: f32,
     output_gain: f32,
     mix: f32,
@@ -28,7 +29,7 @@ pub struct NamStage {
 impl NamStage {
     const fn passthrough(input_gain: f32, output_gain: f32, mix: f32) -> Self {
         Self {
-            wavenet: None,
+            model: None,
             input_gain,
             output_gain,
             mix,
@@ -46,7 +47,7 @@ impl NamStage {
         native_sample_rate: f32,
     ) -> Self {
         Self {
-            wavenet: None,
+            model: None,
             input_gain,
             output_gain,
             mix,
@@ -58,10 +59,10 @@ impl NamStage {
 
 impl Stage for NamStage {
     fn process(&mut self, input: f32) -> f32 {
-        let Some(wavenet) = self.wavenet.as_mut() else {
+        let Some(model) = self.model.as_mut() else {
             return input;
         };
-        let wet = wavenet.process_sample(input * self.input_gain) * self.output_gain;
+        let wet = model.process_sample(input * self.input_gain) * self.output_gain;
         self.mix.mul_add(wet - input, input)
     }
 
@@ -136,7 +137,7 @@ impl Default for NamConfig {
 
 impl NamConfig {
     /// Build a runnable stage. Resolves the model from the global registry and
-    /// allocates the `WaveNet` here (off the real-time thread). On any failure the
+    /// allocates the model here (off the real-time thread). On any failure the
     /// stage falls back to passthrough with a warning.
     pub fn to_stage(&self, sample_rate: f32) -> NamStage {
         let input_gain = db_to_lin(self.input_gain_db.clamp(GAIN_DB_MIN, GAIN_DB_MAX));
@@ -168,9 +169,9 @@ impl NamConfig {
             );
         }
 
-        match WaveNet::new(&model) {
-            Ok(wavenet) => NamStage {
-                wavenet: Some(wavenet),
+        match Model::from_nam(&model) {
+            Ok(runtime) => NamStage {
+                model: Some(runtime),
                 input_gain,
                 output_gain,
                 mix,
@@ -201,9 +202,9 @@ mod tests {
 
     #[test]
     fn mismatch_bypass_is_dry_passthrough() {
-        // A rate-mismatch stage is built without a WaveNet but records the real native
+        // A rate-mismatch stage is built without a model but records the real native
         // rate and the mismatch flag. We construct it directly here because building a
-        // real `WaveNet` requires loading a `.nam` model into the registry, which unit
+        // real model requires loading a `.nam` file into the registry, which unit
         // tests can't do; this still verifies the RT-path passthrough contract and the
         // params reported to the UI.
         let mut stage =
