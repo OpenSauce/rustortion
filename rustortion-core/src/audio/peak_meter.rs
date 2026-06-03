@@ -1,17 +1,59 @@
-use arc_swap::ArcSwap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 const CLIP_THRESHOLD: f32 = 0.95;
+
+/// Lock-free, allocation-free shared peak-meter readout.
+///
+/// `PeakMeterInfo` is plain data with no need for reference counting, so the
+/// three fields are stored as atomics rather than swapped behind an `Arc`.
+/// This keeps `PeakMeter::process` (called per audio block on the RT thread)
+/// free of the `Arc::new` allocation the previous `ArcSwap` design incurred.
+///
+/// `f32` values are stored as their bit patterns. All access is `Relaxed`:
+/// the fields are independent and a momentarily-torn read across them is
+/// cosmetically irrelevant for a level meter.
+struct PeakMeterShared {
+    peak_db: AtomicU32,
+    peak_linear: AtomicU32,
+    is_clipping: AtomicBool,
+}
+
+impl PeakMeterShared {
+    fn new() -> Self {
+        let default = PeakMeterInfo::default();
+        Self {
+            peak_db: AtomicU32::new(default.peak_db.to_bits()),
+            peak_linear: AtomicU32::new(default.peak_linear.to_bits()),
+            is_clipping: AtomicBool::new(default.is_clipping),
+        }
+    }
+
+    fn store(&self, peak_db: f32, peak_linear: f32, is_clipping: bool) {
+        self.peak_db.store(peak_db.to_bits(), Ordering::Relaxed);
+        self.peak_linear
+            .store(peak_linear.to_bits(), Ordering::Relaxed);
+        self.is_clipping.store(is_clipping, Ordering::Relaxed);
+    }
+
+    fn load(&self) -> PeakMeterInfo {
+        PeakMeterInfo {
+            peak_db: f32::from_bits(self.peak_db.load(Ordering::Relaxed)),
+            peak_linear: f32::from_bits(self.peak_linear.load(Ordering::Relaxed)),
+            is_clipping: self.is_clipping.load(Ordering::Relaxed),
+        }
+    }
+}
 
 pub struct PeakMeter {
     current_peak: f32,
     samples_since_peak: usize,
     peak_hold_samples: usize,
-    info: Arc<ArcSwap<PeakMeterInfo>>,
+    shared: Arc<PeakMeterShared>,
 }
 
 pub struct PeakMeterHandle {
-    info: Arc<ArcSwap<PeakMeterInfo>>,
+    shared: Arc<PeakMeterShared>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -23,16 +65,16 @@ pub struct PeakMeterInfo {
 
 impl PeakMeter {
     pub fn new(sample_rate: usize) -> (Self, PeakMeterHandle) {
-        let info = Arc::new(ArcSwap::from_pointee(PeakMeterInfo::default()));
+        let shared = Arc::new(PeakMeterShared::new());
 
         (
             Self {
                 current_peak: 0.0,
                 samples_since_peak: 0,
                 peak_hold_samples: sample_rate * 2, // 2 Seconds
-                info: Arc::clone(&info),
+                shared: Arc::clone(&shared),
             },
-            PeakMeterHandle { info },
+            PeakMeterHandle { shared },
         )
     }
 
@@ -59,23 +101,21 @@ impl PeakMeter {
 
         let is_clipping = self.current_peak >= CLIP_THRESHOLD;
 
-        self.info.store(Arc::new(PeakMeterInfo {
-            peak_db,
-            peak_linear: self.current_peak,
-            is_clipping,
-        }));
+        self.shared.store(peak_db, self.current_peak, is_clipping);
     }
 
     pub fn reset(&mut self) {
         self.current_peak = 0.0;
         self.samples_since_peak = 0;
-        self.info.store(Arc::new(PeakMeterInfo::default()));
+        let default = PeakMeterInfo::default();
+        self.shared
+            .store(default.peak_db, default.peak_linear, default.is_clipping);
     }
 }
 
 impl PeakMeterHandle {
     pub fn get_info(&self) -> PeakMeterInfo {
-        self.info.load().as_ref().clone()
+        self.shared.load()
     }
 }
 

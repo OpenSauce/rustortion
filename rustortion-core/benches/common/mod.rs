@@ -24,7 +24,7 @@ pub fn create_test_cabinet(ir_length: usize, sample_rate: usize) -> IrCabinet {
 
     let mut convolver = Convolver::new_fir(max_ir_samples);
     convolver.set_ir(&ir_samples).unwrap();
-    cabinet.swap_convolver(convolver);
+    cabinet.set_convolver(convolver);
 
     cabinet
 }

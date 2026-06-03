@@ -230,22 +230,32 @@ fn samplers_preserve_tone_signal() -> Result<()> {
             })
             .collect();
 
-        // FFT samplers have a delay so we need to prime them.
+        // FFT samplers have a delay so we need to prime them (this also
+        // amortises rubato's first-call scratch setup before the audit).
         for _ in 0..10 {
             samplers.copy_input(&input)?;
             let _ = samplers.upsample()?;
             let _ = samplers.downsample()?;
         }
 
-        samplers.copy_input(&input)?;
+        // The steady-state up/downsample hot path must not allocate on the RT
+        // thread. Measure the RMS values inside the asserted scope.
+        let mut upsampled_rms = 0.0f32;
+        let mut downsampled_rms = 0.0f32;
+        let violations = check_no_alloc(|| {
+            samplers.copy_input(&input).unwrap();
+            let upsampled = samplers.upsample().unwrap();
+            upsampled_rms =
+                (upsampled.iter().map(|x| x * x).sum::<f32>() / upsampled.len() as f32).sqrt();
 
-        let upsampled = samplers.upsample()?;
-        let upsampled_rms =
-            (upsampled.iter().map(|x| x * x).sum::<f32>() / upsampled.len() as f32).sqrt();
-
-        let downsampled = samplers.downsample()?;
-        let downsampled_rms =
-            (downsampled.iter().map(|x| x * x).sum::<f32>() / downsampled.len() as f32).sqrt();
+            let downsampled = samplers.downsample().unwrap();
+            downsampled_rms =
+                (downsampled.iter().map(|x| x * x).sum::<f32>() / downsampled.len() as f32).sqrt();
+        });
+        assert_eq!(
+            violations, 0,
+            "{oversample}x oversample: samplers allocated on RT path"
+        );
 
         let input_rms = (input.iter().map(|x| x * x).sum::<f32>() / input.len() as f32).sqrt();
 
@@ -289,7 +299,14 @@ fn engine_tuner_enabled_no_output() -> Result<()> {
 
     let input = vec![0.0f32; BUFFER_SIZE];
     let mut output = vec![0.0f32; BUFFER_SIZE];
-    engine.process(&input, &mut output)?;
+
+    // With the tuner enabled, process() runs the tuner and returns early. The
+    // tuner appends one block into its pre-allocated 4096-sample buffer, so the
+    // RT path allocates nothing.
+    let violations = check_no_alloc(|| {
+        engine.process(&input, &mut output).unwrap();
+    });
+    assert_eq!(violations, 0, "tuner-enabled process allocated on RT path");
 
     assert!(output.iter().all(|&x| x == 0.0), "expected silent output");
 

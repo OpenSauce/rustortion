@@ -1,5 +1,4 @@
 use anyhow::Result;
-use assert_no_alloc::permit_alloc;
 use crossbeam::channel::{Receiver, Sender, bounded};
 use log::{debug, error};
 
@@ -17,7 +16,10 @@ use crate::tuner::Tuner;
 
 pub struct PreparedIr {
     pub name: String,
-    pub convolver: Convolver,
+    /// Boxed so it can be swapped into the cabinet on the RT thread without
+    /// reallocating, and so the whole `PreparedIr` (old convolver + name) can
+    /// be retired off the RT thread in one piece.
+    pub convolver: Box<Convolver>,
 }
 
 pub enum EngineMessage {
@@ -35,7 +37,9 @@ pub enum EngineMessage {
     SetIrBypass(bool),
     SetIrGain(f32),
     SetTunerEnabled(bool),
-    SetPitchShift(i32),
+    /// Carries a fully-constructed pitch shifter (built off the RT thread), or
+    /// `None` to disable pitch shifting (the `0` semitones bypass case).
+    SetPitchShift(Option<Box<PitchShifter>>),
     SetStageBypassed(usize, bool),
     SetSamplers(Box<Samplers>),
 }
@@ -49,12 +53,14 @@ pub struct Engine {
     engine_receiver: Receiver<EngineMessage>,
     /// Handle for sending arbitrary objects off the RT thread for deallocation.
     rt_drop: RtDropHandle,
-    samplers: Samplers,
+    /// Boxed so swapping samplers (sample-rate / buffer changes) on the RT
+    /// thread exchanges pointers and retires the old box directly.
+    samplers: Box<Samplers>,
     tuner: Option<Tuner>,
     recorder: Option<Recorder>,
     peak_meter: Option<PeakMeter>,
     metronome: Option<Metronome>,
-    pitch_shifter: Option<PitchShifter>,
+    pitch_shifter: Option<Box<PitchShifter>>,
     input_highpass: Option<Box<dyn Stage>>,
     input_lowpass: Option<Box<dyn Stage>>,
     /// When true, skip tuner, peak meter, recorder, and metronome processing.
@@ -83,7 +89,7 @@ impl Engine {
                 ir_cabinet,
                 engine_receiver,
                 rt_drop,
-                samplers,
+                samplers: Box::new(samplers),
                 tuner: Some(tuner),
                 recorder: None,
                 peak_meter: Some(peak_meter),
@@ -115,7 +121,7 @@ impl Engine {
             ir_cabinet,
             engine_receiver,
             rt_drop: rt_drop_handle,
-            samplers,
+            samplers: Box::new(samplers),
             tuner: None,
             recorder: None,
             peak_meter: None,
@@ -162,9 +168,7 @@ impl Engine {
         }
 
         if let Some(ref mut shifter) = self.pitch_shifter {
-            // FIXME(no_alloc): PitchShifter::process_block uses Vec scratch
-            // buffers internally — see audio/pitch_shifter.rs.
-            permit_alloc(|| shifter.process_block(output));
+            shifter.process_block(output);
         }
 
         if let Some(ref mut cab) = self.ir_cabinet {
@@ -172,17 +176,13 @@ impl Engine {
         }
 
         if let Some(ref mut peak_meter) = self.peak_meter {
-            // FIXME(no_alloc): PeakMeter::process does Arc::new(PeakMeterInfo)
-            // every block — see audio/peak_meter.rs:62.
-            permit_alloc(|| peak_meter.process(output));
+            peak_meter.process(output);
         }
 
         if !self.lightweight
             && let Some(recorder) = self.recorder.as_mut()
         {
-            // FIXME(no_alloc): Recorder::record_block does Vec::with_capacity
-            // per block — see audio/recorder.rs:47.
-            permit_alloc(|| recorder.record_block(output))?;
+            recorder.record_block(output)?;
         }
 
         Ok(())
@@ -286,16 +286,26 @@ impl Engine {
                     }
                 }
                 EngineMessage::SetInputFilters(hp, lp) => {
-                    self.input_highpass = hp;
-                    self.input_lowpass = lp;
+                    // Retire the previous filters off the RT thread instead of
+                    // dropping them here on direct assignment.
+                    if let Some(old) = std::mem::replace(&mut self.input_highpass, hp) {
+                        self.rt_drop.retire(old);
+                    }
+                    if let Some(old) = std::mem::replace(&mut self.input_lowpass, lp) {
+                        self.rt_drop.retire(old);
+                    }
                     debug!("Updated input filters");
                 }
-                EngineMessage::SwapIrConvolver(prepared) => {
+                EngineMessage::SwapIrConvolver(mut prepared) => {
                     if let Some(ref mut cab) = self.ir_cabinet {
                         debug!("IR convolver swapped: {}", prepared.name);
-                        let old = cab.swap_convolver(prepared.convolver);
-                        permit_alloc(|| self.rt_drop.retire(Box::new(old)));
+                        // Swap the new convolver in; `prepared` is left holding
+                        // the old convolver. Retire the whole `PreparedIr` (old
+                        // convolver + name `String`) off the RT thread so
+                        // nothing deallocates here.
+                        cab.swap_convolver(&mut prepared.convolver);
                     }
+                    self.rt_drop.retire(prepared);
                 }
                 EngineMessage::ClearIr => {
                     if let Some(ref mut cab) = self.ir_cabinet {
@@ -326,12 +336,12 @@ impl Engine {
                 EngineMessage::StopRecording => {
                     self.handle_stop_recording();
                 }
-                EngineMessage::SetPitchShift(semitones) => {
-                    self.handle_pitch_shift(semitones);
+                EngineMessage::SetPitchShift(shifter) => {
+                    self.handle_pitch_shift(shifter);
                 }
                 EngineMessage::SetSamplers(new_samplers) => {
-                    let old = std::mem::replace(&mut self.samplers, *new_samplers);
-                    permit_alloc(|| self.rt_drop.retire(Box::new(old)));
+                    let old = std::mem::replace(&mut self.samplers, new_samplers);
+                    self.rt_drop.retire(old);
                     debug!("Samplers swapped");
                 }
             }
@@ -364,19 +374,15 @@ impl Engine {
         self.recorder = None;
     }
 
-    fn handle_pitch_shift(&mut self, semitones: i32) {
-        if semitones == 0 {
-            self.pitch_shifter = None;
-            debug!("Pitch shift disabled (bypass)");
-        } else if let Some(ref mut shifter) = self.pitch_shifter {
-            shifter.set_semitones(semitones as f32);
-            debug!("Pitch shift set to {semitones} semitones");
-        } else {
-            // FIXME(no_alloc): PitchShifter::new allocates FFT scratch buffers
-            // — see audio/pitch_shifter.rs.
-            self.pitch_shifter = Some(permit_alloc(|| PitchShifter::new(semitones as f32)));
-            debug!("Pitch shift set to {semitones} semitones");
+    fn handle_pitch_shift(&mut self, shifter: Option<Box<PitchShifter>>) {
+        // The shifter (if any) is constructed off the RT thread in
+        // `EngineHandle::set_pitch_shift`; here we just swap it in and retire
+        // the previous one off the RT thread.
+        let old = std::mem::replace(&mut self.pitch_shifter, shifter);
+        if let Some(old) = old {
+            self.rt_drop.retire(old);
         }
+        debug!("Pitch shifter updated");
     }
 }
 
@@ -448,8 +454,14 @@ impl EngineHandle {
     }
 
     pub fn set_pitch_shift(&self, semitones: i32) {
-        let update = EngineMessage::SetPitchShift(semitones);
-        self.send(update);
+        // Construct the pitch shifter here (GUI thread) so the RT thread never
+        // allocates its FFT plans / scratch buffers. `0` semitones == bypass.
+        let shifter = if semitones == 0 {
+            None
+        } else {
+            Some(Box::new(PitchShifter::new(semitones as f32)))
+        };
+        self.send(EngineMessage::SetPitchShift(shifter));
     }
 
     pub fn set_stage_bypassed(&self, idx: usize, bypassed: bool) {
@@ -461,8 +473,13 @@ impl EngineHandle {
         self.send(update);
     }
 
-    pub fn start_recording(&self, sample_rate: usize, output_dir: &str) -> Result<()> {
-        let recorder = Recorder::new(sample_rate as u32, output_dir)?;
+    pub fn start_recording(
+        &self,
+        sample_rate: usize,
+        output_dir: &str,
+        max_block_samples: usize,
+    ) -> Result<()> {
+        let recorder = Recorder::new(sample_rate as u32, output_dir, max_block_samples)?;
 
         let update = EngineMessage::StartRecording(recorder);
         self.send(update);

@@ -304,14 +304,13 @@ impl AmplifierApp {
         match message {
             Message::StartRecording => {
                 let sample_rate = self.shared.backend.manager().sample_rate();
+                let buffer_size = self.shared.backend.manager().buffer_size();
                 let recording_dir = &self.settings.recording_dir;
-                if let Err(e) = self
-                    .shared
-                    .backend
-                    .manager()
-                    .engine()
-                    .start_recording(sample_rate, recording_dir)
-                {
+                if let Err(e) = self.shared.backend.manager().engine().start_recording(
+                    sample_rate,
+                    recording_dir,
+                    buffer_size,
+                ) {
                     error!("Failed to start recording: {e}");
                 } else {
                     self.shared.is_recording = true;

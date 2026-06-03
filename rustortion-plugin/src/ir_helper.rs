@@ -35,7 +35,7 @@ fn set_ir_samples(handle: &EngineHandle, name: &str, ir_samples: &[f32], sample_
     } else {
         handle.swap_ir_convolver(PreparedIr {
             name: name.to_string(),
-            convolver,
+            convolver: Box::new(convolver),
         });
     }
 }

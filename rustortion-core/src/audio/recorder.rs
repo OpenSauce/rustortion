@@ -5,18 +5,42 @@ use log::{error, info};
 use std::{fs, thread};
 
 type AudioBlock = Vec<i16>;
-const BLOCK_CHANNEL_CAPACITY: usize = 32;
+const BLOCK_CHANNEL_CAPACITY: usize = 64;
+/// Number of pre-allocated buffers cycling between the RT thread and the writer.
+/// Sized to twice the in-flight channel capacity so a free buffer is always
+/// available to `record_block` (it never starves the pool) — the blocking
+/// `send` remains the sole backpressure throttle, exactly as before, only now
+/// without the per-block `Vec` allocation.
+const BUFFER_POOL_SIZE: usize = BLOCK_CHANNEL_CAPACITY * 2;
 
 pub struct Recorder {
     recorder_sender: Sender<AudioBlock>,
+    /// Pool of emptied buffers returned by the writer thread for reuse, so
+    /// `record_block` never allocates on the RT thread.
+    recycle_receiver: Receiver<AudioBlock>,
+    /// Largest input block (in samples) the pre-allocated buffers can hold
+    /// without reallocating. Blocks larger than this are dropped.
+    max_block_samples: usize,
     handle: thread::JoinHandle<()>,
 }
 
 impl Recorder {
     /// Creates a new Recorder instance.
-    pub fn new(sample_rate: u32, record_dir: &str) -> Result<Self> {
+    ///
+    /// `max_block_samples` is the largest input block size the recorder will be
+    /// asked to handle; the buffer pool is pre-sized to it so that
+    /// `record_block` performs no allocation on the RT thread.
+    pub fn new(sample_rate: u32, record_dir: &str, max_block_samples: usize) -> Result<Self> {
         let (recorder_sender, recorder_receiver) = bounded::<AudioBlock>(BLOCK_CHANNEL_CAPACITY);
+        let (recycle_sender, recycle_receiver) = bounded::<AudioBlock>(BUFFER_POOL_SIZE);
         fs::create_dir_all(record_dir)?;
+
+        // Pre-allocate the buffer pool. Each input sample becomes two
+        // interleaved stereo `i16`s, so size for `max_block_samples * 2`.
+        for _ in 0..BUFFER_POOL_SIZE {
+            // Can't fail: the channel is empty and sized to match the loop.
+            let _ = recycle_sender.try_send(AudioBlock::with_capacity(max_block_samples * 2));
+        }
 
         let filename = format!(
             "{record_dir}/recording_{}.wav",
@@ -24,11 +48,14 @@ impl Recorder {
         );
         info!("Recording to: {filename}");
 
-        let handle =
-            thread::spawn(move || run_writer_thread(sample_rate, filename, recorder_receiver));
+        let handle = thread::spawn(move || {
+            run_writer_thread(sample_rate, filename, recorder_receiver, &recycle_sender);
+        });
 
         Ok(Self {
             recorder_sender,
+            recycle_receiver,
+            max_block_samples,
             handle,
         })
     }
@@ -43,8 +70,22 @@ impl Recorder {
     }
 
     /// Record block takes a slice of f32 samples and sends them to the writer thread.
+    ///
+    /// Reuses a pre-allocated buffer from the recycle pool, so it never
+    /// allocates. A block larger than the pool was sized for is dropped (it
+    /// would otherwise force a reallocation). The pool is sized so a free buffer
+    /// is always available; the blocking `send` provides backpressure (as
+    /// before) without the per-block `Vec` allocation. If the pool is somehow
+    /// momentarily empty (writer stalled) the block is dropped rather than
+    /// blocking — and a stalled writer means a full `send` would block anyway.
     pub fn record_block(&self, samples: &[f32]) -> Result<()> {
-        let mut block = AudioBlock::with_capacity(samples.len() * 2);
+        if samples.len() > self.max_block_samples {
+            return Ok(());
+        }
+        let Ok(mut block) = self.recycle_receiver.try_recv() else {
+            return Ok(());
+        };
+        block.clear();
         for sample in samples {
             let v = (sample * i16::MAX as f32).clamp(i16::MIN as f32, i16::MAX as f32) as i16;
             block.push(v);
@@ -57,7 +98,12 @@ impl Recorder {
 }
 
 /// Runs the writer thread, that writes audio blocks received over its channel to a WAV file.
-fn run_writer_thread(sample_rate: u32, filename: String, recorder_receiver: Receiver<AudioBlock>) {
+fn run_writer_thread(
+    sample_rate: u32,
+    filename: String,
+    recorder_receiver: Receiver<AudioBlock>,
+    recycle_sender: &Sender<AudioBlock>,
+) {
     let spec = hound::WavSpec {
         channels: 2,
         sample_rate,
@@ -79,6 +125,9 @@ fn run_writer_thread(sample_rate: u32, filename: String, recorder_receiver: Rece
                 error!("Failed to write sample to WAV file '{filename}': {e}");
             }
         }
+        // Return the buffer to the pool for reuse. If the pool is full or the
+        // RT side has gone away, just drop it.
+        let _ = recycle_sender.try_send(block);
     }
 
     if let Err(e) = writer.finalize() {
@@ -105,10 +154,10 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let record_dir = temp_dir.path().to_str().unwrap();
 
-        let recorder = Recorder::new(SAMPLE_RATE, record_dir)?;
+        let block_size = 256;
+        let recorder = Recorder::new(SAMPLE_RATE, record_dir, block_size)?;
 
         let total_samples = (SAMPLE_RATE as f32 * DURATION_SECS) as usize;
-        let block_size = 256;
         let mut generated_samples = 0;
 
         while generated_samples < total_samples {

@@ -128,7 +128,7 @@ pub fn spawn(
                             build_convolver(coefficients, convolver_type, max_ir_samples);
                         let prepared = PreparedIr {
                             name: name.clone(),
-                            convolver,
+                            convolver: Box::new(convolver),
                         };
 
                         engine_handle.swap_ir_convolver(prepared);

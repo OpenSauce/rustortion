@@ -5,16 +5,34 @@ struct BypassableStage {
     bypassed: bool,
 }
 
+/// Default stage capacity reserved up front so that adding/inserting stages on
+/// the RT thread (`AddStage`) doesn't reallocate the backing `Vec` until the
+/// chain grows past this many stages.
+pub const DEFAULT_CHAIN_CAPACITY: usize = 16;
+
 // AmplifierChain holds a sequence of processing stages.
-#[derive(Default)]
 pub struct AmplifierChain {
     stages: Vec<BypassableStage>,
 }
 
+impl Default for AmplifierChain {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AmplifierChain {
     #[must_use]
-    pub const fn new() -> Self {
-        Self { stages: Vec::new() }
+    pub fn new() -> Self {
+        Self::with_capacity(DEFAULT_CHAIN_CAPACITY)
+    }
+
+    /// Create a chain that can hold `capacity` stages before reallocating.
+    #[must_use]
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            stages: Vec::with_capacity(capacity),
+        }
     }
 
     pub fn add_stage(&mut self, stage: Box<dyn Stage>) {

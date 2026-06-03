@@ -15,7 +15,10 @@ pub enum ConvolverType {
 pub const DEFAULT_MAX_IR_MS: usize = 50;
 
 pub struct IrCabinet {
-    convolver: Convolver,
+    /// Boxed so the convolver can be swapped in/out on the RT thread by
+    /// exchanging pointers (`swap_convolver`) without moving the heavy
+    /// convolver struct or allocating to type-erase it for `rt_drop`.
+    convolver: Box<Convolver>,
 
     bypassed: bool,
     output_gain: f32,
@@ -23,10 +26,10 @@ pub struct IrCabinet {
 
 impl IrCabinet {
     pub fn new(convolver_type: ConvolverType, max_ir_samples: usize) -> Self {
-        let convolver = match convolver_type {
+        let convolver = Box::new(match convolver_type {
             ConvolverType::Fir => Convolver::new_fir(max_ir_samples),
             ConvolverType::TwoStage => Convolver::new_two_stage(),
-        };
+        });
 
         debug!("IrCabinet created: {convolver_type:?} convolver, max {max_ir_samples} samples");
 
@@ -37,8 +40,17 @@ impl IrCabinet {
         }
     }
 
-    pub const fn swap_convolver(&mut self, convolver: Convolver) -> Convolver {
-        std::mem::replace(&mut self.convolver, convolver)
+    /// RT-safe convolver swap: exchanges the cabinet's convolver with `other`
+    /// in place. Neither side allocates or deallocates — the caller is left
+    /// holding the previous convolver (e.g. to retire it off the RT thread).
+    pub const fn swap_convolver(&mut self, other: &mut Box<Convolver>) {
+        std::mem::swap(&mut self.convolver, other);
+    }
+
+    /// Install a convolver by value, reusing the existing heap allocation.
+    /// Intended for setup and tests, not the RT thread.
+    pub fn set_convolver(&mut self, convolver: Convolver) {
+        *self.convolver = convolver;
     }
 
     pub fn clear_convolver(&mut self) {
