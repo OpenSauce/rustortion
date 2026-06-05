@@ -263,8 +263,14 @@ impl Engine {
                     }
                 }
                 EngineMessage::AddStage(idx, stage) => {
-                    self.chain.insert_stage(idx, stage);
-                    debug!("Added stage at index {idx}");
+                    if let Some(rejected) = self.chain.insert_stage(idx, stage) {
+                        // Chain is at its reserved capacity. Retire the rejected
+                        // stage off the RT thread rather than dropping (freeing)
+                        // it here. The UI caps stage count, so this is a backstop.
+                        self.rt_drop.retire(rejected);
+                    } else {
+                        debug!("Added stage at index {idx}");
+                    }
                 }
                 EngineMessage::RemoveStage(idx) => {
                     if let Some(old) = self.chain.remove_stage(idx) {

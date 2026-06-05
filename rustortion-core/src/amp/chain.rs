@@ -5,10 +5,13 @@ struct BypassableStage {
     bypassed: bool,
 }
 
-/// Default stage capacity reserved up front so that adding/inserting stages on
-/// the RT thread (`AddStage`) doesn't reallocate the backing `Vec` until the
-/// chain grows past this many stages.
-pub const DEFAULT_CHAIN_CAPACITY: usize = 16;
+/// Stage capacity reserved up front, and the hard cap on chain length.
+///
+/// `insert_stage` (the RT `AddStage` path) never grows the backing `Vec` past
+/// its reserved capacity, so it never reallocates on the RT thread; the UI
+/// enforces the same number as the maximum stage count. ~24 bytes per slot, so
+/// ~1.5 KB reserved.
+pub const DEFAULT_CHAIN_CAPACITY: usize = 64;
 
 // AmplifierChain holds a sequence of processing stages.
 pub struct AmplifierChain {
@@ -80,8 +83,18 @@ impl AmplifierChain {
         self.stages.get(idx).map(|s| s.inner.get_parameter(name))
     }
 
-    /// Insert a stage at the given index.
-    pub fn insert_stage(&mut self, idx: usize, stage: Box<dyn Stage>) {
+    /// Insert a stage at the given index **without reallocating**.
+    ///
+    /// This runs on the RT thread (via `AddStage`). If the chain is already at
+    /// its reserved capacity, the stage is **returned** rather than inserted, so
+    /// the caller can dispose of it off the RT thread (growing the `Vec` here
+    /// would allocate, and dropping the rejected box here would free, on the
+    /// audio thread). Returns `None` when the stage was inserted.
+    #[must_use]
+    pub fn insert_stage(&mut self, idx: usize, stage: Box<dyn Stage>) -> Option<Box<dyn Stage>> {
+        if self.stages.len() == self.stages.capacity() {
+            return Some(stage);
+        }
         let idx = idx.min(self.stages.len());
         self.stages.insert(
             idx,
@@ -90,6 +103,7 @@ impl AmplifierChain {
                 bypassed: false,
             },
         );
+        None
     }
 
     /// Remove and return the stage at the given index.
@@ -162,7 +176,7 @@ mod tests {
         let mut chain = AmplifierChain::new();
         chain.add_stage(make_level(1.0));
         chain.add_stage(make_level(1.0));
-        chain.insert_stage(1, make_level(0.5));
+        assert!(chain.insert_stage(1, make_level(0.5)).is_none());
         let out = chain.process(1.0);
         assert!((out - 0.5).abs() < 1e-6);
     }
@@ -257,7 +271,7 @@ mod tests {
         let mut chain = AmplifierChain::new();
         chain.add_stage(make_level(1.0));
         chain.set_bypassed(0, true);
-        chain.insert_stage(0, make_level(0.5)); // insert before bypassed
+        assert!(chain.insert_stage(0, make_level(0.5)).is_none()); // insert before bypassed
         // idx 0 = new (active, 0.5x), idx 1 = old (bypassed, 1.0x)
         let out = chain.process(1.0);
         assert!(

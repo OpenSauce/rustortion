@@ -22,6 +22,7 @@ use crate::stages::{
 };
 use crate::tabs::Tab;
 use crate::tr;
+use rustortion_core::amp::chain::DEFAULT_CHAIN_CAPACITY;
 use rustortion_core::preset::InputFilterConfig;
 
 const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
@@ -90,14 +91,18 @@ impl<B: ParamBackend> SharedApp<B> {
             }
             Message::RebuildTick => self.flush_dirty_params(),
             Message::AddStage => {
-                self.flush_dirty_params();
-                let new_stage = StageConfig::from(self.selected_stage_type);
-                let category = new_stage.category();
-                let insert_idx = self.category_end_index(category);
-                self.stages.insert(insert_idx, new_stage);
-                self.collapsed_stages.insert(insert_idx, false);
-                self.backend.add_stage(insert_idx, &self.stages[insert_idx]);
-                self.backend.persist_chain_state(&self.stages);
+                // Cap the chain so the engine's stage list never has to grow on
+                // the RT thread. See `DEFAULT_CHAIN_CAPACITY`.
+                if self.stages.len() < DEFAULT_CHAIN_CAPACITY {
+                    self.flush_dirty_params();
+                    let new_stage = StageConfig::from(self.selected_stage_type);
+                    let category = new_stage.category();
+                    let insert_idx = self.category_end_index(category);
+                    self.stages.insert(insert_idx, new_stage);
+                    self.collapsed_stages.insert(insert_idx, false);
+                    self.backend.add_stage(insert_idx, &self.stages[insert_idx]);
+                    self.backend.persist_chain_state(&self.stages);
+                }
             }
             Message::RemoveStage(idx) => {
                 if idx < self.stages.len() {
@@ -506,9 +511,11 @@ impl<B: ParamBackend> SharedApp<B> {
             available_types.first().copied()
         };
 
+        // Disable "Add Stage" once the chain hits its capacity cap.
+        let add_msg = (self.stages.len() < DEFAULT_CHAIN_CAPACITY).then_some(Message::AddStage);
         row![
             pick_list(available_types, selected, Message::StageTypeSelected),
-            button(tr!(add_stage)).on_press(Message::AddStage),
+            button(tr!(add_stage)).on_press_maybe(add_msg),
         ]
         .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center)

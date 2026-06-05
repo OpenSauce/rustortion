@@ -14,7 +14,7 @@
 use assert_no_alloc::{AllocDisabler, assert_no_alloc, reset_violation_count, violation_count};
 use hound::{WavSpec, WavWriter};
 
-use rustortion_core::amp::chain::AmplifierChain;
+use rustortion_core::amp::chain::{AmplifierChain, DEFAULT_CHAIN_CAPACITY};
 use rustortion_core::amp::stages::Stage;
 use rustortion_core::amp::stages::clipper::ClipperType;
 use rustortion_core::amp::stages::compressor::CompressorStage;
@@ -529,6 +529,27 @@ mod message_arms {
         assert_eq!(
             violations, 0,
             "AddStage drain allocated {violations} time(s)"
+        );
+    }
+
+    #[test]
+    fn add_stage_at_capacity_does_not_allocate() {
+        // Fill the chain to its reserved capacity (off-audit), then assert the
+        // capacity-crossing AddStage drain neither reallocates nor deallocates:
+        // the chain rejects the stage instead of growing its Vec, and the engine
+        // retires the rejected box via rt_drop rather than freeing it on RT.
+        let (mut engine, handle, _rx) = plugin_engine(1.0);
+        let (input, mut output) = buffers();
+        for _ in 0..DEFAULT_CHAIN_CAPACITY {
+            handle.add_stage(0, Box::new(LevelStage::new(1.0)));
+            engine.process(&input, &mut output).unwrap();
+        }
+        let violations = assert_drain_alloc_free(&mut engine, &input, &mut output, || {
+            handle.add_stage(0, Box::new(LevelStage::new(0.5)));
+        });
+        assert_eq!(
+            violations, 0,
+            "at-capacity AddStage drain allocated {violations} time(s)"
         );
     }
 
