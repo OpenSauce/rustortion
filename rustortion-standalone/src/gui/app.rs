@@ -304,14 +304,22 @@ impl AmplifierApp {
         match message {
             Message::StartRecording => {
                 let sample_rate = self.shared.backend.manager().sample_rate();
-                let recording_dir = &self.settings.recording_dir;
-                if let Err(e) = self
+                // Size the recorder pool for the worst-case JACK period, not the
+                // current one: JACK can raise the buffer size mid-recording, and
+                // a pool sized to the smaller period would then drop every block
+                // as an overrun. See `ProcessHandler::MAX_BUFFER_FRAMES`.
+                let max_block_samples = self
                     .shared
                     .backend
                     .manager()
-                    .engine()
-                    .start_recording(sample_rate, recording_dir)
-                {
+                    .buffer_size()
+                    .max(crate::audio::jack::ProcessHandler::MAX_BUFFER_FRAMES);
+                let recording_dir = &self.settings.recording_dir;
+                if let Err(e) = self.shared.backend.manager().engine().start_recording(
+                    sample_rate,
+                    recording_dir,
+                    max_block_samples,
+                ) {
                     error!("Failed to start recording: {e}");
                 } else {
                     self.shared.is_recording = true;

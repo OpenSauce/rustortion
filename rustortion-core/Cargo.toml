@@ -16,12 +16,14 @@ anyhow = "1.0"
 rustfft = "6.4"
 realfft = "3.5"
 arc-swap = "1.8"
-assert_no_alloc = { version = "1.1", features = ["warn_debug"] }
 nam-rs = "0.2.0"
 
 [dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
 tempfile = "3.24"
+# Test-only: RT-path allocation auditing (tests/no_alloc.rs). `warn_debug`
+# makes it count violations instead of aborting the test binary.
+assert_no_alloc = { version = "1.1", features = ["warn_debug"] }
 
 [[bench]]
 name = "impulse_responses"
