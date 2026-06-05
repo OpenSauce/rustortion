@@ -182,7 +182,7 @@ impl Engine {
         if !self.lightweight
             && let Some(recorder) = self.recorder.as_mut()
         {
-            recorder.record_block(output)?;
+            recorder.record_block(output);
         }
 
         Ok(())

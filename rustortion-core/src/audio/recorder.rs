@@ -110,15 +110,17 @@ impl Recorder {
     /// to the writer (which buffers in memory and flushes to disk on its own
     /// thread). If the writer has fallen behind — pool empty or handoff channel
     /// full — the block is dropped and an overrun is recorded rather than
-    /// stalling the audio thread on disk I/O.
-    pub fn record_block(&self, samples: &[f32]) -> Result<()> {
+    /// stalling the audio thread on disk I/O. If the writer thread has exited
+    /// (e.g. it failed to create the WAV file), every block is likewise counted
+    /// as an overrun; the climbing count surfaces the failure off-RT.
+    pub fn record_block(&self, samples: &[f32]) {
         if samples.len() > self.max_block_samples {
             self.overruns.fetch_add(1, Ordering::Relaxed);
-            return Ok(());
+            return;
         }
         let Ok(mut block) = self.recycle_receiver.try_recv() else {
             self.overruns.fetch_add(1, Ordering::Relaxed);
-            return Ok(());
+            return;
         };
         block.clear();
         for sample in samples {
@@ -127,15 +129,17 @@ impl Recorder {
             block.push(v);
         }
         match self.recorder_sender.try_send(block) {
-            Ok(()) => Ok(()),
+            Ok(()) => {}
             Err(TrySendError::Full(block)) => {
                 // Writer behind: return the buffer to the pool, drop the audio.
                 let _ = self.recycle_sender.try_send(block);
                 self.overruns.fetch_add(1, Ordering::Relaxed);
-                Ok(())
             }
             Err(TrySendError::Disconnected(_)) => {
-                Err(anyhow::anyhow!("recorder writer thread has stopped"))
+                // Writer thread is gone. Constructing an `anyhow` error here
+                // would allocate on the RT thread; count it as an overrun like
+                // any other lost block instead.
+                self.overruns.fetch_add(1, Ordering::Relaxed);
             }
         }
     }
@@ -215,7 +219,7 @@ mod tests {
                 block.push(sample);
             }
 
-            recorder.record_block(&block)?;
+            recorder.record_block(&block);
             generated_samples += samples_to_generate;
         }
 

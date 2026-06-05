@@ -40,7 +40,10 @@ impl jack::NotificationHandler for NotificationHandler {
 }
 
 impl ProcessHandler {
-    const MAX_BUFFER_FRAMES: usize = 8192;
+    /// Largest JACK period (in frames) sized for without reallocating. Also
+    /// used to size the recorder's buffer pool so a mid-recording buffer-size
+    /// increase up to this bound doesn't start dropping blocks.
+    pub const MAX_BUFFER_FRAMES: usize = 8192;
 
     pub fn new(client: &Client, audio_engine: Engine) -> Result<Self> {
         let ports = Ports::new(client).context("failed to create audio ports")?;
