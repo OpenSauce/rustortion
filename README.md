@@ -3,7 +3,9 @@
 
 English | [简体中文](README.zh-CN.md)
 
-A guitar amp simulator built in Rust using JACK.
+![CI](https://github.com/OpenSauce/rustortion/actions/workflows/ci.yaml/badge.svg)
+
+A guitar and bass amp simulator built in Rust. Runs standalone with JACK, or as a VST3/CLAP plugin in your DAW.
 
 ## Screenshot
 
@@ -12,14 +14,16 @@ A guitar amp simulator built in Rust using JACK.
 ## Features
 
 - Low-latency audio processing with configurable oversampling (1x–16x)
-- 10 DSP stages: preamp (with 12AX7 triode clipper), compressor, tone stack, power amp, noise gate, level, multi-band saturator, delay, reverb, and 16-band graphic EQ
+- 11 DSP stages: preamp (with 12AX7 triode clipper), compressor, tone stack, power amp, noise gate, level, multi-band saturator, delay, reverb, 16-band graphic EQ, and NAM (Neural Amp Modeler) model loading (WaveNet + LSTM `.nam` files)
 - Impulse response cabinet simulation for both guitar and bass
 - Saving and loading presets with keyboard hotkey switching
 - Real-time recording capability
 - Built-in tuner
 - FFT-based pitch shifting for alternate tunings without retuning your instrument
 - MIDI controller support
+- VST3 and CLAP plugin builds for DAW use (experimental — see [Plugin](#vst3clap-plugin))
 - Tabbed GUI with minimap, collapsible stage cards, and input filter controls - built with [Iced](https://github.com/iced-rs/iced)
+- English and Simplified Chinese UI
 
 ## Requirements
 
@@ -56,6 +60,15 @@ cargo run --release
 > sudo apt-get install pipewire-jack
 > pw-jack cargo run --release
 > ```
+
+### VST3/CLAP Plugin
+
+The plugin is experimental and not yet included in releases — build it from source:
+
+```bash
+make plugin           # builds target/bundled/Rustortion.{clap,vst3}
+make plugin-install   # copies them into ~/.clap and ~/.vst3
+```
 
 ## Contributing
 
