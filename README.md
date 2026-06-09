@@ -12,7 +12,7 @@ A guitar amp simulator built in Rust using JACK.
 ## Features
 
 - Low-latency audio processing with configurable oversampling (1x–16x)
-- 10 DSP stages: preamp (with 12AX7 triode clipper), compressor, tone stack, power amp, noise gate, level, multi-band saturator, delay, reverb, and 16-band graphic EQ
+- 11 DSP stages: preamp (with 12AX7 triode clipper), compressor, tone stack, power amp, noise gate, level, multi-band saturator, delay, reverb, 16-band graphic EQ, and NAM (Neural Amp Modeler) model loading (WaveNet + LSTM `.nam` files)
 - Impulse response cabinet simulation for both guitar and bass
 - Saving and loading presets with keyboard hotkey switching
 - Real-time recording capability
