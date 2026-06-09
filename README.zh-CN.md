@@ -2,7 +2,9 @@
 
 [English](README.md) | 简体中文
 
-一款使用 Rust 和 JACK 构建的吉他音箱模拟器。
+![CI](https://github.com/OpenSauce/rustortion/actions/workflows/ci.yaml/badge.svg)
+
+一款使用 Rust 构建的吉他/贝斯音箱模拟器。可作为 JACK 独立应用运行，也可作为 VST3/CLAP 插件在 DAW 中使用。
 
 ## 截图
 
@@ -18,7 +20,9 @@
 - 内置调音器
 - 基于 FFT 的变调功能，无需重新调弦即可切换至不同调音
 - MIDI 控制器支持
+- VST3 与 CLAP 插件构建，可在 DAW 中使用（实验性 — 参见[插件](#vst3clap-插件)）
 - 标签式界面，支持缩略图、可折叠级卡片和输入滤波器控制 - 使用 [Iced](https://github.com/iced-rs/iced) 构建
+- 界面支持英文与简体中文
 
 ## 系统要求
 
@@ -56,6 +60,15 @@ cargo run --release
 > sudo apt-get install pipewire-jack
 > pw-jack cargo run --release
 > ```
+
+### VST3/CLAP 插件
+
+插件目前为实验性功能，尚未包含在发布版本中——需从源码构建：
+
+```bash
+make plugin           # 构建 target/bundled/Rustortion.{clap,vst3}
+make plugin-install   # 复制到 ~/.clap 与 ~/.vst3
+```
 
 ## 参与贡献
 
