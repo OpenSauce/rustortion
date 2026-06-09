@@ -58,7 +58,7 @@ impl NamLoader {
                 Ok(model) => {
                     info!(
                         "Loaded NAM model '{name}' ({} Hz)",
-                        model.sample_rate() as u32
+                        model.expected_sample_rate() as u32
                     );
                     models.insert(name, Arc::new(model));
                 }

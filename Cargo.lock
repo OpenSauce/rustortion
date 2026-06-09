@@ -2616,9 +2616,9 @@ dependencies = [
 
 [[package]]
 name = "nam-rs"
-version = "0.2.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8740673c58dca29a4db6fc5cf41cb633039b43303ac45b2e423ea8ac0f178ce"
+checksum = "3408b0fceb250101c1a3206ea55af39960ba75c428ab765d01a13d3169e70e36"
 dependencies = [
  "serde",
  "serde_json",

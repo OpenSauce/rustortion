@@ -118,7 +118,7 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         let info_line: Element<'_, Message> = match model_name.as_deref() {
             Some(name) => match registry::get(name) {
                 Some(model) => {
-                    let native_rate = model.sample_rate() as u32;
+                    let native_rate = model.expected_sample_rate() as u32;
                     if native_rate.abs_diff(engine_rate) > 1 {
                         text(format!(
                             "{}: {native_rate} Hz · {engine_rate} Hz",
