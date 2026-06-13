@@ -8,14 +8,21 @@ use crate::amp::stages::common::calculate_coefficient;
 const MIN_RATE_HZ: f32 = 0.1;
 const MAX_RATE_HZ: f32 = 20.0;
 
-/// Smallest `tanh` drive, applied at `shape = 0.0`. `tanh` is ~linear near
-/// zero, so at this drive `tanh(raw * d) / tanh(d)` collapses back to `raw` —
-/// i.e. a faithful sine. Kept above zero to avoid a `0 / 0` at `shape = 0`.
+/// Pure-sine floor: `tanh` drive at exactly `shape = 0.0`. `tanh` is ~linear
+/// near zero, so `tanh(raw * d) / tanh(d)` collapses back to `raw` — a faithful
+/// sine. Kept above zero to avoid a `0 / 0`.
 const MIN_DRIVE: f32 = 1e-3;
 
-/// `tanh` drive at `shape = 1.0`. ~12 clamps the sine to within 0.01% of a hard
-/// square, giving the "killswitch" chop without the aliasing of a literal sign().
-const MAX_DRIVE: f32 = 12.0;
+/// Start of the audible morph sweep, for `shape` just above 0. Drive sweeps
+/// *geometrically* from here to `MAX_DRIVE`, because the sine→square morph
+/// saturates with drive: a linear sweep finishes ~80% of the morph in the
+/// bottom third of the knob, leaving the upper half inert. Equal `shape` steps
+/// → equal drive *ratios* spreads the morph evenly across the control.
+const SHAPE_MIN_DRIVE: f32 = 0.5;
+
+/// `tanh` drive at `shape = 1.0`. ~16 gives a hard, crisp square for the
+/// "killswitch" chop without the aliasing of a literal `sign()`.
+const MAX_DRIVE: f32 = 16.0;
 
 /// One-pole smoothing time for the depth parameter — fast enough to feel
 /// instant, slow enough to suppress zipper noise when the slider is dragged.
@@ -70,7 +77,14 @@ impl TremoloStage {
     /// the `tanh` waveshaper's slope; `drive_norm = 1 / tanh(drive)` renormalises
     /// the shaped output back to ±1. Called only when `shape` changes.
     fn update_shape_coeffs(&mut self) {
-        self.drive = (MAX_DRIVE - MIN_DRIVE).mul_add(self.shape, MIN_DRIVE);
+        // Geometric sweep so the morph spreads evenly across the knob (see
+        // SHAPE_MIN_DRIVE). `shape` exactly 0 stays a true sine; above that,
+        // drive ramps from SHAPE_MIN_DRIVE up to MAX_DRIVE.
+        self.drive = if self.shape <= 0.0 {
+            MIN_DRIVE
+        } else {
+            SHAPE_MIN_DRIVE * (MAX_DRIVE / SHAPE_MIN_DRIVE).powf(self.shape)
+        };
         self.drive_norm = 1.0 / self.drive.tanh();
     }
 
@@ -237,6 +251,28 @@ mod tests {
                 gains[i + period]
             );
         }
+    }
+
+    #[test]
+    fn upper_shape_knob_still_morphs() {
+        // Regression guard: the upper half of the Shape knob must keep morphing
+        // toward square. A linear drive sweep saturated by ~shape 0.5, making
+        // 0.5→1.0 nearly identical (MAE ~0.019); the geometric sweep keeps them
+        // distinct (MAE ~0.066). Compare one full LFO cycle at depth 1.
+        fn cycle_gains(shape: f32) -> Vec<f32> {
+            let mut s = TremoloStage::new(5.0, 1.0, shape, SAMPLE_RATE);
+            let n = (SAMPLE_RATE / 5.0) as usize;
+            (0..n).map(|_| s.process(1.0)).collect()
+        }
+        let mid = cycle_gains(0.5);
+        let top = cycle_gains(1.0);
+        let mae: f32 = mid
+            .iter()
+            .zip(&top)
+            .map(|(a, b)| (a - b).abs())
+            .sum::<f32>()
+            / mid.len() as f32;
+        assert!(mae > 0.03, "upper-half Shape morph too flat (mae={mae})");
     }
 
     #[test]
