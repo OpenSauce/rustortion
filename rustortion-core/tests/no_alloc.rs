@@ -28,6 +28,7 @@ use rustortion_core::amp::stages::poweramp::{PowerAmpStage, PowerAmpType};
 use rustortion_core::amp::stages::preamp::PreampStage;
 use rustortion_core::amp::stages::reverb::ReverbStage;
 use rustortion_core::amp::stages::tonestack::{ToneStackModel, ToneStackStage};
+use rustortion_core::amp::stages::tremolo::TremoloStage;
 use rustortion_core::audio::engine::{Engine, EngineHandle, PreparedIr};
 use rustortion_core::audio::peak_meter::PeakMeter;
 use rustortion_core::audio::rt_drop::{RtDropHandle, RtDropReceiver};
@@ -325,6 +326,12 @@ mod stages {
     fn eq_stage_does_not_allocate() {
         // Covers: EqStage 16-band cascaded biquads.
         run_with_stage(Box::new(EqStage::new([0.0; NUM_BANDS], SAMPLE_RATE_F32)));
+    }
+
+    #[test]
+    fn tremolo_stage_does_not_allocate() {
+        // Covers: TremoloStage sine LFO + tanh shape morph + depth smoothing.
+        run_with_stage(Box::new(TremoloStage::new(5.0, 0.7, 0.5, SAMPLE_RATE_F32)));
     }
 }
 
