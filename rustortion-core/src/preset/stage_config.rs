@@ -14,6 +14,7 @@ use crate::amp::stages::poweramp::PowerAmpConfig;
 use crate::amp::stages::preamp::PreampConfig;
 use crate::amp::stages::reverb::ReverbConfig;
 use crate::amp::stages::tonestack::ToneStackConfig;
+use crate::amp::stages::tremolo::TremoloConfig;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StageCategory {
@@ -35,6 +36,7 @@ pub enum StageType {
     Delay,
     Reverb,
     Eq,
+    Tremolo,
 }
 
 impl StageType {
@@ -50,6 +52,7 @@ impl StageType {
         Self::Delay,
         Self::Reverb,
         Self::Eq,
+        Self::Tremolo,
     ];
 
     pub const fn category(self) -> StageCategory {
@@ -62,7 +65,7 @@ impl StageType {
             | Self::NoiseGate
             | Self::MultibandSaturator
             | Self::Nam => StageCategory::Amp,
-            Self::Delay | Self::Reverb | Self::Eq => StageCategory::Effect,
+            Self::Delay | Self::Reverb | Self::Eq | Self::Tremolo => StageCategory::Effect,
         }
     }
 
@@ -89,6 +92,7 @@ impl Display for StageType {
             Self::Delay => write!(f, "Delay"),
             Self::Reverb => write!(f, "Reverb"),
             Self::Eq => write!(f, "EQ"),
+            Self::Tremolo => write!(f, "Tremolo"),
         }
     }
 }
@@ -106,6 +110,7 @@ pub enum StageConfig {
     Delay(DelayConfig),
     Reverb(ReverbConfig),
     Eq(EqConfig),
+    Tremolo(TremoloConfig),
 }
 
 impl From<StageType> for StageConfig {
@@ -124,6 +129,7 @@ impl From<StageType> for StageConfig {
             StageType::Delay => Self::Delay(DelayConfig::default()),
             StageType::Reverb => Self::Reverb(ReverbConfig::default()),
             StageType::Eq => Self::Eq(EqConfig::default()),
+            StageType::Tremolo => Self::Tremolo(TremoloConfig::default()),
         }
     }
 }
@@ -142,6 +148,7 @@ impl StageConfig {
             Self::Delay(cfg) => Box::new(cfg.to_stage(sample_rate)),
             Self::Reverb(cfg) => Box::new(cfg.to_stage(sample_rate)),
             Self::Eq(cfg) => Box::new(cfg.to_stage(sample_rate)),
+            Self::Tremolo(cfg) => Box::new(cfg.to_stage(sample_rate)),
         }
     }
 
@@ -158,6 +165,7 @@ impl StageConfig {
             Self::Delay(_) => StageType::Delay,
             Self::Reverb(_) => StageType::Reverb,
             Self::Eq(_) => StageType::Eq,
+            Self::Tremolo(_) => StageType::Tremolo,
         }
     }
 
@@ -178,6 +186,7 @@ impl StageConfig {
             Self::Delay(cfg) => cfg.bypassed,
             Self::Reverb(cfg) => cfg.bypassed,
             Self::Eq(cfg) => cfg.bypassed,
+            Self::Tremolo(cfg) => cfg.bypassed,
         }
     }
 
@@ -194,6 +203,7 @@ impl StageConfig {
             Self::Delay(cfg) => cfg.bypassed = bypassed,
             Self::Reverb(cfg) => cfg.bypassed = bypassed,
             Self::Eq(cfg) => cfg.bypassed = bypassed,
+            Self::Tremolo(cfg) => cfg.bypassed = bypassed,
         }
     }
 }

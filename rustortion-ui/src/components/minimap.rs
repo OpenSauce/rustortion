@@ -19,6 +19,7 @@ const fn stage_abbreviation(cfg: &StageConfig) -> &'static str {
         StageConfig::Delay(_) => "Dly",
         StageConfig::Reverb(_) => "Rev",
         StageConfig::Eq(_) => "EQ",
+        StageConfig::Tremolo(_) => "Trm",
     }
 }
 
