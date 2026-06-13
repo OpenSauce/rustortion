@@ -481,6 +481,37 @@ impl Default for EqSlotParams {
     }
 }
 
+#[derive(Params)]
+pub struct TremoloSlotParams {
+    #[id = "rate"]
+    pub rate: FloatParam,
+    #[id = "depth"]
+    pub depth: FloatParam,
+    #[id = "shape"]
+    pub shape: FloatParam,
+    #[id = "bypassed"]
+    pub bypassed: BoolParam,
+}
+
+impl Default for TremoloSlotParams {
+    fn default() -> Self {
+        Self {
+            rate: FloatParam::new(
+                "Rate",
+                5.0,
+                FloatRange::Linear {
+                    min: 0.1,
+                    max: 20.0,
+                },
+            )
+            .with_unit(" Hz"),
+            depth: FloatParam::new("Depth", 0.5, FloatRange::Linear { min: 0.0, max: 1.0 }),
+            shape: FloatParam::new("Shape", 0.0, FloatRange::Linear { min: 0.0, max: 1.0 }),
+            bypassed: BoolParam::new("Bypassed", false),
+        }
+    }
+}
+
 /// Per-slot NAM params — intentionally **no** `model` parameter here.
 ///
 /// The selected model is stored by NAME in `NamConfig.model_name` inside the
@@ -604,6 +635,9 @@ pub struct RustortionParams {
 
     #[nested(array, group = "EQ")]
     pub eq: [EqSlotParams; 8],
+
+    #[nested(array, group = "Tremolo")]
+    pub tremolo: [TremoloSlotParams; 8],
 }
 
 impl Default for RustortionParams {
@@ -683,6 +717,7 @@ impl Default for RustortionParams {
             delay: Default::default(),
             reverb: Default::default(),
             eq: Default::default(),
+            tremolo: Default::default(),
         }
     }
 }

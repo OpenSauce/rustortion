@@ -67,4 +67,5 @@ gui_stage_registry! {
     Delay              => delay,                DelayMessage,              stage_delay;
     Reverb             => reverb,               ReverbMessage,             stage_reverb;
     Eq                 => eq,                   EqMessage,                 stage_eq;
+    Tremolo            => tremolo,              TremoloMessage,            stage_tremolo;
 }

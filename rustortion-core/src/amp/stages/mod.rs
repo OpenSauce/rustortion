@@ -12,6 +12,7 @@ pub mod poweramp;
 pub mod preamp;
 pub mod reverb;
 pub mod tonestack;
+pub mod tremolo;
 
 // The core trait that all processing stages must implement
 pub trait Stage: Send + Sync + 'static {

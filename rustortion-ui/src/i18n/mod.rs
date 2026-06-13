@@ -165,6 +165,7 @@ pub struct Translations {
     pub stage_delay: &'static str,
     pub stage_reverb: &'static str,
     pub stage_eq: &'static str,
+    pub stage_tremolo: &'static str,
     pub stage_nam: &'static str,
     pub nam_model: &'static str,
     pub nam_no_model: &'static str,
@@ -208,6 +209,9 @@ pub struct Translations {
     pub dry_wet: &'static str,
     pub room_size: &'static str,
     pub damping: &'static str,
+    pub rate: &'static str,
+    pub depth: &'static str,
+    pub shape: &'static str,
 
     // Filter types
     pub filter_highpass: &'static str,
@@ -370,6 +374,7 @@ pub static EN: Translations = Translations {
     stage_delay: "Delay",
     stage_reverb: "Reverb",
     stage_eq: "Graphic EQ",
+    stage_tremolo: "Tremolo",
     stage_nam: "NAM",
     nam_model: "Model",
     nam_no_model: "Select a model…",
@@ -413,6 +418,9 @@ pub static EN: Translations = Translations {
     dry_wet: "Dry/Wet",
     room_size: "Room Size",
     damping: "Damping",
+    rate: "Rate",
+    depth: "Depth",
+    shape: "Shape",
 
     // Filter types
     filter_highpass: "Highpass",
@@ -566,6 +574,7 @@ pub static ZH_CN: Translations = Translations {
     stage_delay: "延迟",
     stage_reverb: "混响",
     stage_eq: "图形均衡器",
+    stage_tremolo: "颤音",
     stage_nam: "NAM",
     nam_model: "模型",
     nam_no_model: "选择模型…",
@@ -609,6 +618,9 @@ pub static ZH_CN: Translations = Translations {
     dry_wet: "干/湿",
     room_size: "房间大小",
     damping: "阻尼",
+    rate: "速率",
+    depth: "深度",
+    shape: "波形",
 
     // Filter types
     filter_highpass: "高通",
