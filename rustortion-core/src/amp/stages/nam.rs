@@ -194,7 +194,7 @@ impl NamConfig {
             return NamStage::passthrough(input_gain, output_gain, mix);
         };
 
-        let native_sample_rate = model.sample_rate() as f32;
+        let native_sample_rate = model.expected_sample_rate() as f32;
         if (native_sample_rate - sample_rate).abs() > 1.0 {
             // Resampling is intentionally avoided (too expensive on the RT path), so a
             // rate mismatch bypasses the model entirely: pass the dry signal through.
