@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use log::debug;
 use rubato::audioadapter_buffers::direct::SequentialSliceOfVecs;
-use rubato::{Fft, FixedSync, Resampler};
+use rubato::{Fft, FixedSync, Resampler, WindowFunction};
 
 const CHANNELS: usize = 1;
 
@@ -21,22 +21,24 @@ pub struct Samplers {
 
 impl Samplers {
     pub fn new(buffer_size: usize, oversample_factor: f64, sample_rate: usize) -> Result<Self> {
-        let upsampler = Fft::<f32>::new(
+        let upsampler = Fft::<f32>::new_custom(
             sample_rate,
             sample_rate * oversample_factor as usize,
             buffer_size,
             1,
             CHANNELS,
+            WindowFunction::BlackmanHarris2,
             FixedSync::Both,
         )
         .context("failed to create upsampler")?;
 
-        let downsampler = Fft::<f32>::new(
+        let downsampler = Fft::<f32>::new_custom(
             sample_rate * oversample_factor as usize,
             sample_rate,
             buffer_size * oversample_factor as usize,
             1,
             CHANNELS,
+            WindowFunction::BlackmanHarris2,
             FixedSync::Both,
         )
         .context("failed to create downsampler")?;
@@ -129,24 +131,26 @@ impl Samplers {
 
         self.input_buffer[0].resize(new_size, 0.0);
 
-        self.upsampler = Fft::<f32>::new(
+        self.upsampler = Fft::<f32>::new_custom(
             self.sample_rate,
             self.sample_rate * self.oversample_factor as usize,
             new_size,
             1,
             CHANNELS,
+            WindowFunction::BlackmanHarris2,
             FixedSync::Both,
         )
         .context("failed to recreate upsampler")?;
         self.upsampled_buffer = vec![vec![0.0; self.upsampler.output_frames_max()]; CHANNELS];
         self.upsampled_frames = self.upsampled_buffer[0].len();
 
-        self.downsampler = Fft::<f32>::new(
+        self.downsampler = Fft::<f32>::new_custom(
             self.sample_rate * self.oversample_factor as usize,
             self.sample_rate,
             new_size * self.oversample_factor as usize,
             1,
             CHANNELS,
+            WindowFunction::BlackmanHarris2,
             FixedSync::Both,
         )
         .context("failed to recreate downsampler")?;

@@ -180,7 +180,7 @@ fn resample(samples: &[f32], from_rate: u32, to_rate: u32) -> Result<Vec<f32>> {
 
     let params = SincInterpolationParameters {
         sinc_len: 256,
-        f_cutoff: 0.95,
+        f_cutoff: Some(0.95),
         interpolation: SincInterpolationType::Linear,
         oversampling_factor: 256,
         window: WindowFunction::BlackmanHarris2,
