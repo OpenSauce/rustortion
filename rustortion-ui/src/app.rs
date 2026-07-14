@@ -546,7 +546,7 @@ impl<B: ParamBackend> SharedApp<B> {
                     Message::InputFilterHighpassCutoff
                 )
                 .width(Length::FillPortion(5))
-                .step(1.0),
+                .step(1.0_f32),
                 text(format!(
                     "{:.0} {}",
                     self.input_filter_config.hp_cutoff,
@@ -571,7 +571,7 @@ impl<B: ParamBackend> SharedApp<B> {
                     Message::InputFilterLowpassCutoff
                 )
                 .width(Length::FillPortion(5))
-                .step(1.0),
+                .step(1.0_f32),
                 text(format!(
                     "{:.0} {}",
                     self.input_filter_config.lp_cutoff,
