@@ -1,0 +1,95 @@
+# Builds the CLAP + VST3 plugin bundles and attaches them to an existing GitHub
+# release.
+#
+# NOTE: this deliberately triggers on `release: published`, NOT on tag push.
+# cargo-dist's own `release.yml` is what calls `gh release create`; a workflow
+# triggered by the same tag push would race it and fail every upload with a 404
+# because the release does not exist yet. Waiting for `published` guarantees the
+# release object is there before we upload to it.
+#
+# Do not fold this into `.github/workflows/release.yml` — that file is generated
+# by `dist init` and hand edits are destroyed on regeneration.
+name: Plugin Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to build and upload plugin bundles for"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  # `github.event.release.tag_name` is unset for workflow_dispatch runs.
+  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  bundle:
+    name: Bundle plugin (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # v0.3.0 ships the plugin for x86_64 Linux only. aarch64 needs a full
+          # arm64 sysroot (X11/xcb/GL/xkbcommon) for the iced_baseview GUI, which
+          # plain `gcc-aarch64-linux-gnu` does not provide — see README.
+          - label: linux-x86_64
+            runner: ubuntu-latest
+            arch_dir: x86_64-linux
+            asset: Rustortion-linux-x86_64.zip
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Build exactly the code the release was cut from, not branch tip.
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libjack-jackd2-dev libasound2-dev pkg-config \
+            libgl-dev libx11-dev libx11-xcb-dev libxcb1-dev \
+            libxcursor-dev libxfixes-dev libxft-dev libxi-dev \
+            libxinerama-dev libxmu-dev libxrandr-dev libxrender-dev \
+            libxss-dev libxt-dev libxtst-dev libxxf86vm-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libxpresent-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-icccm4-dev libxcb-dri2-0-dev zip
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      # No rust-cache here on purpose: release builds should not inherit a warm,
+      # possibly polluted target/ directory.
+      - name: Clean stale bundle output
+        run: rm -rf target/bundled
+      - name: Bundle plugin
+        # `--profile dist` matches cargo-dist's release profile (lto = true,
+        # codegen-units = 1) so the plugin gets the same optimisation level as
+        # the standalone binary in the same release.
+        run: cargo xtask bundle rustortion-plugin --profile dist --locked
+      - name: Verify bundle structure
+        run: |
+          set -euo pipefail
+          test -f target/bundled/Rustortion.clap
+          test -f "target/bundled/Rustortion.vst3/Contents/${{ matrix.arch_dir }}/Rustortion.so"
+          unexpected="$(find target/bundled/Rustortion.vst3/Contents \
+            -mindepth 1 -maxdepth 1 -not -name '${{ matrix.arch_dir }}' -print)"
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected entries in the VST3 bundle:"
+            echo "$unexpected"
+            exit 1
+          fi
+          find target/bundled
+      - name: Package
+        run: |
+          set -euo pipefail
+          zip -r -y "$GITHUB_WORKSPACE/${{ matrix.asset }}" \
+            Rustortion.clap Rustortion.vst3
+        working-directory: target/bundled
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$RELEASE_TAG" "${{ matrix.asset }}" --clobber

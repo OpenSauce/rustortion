@@ -63,7 +63,32 @@ cargo run --release
 
 ### VST3/CLAP Plugin
 
-The plugin is experimental and not yet included in releases — build it from source:
+Rustortion also ships as an audio plugin in two formats: **CLAP** (`Rustortion.clap`) and
+**VST3** (`Rustortion.vst3`). Both are built from the same code and expose the same GUI as the
+standalone app.
+
+> [!NOTE]
+> Plugin builds are **Linux x86_64 only** for this release. There is no aarch64 (Raspberry Pi),
+> macOS, or Windows plugin build yet — cross-compiling the plugin GUI needs a full target sysroot
+> for X11/xcb/OpenGL, which the release pipeline does not have. On other platforms, build from
+> source (below) or use the standalone app.
+
+Download `Rustortion-linux-x86_64.zip` from the
+[releases page](https://github.com/OpenSauce/rustortion/releases/) and unpack both bundles into
+your plugin folders:
+
+```bash
+sudo apt-get install libjack-jackd2-0
+unzip Rustortion-linux-x86_64.zip
+mkdir -p ~/.clap ~/.vst3
+cp -r Rustortion.clap ~/.clap/
+cp -r Rustortion.vst3 ~/.vst3/
+```
+
+`~/.clap` and `~/.vst3` are the standard per-user plugin directories on Linux; most hosts scan
+them by default. Rescan plugins in your DAW afterwards.
+
+To build the plugin from source instead:
 
 ```bash
 make plugin           # builds target/bundled/Rustortion.{clap,vst3}

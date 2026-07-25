@@ -20,3 +20,8 @@ impulse_responses/*
 !/impulse_responses/Science Amplification
 
 /.worktrees
+
+# Local-only NAM test preset. `rustortion-plugin` embeds all of `presets/` via
+# rust-embed, and no `.nam` models are tracked or shipped, so committing this
+# would ship a factory preset whose NAM stage resolves to nothing.
+/presets/NAM.json
