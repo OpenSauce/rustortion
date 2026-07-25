@@ -1,136 +1,72 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Rustortion is a real-time guitar/bass amp simulator in Rust. It ships as a standalone JACK app
+and as a VST3/CLAP plugin; both drive the same GUI via `SharedApp<B: ParamBackend>`.
 
-## Project Overview
+Workspace: `rustortion-core` (DSP, no GUI deps) · `rustortion-ui` (shared iced 0.14 GUI) ·
+`rustortion-standalone` (JACK) · `rustortion-plugin` (nih-plug) · `xtask`.
 
-Rustortion is a real-time guitar/bass amp simulator built in Rust. It runs as a standalone JACK app and as a VST3/CLAP plugin. The GUI is shared between both targets via the `rustortion-ui` crate.
-
-## Workspace Crates
-
-- **`rustortion-core`** — DSP engine, amp stages, IR cabinet, preset management. No GUI dependencies.
-- **`rustortion-ui`** — Shared GUI: stages, components, messages, handlers, i18n, `SharedApp<ParamBackend>`. Uses `iced = "0.14"`.
-- **`rustortion-standalone`** — Standalone JACK app. Thin shell wrapping `SharedApp<StandaloneBackend>` with MIDI, tuner, settings, recording.
-- **`rustortion-plugin`** — VST3/CLAP plugin via nih-plug. Editor uses `iced_baseview` + `SharedApp<PluginBackend>`.
-- **`xtask`** — Build automation.
-
-## Build & Development Commands
+## Commands
 
 ```bash
-# Build and run standalone (requires JACK/PipeWire)
-cargo run --release
-
-# Build plugin
-cargo build -p rustortion-plugin --release
-
-# Lint (formatting + clippy) — this is what CI runs
-make lint
-
-# Run tests
-make test                    # all tests
-cargo test test_name         # single test
-
-# Benchmarks
-make bench
-
-# Coverage (requires cargo-tarpaulin)
-make cover
+cargo run --release              # standalone (JACK/PipeWire must be running or it panics)
+make lint                        # fmt + clippy — exactly what CI runs
+make test                        # cargo test --workspace --all-targets --all-features
+make plugin                      # cargo xtask bundle rustortion-plugin --release
+make plugin-install              # copy bundle to ~/.clap and ~/.vst3
+make bench / make cover
 ```
 
-**System dependencies** (must be installed before building):
-```bash
-sudo apt-get install libjack-jackd2-dev libasound2-dev pkg-config
-```
+CI clippy: `-D warnings -D clippy::all -D clippy::pedantic -D clippy::nursery`. Each `lib.rs`
+carries its own `#![allow(...)]` block (they have drifted — see REV-20 in `claude/tasks.md`).
 
-**Clippy flags** used in CI: `-D warnings -D clippy::all -D clippy::pedantic -D clippy::nursery`
-(`lib.rs` has `#![allow(...)]` overrides for specific pedantic/nursery lints)
+System deps: `libjack-jackd2-dev libasound2-dev pkg-config`.
 
-**Dev profile** uses `opt-level = 1` because IR cabinet processing is too slow in pure debug mode.
+Dev profile uses `opt-level = 1` — IR convolution is unusably slow at `opt-level = 0`. Any
+performance claim must come from `--release`.
 
-## Architecture
-
-### Shared GUI Pattern
-
-Both standalone and plugin use `SharedApp<B: ParamBackend>` from `rustortion-ui`:
+## Signal flow
 
 ```
-rustortion-standalone                    rustortion-plugin
-  AmplifierApp                             PluginApp (iced_baseview::Application)
-    └─ SharedApp<StandaloneBackend>          └─ SharedApp<PluginBackend>
-         └─ StandaloneBackend                     └─ PluginBackend
-              └─ Manager/Engine (JACK)                  └─ EngineHandle + GuiContext
+Input → [Tuner bypass] → Input Filters (HP/LP) → [Upsample] → Amp Chain → [Downsample]
+      → Pitch Shifter → IR Cabinet → Peak Meter → Recorder → Output
 ```
 
-`ParamBackend` trait (`rustortion-ui/src/backend.rs`) abstracts engine communication. `Capabilities` struct controls which UI sections render (e.g. plugin hides tuner, MIDI config, recording, settings).
+The engine drives the chain per-block. Stages may override `Stage::process_block` (NAM does,
+via nam-rs's batched `process_buffer`); the default impl loops per sample.
 
-### Audio Signal Flow
+RT thread = JACK process callback (standalone) or nih-plug `process()` (plugin). GUI → engine is
+crossbeam channels; engine → GUI is `ArcSwap` (tuner, peak meter). Nothing allocates, locks, or
+does I/O on the RT path — `rustortion-core/tests/no_alloc.rs` enforces this in CI.
 
-```
-Input → [Tuner bypass] → Input Filters (HP/LP) → [Upsample] → Amp Chain (stages) → [Downsample] → Pitch Shifter → IR Cabinet → Peak Meter → Recorder → Output
-```
+## Adding a stage
 
-### Key Modules
+There are **12** registered stages. The `gui_stage_registry!` macro in
+`rustortion-ui/src/stages/mod.rs` generates only `StageMessage` and three dispatch fns —
+`StageType`/`StageConfig` live in core and are **hand-maintained across ~9 match sites** in
+`rustortion-core/src/preset/stage_config.rs`. Adding a stage means:
 
-#### rustortion-core
-- **`src/amp/chain.rs`** — Ordered list of processing stages.
-- **`src/amp/stages/`** — 11 registered DSP stages: preamp, compressor, noise_gate, tonestack, poweramp, multiband_saturator, level, nam, delay, reverb, eq. Plus utilities: `clipper`, `filter`, `common`.
-- **`src/audio/engine.rs`** — Core audio processing loop. Controlled via crossbeam channels.
-- **`src/ir/`** — IR cabinet, convolver (FIR/FFT), loader.
-- **`src/nam/`** — NAM model loader and process-global registry (models resolved by name in `NamConfig::to_stage`).
-- **`src/preset/`** — Preset save/load/delete, `StageConfig` enum, `InputFilterConfig`. Note: core's `StageConfig` in `stage_config.rs` is **hand-maintained** (the variant list repeats across ~9 match sites) — it is NOT generated by the UI macro.
+1. `rustortion-core/src/amp/stages/new_stage.rs` — implement the `Stage` trait
+2. `rustortion-core/src/preset/stage_config.rs` — add the variant to every match (compiler will list them)
+3. `rustortion-ui/src/stages/new_stage.rs` — config, message, `apply()`, `view()`
+4. One line in the `gui_stage_registry!` invocation
+5. i18n keys in **both** EN and ZH_CN (`rustortion-ui/src/i18n/mod.rs`, `tr!()` macro)
+6. Slot params in `rustortion-plugin/src/params.rs`
 
-#### rustortion-ui
-- **`src/app.rs`** — `SharedApp<B>` — shared state, update(), view(), subscription().
-- **`src/backend.rs`** — `ParamBackend` trait, `Capabilities`, `ExternalEvent`.
-- **`src/stages/mod.rs`** — `gui_stage_registry!` macro, `ParamUpdate`, all 11 stage view modules.
-- **`src/components/`** — Reusable UI components: widgets, dialogs, preset_bar, peak_meter, ir_cabinet_control, minimap, etc.
-- **`src/handlers/`** — Portable handlers: preset, hotkey.
-- **`src/messages/`** — Message enums for Iced event-driven updates.
-- **`src/i18n/`** — `tr!()` macro, EN + ZH_CN locales.
-- **`src/tabs.rs`** — Tab navigation: Amp, Effects, Cabinet, IO.
+## Pitfalls
 
-#### rustortion-standalone
-- **`src/gui/app.rs`** — `AmplifierApp` wrapping `SharedApp<StandaloneBackend>` + standalone handlers (MIDI, tuner, settings, recording).
-- **`src/backend.rs`** — `StandaloneBackend` implementing `ParamBackend` via `Manager`/`Engine`.
-- **`src/audio/`** — JACK client, Manager, ports.
-- **`src/gui/handlers/`** — Standalone-only: midi, tuner, settings.
-- **`src/gui/components/dialogs/`** — Standalone-only dialogs: midi, settings, tuner.
-
-#### rustortion-plugin
-- **`src/lib.rs`** — nih-plug `Plugin` impl, audio processing, initialization.
-- **`src/editor.rs`** — `PluginEditor` (nih-plug `Editor` trait) + `PluginApp` (iced_baseview `Application`).
-- **`src/backend.rs`** — `PluginBackend` implementing `ParamBackend` via `EngineHandle` + `GuiContext`.
-- **`src/params.rs`** — Full nih-plug parameter set: global params + 8 slots × 11 stage types. (Note: the per-slot stage params are not yet read by `process()` — see REF-Q3/REV-4 in `claude/tasks.md`.)
-
-### Stage Registration (`rustortion-ui/src/stages/mod.rs`)
-
-The `gui_stage_registry!` macro generates the **UI-side** `StageType`, `StageConfig`, and `StageMessage` enums plus boilerplate. Core's `StageConfig` (`rustortion-core/src/preset/stage_config.rs`) is hand-maintained. Adding a new stage requires:
-1. Add one line to the macro invocation
-2. Create `rustortion-ui/src/stages/new_stage.rs` with config, message, and view implementations
-3. Create `rustortion-core/src/amp/stages/new_stage.rs` implementing the `Stage` trait
-4. Add the variant to `rustortion-core/src/preset/stage_config.rs` (every match site — the compiler will point at them)
-5. Add i18n keys to EN and ZH_CN in `rustortion-ui/src/i18n/mod.rs`
-6. Add slot params to `rustortion-plugin/src/params.rs`
-
-### Thread Model
-
-The JACK process callback (standalone) or nih-plug `process()` (plugin) runs on a real-time thread. The GUI communicates with the engine via crossbeam channels. Shared state (tuner data, peak meter) uses `ArcSwap` for lock-free reads.
-
-## Common Pitfalls
-
-- **JACK/PipeWire must be running** before `cargo run --release`. If JACK is not available the app will panic on startup.
-- **Dev profile uses `opt-level = 1`** — benchmarks and performance comparisons must use `--release`.
-- **The `gui_stage_registry!` macro** in `rustortion-ui/src/stages/mod.rs` generates boilerplate. Do not hand-write — add one line to the macro invocation instead.
-- **Preset JSON format** — each preset is a JSON file in `~/.config/rustortion/presets/`. Structure: `{ "name": "...", "stages": [...], "ir_name": "...", "ir_gain": N, "pitch_shift_semitones": N, "input_filters": {...} }`.
-- **IR files** are in `impulse_responses/` and `~/.config/rustortion/impulse_responses/`. Loading is async (off RT thread).
-- **NAM models** (`.nam`, WaveNet + LSTM via the `nam-rs` crate) load from a user-configurable folder with rescan; loaded models live in a process-global registry and stages resolve them by name. No rfd file-picker (rfd/gtk3 breaks CI).
-- **Clippy is strict** — CI runs `-D warnings -D clippy::all -D clippy::pedantic -D clippy::nursery`.
-- **iced_baseview** is a fork at `github.com/OpenSauce/iced_baseview`, upgraded to iced 0.14 crates.io.
+- **Preset files** — one JSON per preset in `~/.config/rustortion/presets/`. Saves are not atomic
+  and filenames collide on non-ASCII names (REV-7); don't build on the current behavior.
+- **NAM models** (`.nam`, WaveNet + LSTM via `nam-rs`) load from a user folder with rescan, into a
+  process-global registry; stages resolve them **by name**. No rfd file-picker — rfd/gtk3 breaks CI.
+- **IR files** live in `impulse_responses/` and `~/.config/rustortion/impulse_responses/`; loading
+  is async, off the RT thread. Keep convolver type configurable — FIR beat FFT on the Pi in real
+  testing, and the TwoStage tail math is numerically wrong until REV-2 lands.
+- **iced_baseview** is a fork at `github.com/OpenSauce/iced_baseview` (unpinned git dep).
+- **Plugin per-slot params are not read by `process()`** — host automation of stage params is dead
+  until REF-Q3/REV-4 is resolved.
 
 ## Conventions
 
-- Rust edition 2024
-- Conventional commits: `feat:`, `fix:`, `refactor:`, `chore:`, etc.
-- Changelog generated via `git-cliff`
-- Standalone entry point: `rustortion-standalone/src/bin/gui.rs`
-- Releases via `cargo-dist` (`.github/workflows/release.yml`, `dist-workspace.toml`)
+Rust edition 2024 · conventional commits · changelog via `git-cliff` · releases via `cargo-dist`.
+Working notes (tasks, roadmap, product, DSP context) are in `./claude/` — gitignored.
