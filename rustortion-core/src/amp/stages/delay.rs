@@ -6,7 +6,6 @@ use crate::amp::stages::common::calculate_coefficient;
 const MAX_DELAY_MS: f32 = 2000.0;
 const MAX_FEEDBACK: f32 = 0.95;
 const SMOOTH_TIME_MS: f32 = 50.0;
-const DENORMAL_THRESHOLD: f32 = 1e-20;
 
 /// Delay stage for echo and slapback effects.
 ///
@@ -76,13 +75,8 @@ impl Stage for DelayStage {
         // Linear interpolation between the two nearest samples
         let delayed = (1.0 - frac).mul_add(self.buffer[read_idx], frac * self.buffer[prev_idx]);
 
-        // Write input + feedback into buffer, flush denormals
-        let write_val = self.feedback.mul_add(delayed, input);
-        self.buffer[self.write_pos] = if write_val.abs() < DENORMAL_THRESHOLD {
-            0.0
-        } else {
-            write_val
-        };
+        // Write input + feedback into buffer
+        self.buffer[self.write_pos] = self.feedback.mul_add(delayed, input);
 
         // Advance write position
         self.write_pos = (self.write_pos + 1) % buf_len;

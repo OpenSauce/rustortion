@@ -1,6 +1,7 @@
 #![allow(clippy::pedantic, clippy::nursery)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use rustortion_core::audio::denormals::enable_flush_to_zero;
 use std::hint::black_box;
 
 use rustortion_core::amp::chain::AmplifierChain;
@@ -42,6 +43,10 @@ pub fn build_engine(
 }
 
 fn bench_engine_buffer_sizes(c: &mut Criterion) {
+    // Match the RT audio callback: denormals flushed to zero, so the numbers
+    // reflect production rather than denormal-stalled arithmetic.
+    enable_flush_to_zero();
+
     let mut group = c.benchmark_group("Engine Buffer Sizes");
 
     for &buffer_size in &[64, 128, 256, 512] {
@@ -73,6 +78,10 @@ fn bench_engine_buffer_sizes(c: &mut Criterion) {
 }
 
 fn bench_engine_throughput(c: &mut Criterion) {
+    // Match the RT audio callback: denormals flushed to zero, so the numbers
+    // reflect production rather than denormal-stalled arithmetic.
+    enable_flush_to_zero();
+
     use criterion::Throughput;
 
     let mut group = c.benchmark_group("Engine Throughput");
@@ -101,6 +110,10 @@ fn bench_engine_throughput(c: &mut Criterion) {
 }
 
 fn bench_engine_with_ir_cabinet(c: &mut Criterion) {
+    // Match the RT audio callback: denormals flushed to zero, so the numbers
+    // reflect production rather than denormal-stalled arithmetic.
+    enable_flush_to_zero();
+
     let mut group = c.benchmark_group("Engine With IR Cabinet");
 
     for &oversample in &[1.0, 4.0, 8.0] {
@@ -139,6 +152,10 @@ fn bench_engine_with_ir_cabinet(c: &mut Criterion) {
 }
 
 fn bench_engine_ir_lengths(c: &mut Criterion) {
+    // Match the RT audio callback: denormals flushed to zero, so the numbers
+    // reflect production rather than denormal-stalled arithmetic.
+    enable_flush_to_zero();
+
     let mut group = c.benchmark_group("Engine IR Lengths");
 
     for &ir_length in &[1_000, 13_000, 34_000, 87_000] {

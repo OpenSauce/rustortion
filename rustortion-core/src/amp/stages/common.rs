@@ -107,7 +107,7 @@ impl EnvelopeFollower {
         self.envelope
     }
 
-    /// Reset envelope to zero (denormal flush).
+    /// Reset the envelope to zero, discarding any accumulated state.
     pub const fn reset(&mut self) {
         self.envelope = 0.0;
     }
