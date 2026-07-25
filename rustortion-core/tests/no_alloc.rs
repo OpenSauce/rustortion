@@ -373,6 +373,29 @@ mod ir_cabinet {
     }
 
     #[test]
+    fn clear_convolver_does_not_allocate() {
+        // Covers: IrCabinet::clear_convolver (reachable from the RT thread via
+        // EngineMessage::ClearIr). Must drop the IR without freeing anything.
+        for convolver in [make_fir_convolver(), make_two_stage_convolver()] {
+            let max_ir_samples = (SAMPLE_RATE * DEFAULT_MAX_IR_MS) / 1000;
+            let mut cabinet = IrCabinet::new(ConvolverType::Fir, max_ir_samples);
+            cabinet.set_convolver(convolver);
+
+            let mut block = vec![0.25_f32; BUFFER_SIZE];
+            cabinet.process_block(&mut block);
+
+            let violations = check_no_alloc(|| {
+                cabinet.clear_convolver();
+                cabinet.process_block(&mut block);
+            });
+            assert_eq!(
+                violations, 0,
+                "clear_convolver allocated {violations} time(s) on the RT path"
+            );
+        }
+    }
+
+    #[test]
     fn ir_cabinet_via_loader_does_not_allocate() {
         // Sanity check: WAV-loaded FIR cabinet behaves the same as the
         // synthesised one. Loading happens before the assert scope.
@@ -714,5 +737,80 @@ fn metronome_processing_does_not_allocate() {
     assert_eq!(
         violations, 0,
         "metronome processing allocated {violations} time(s)"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Variable-block (plugin) path
+// ---------------------------------------------------------------------------
+
+/// Covers the FIFO path taken when the host block is shorter than the
+/// resampler chunk: `fifo_push_input` / `fifo_load_chunk` /
+/// `downsample_into_fifo` / `fifo_pop_output`, plus the master-bus non-finite
+/// guard. All of these run on the audio thread, so none of them may allocate.
+#[test]
+fn engine_process_does_not_allocate_with_short_blocks_and_oversampling() {
+    let (mut engine, handle, _rx) = plugin_engine(4.0);
+
+    let mut chain = AmplifierChain::new();
+    chain.add_stage(Box::new(LevelStage::new(0.5)));
+    handle.set_amp_chain(chain);
+
+    // Deliberately shorter than BUFFER_SIZE, and not a divisor of it, so the
+    // FIFO carries a different remainder on every call.
+    let short = BUFFER_SIZE / 3 + 1;
+    let input = vec![0.5_f32; short];
+    let mut output = vec![0.0_f32; short];
+    assert_engine_alloc_free(&mut engine, &input, &mut output, 32);
+}
+
+/// The non-finite guard must stay allocation-free on the sample path too.
+#[test]
+fn nonfinite_guard_does_not_allocate() {
+    let (mut engine, _handle, _rx) = plugin_engine(1.0);
+
+    let mut input = vec![0.5_f32; BUFFER_SIZE];
+    input[7] = f32::NAN;
+    let mut output = vec![0.0_f32; BUFFER_SIZE];
+    assert_engine_alloc_free(&mut engine, &input, &mut output, 32);
+    assert!(engine.take_nonfinite_seen());
+}
+
+/// The adaptive FIFO must be able to *engage* on the audio thread without
+/// allocating: its buffers are sized up front in `new_variable_block` and
+/// engaging is only a flag flip plus a `fill(0.0)` of memory already owned.
+#[test]
+fn engaging_the_oversampling_fifo_does_not_allocate() {
+    let (mut engine, handle, _rx) = plugin_engine(4.0);
+
+    let mut chain = AmplifierChain::new();
+    chain.add_stage(Box::new(LevelStage::new(0.5)));
+    handle.set_amp_chain(chain);
+
+    // Warm up on the fast path: drains the queued message and amortises any
+    // first-call cold start, both outside the audit.
+    let (input, mut output) = buffers();
+    engine.process(&input, &mut output).unwrap();
+    assert!(
+        !engine.fifo_engaged(),
+        "a full {BUFFER_SIZE}-frame block should stay on the fast path"
+    );
+
+    // A block that is not a multiple of the chunk engages the FIFO — under the
+    // allocation audit, along with several blocks of steady state after it.
+    let ragged = vec![0.5_f32; 37];
+    let mut ragged_out = vec![0.0_f32; 37];
+    let violations = check_no_alloc(|| {
+        for _ in 0..16 {
+            engine.process(&ragged, &mut ragged_out).unwrap();
+        }
+    });
+    assert_eq!(
+        violations, 0,
+        "engaging the oversampling FIFO allocated {violations} time(s) on the RT path"
+    );
+    assert!(
+        engine.fifo_engaged(),
+        "the ragged block should have engaged"
     );
 }

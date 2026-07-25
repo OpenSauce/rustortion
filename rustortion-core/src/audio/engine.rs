@@ -14,6 +14,59 @@ use crate::ir::convolver::Convolver;
 use crate::metronome::Metronome;
 use crate::tuner::Tuner;
 
+/// Latency, in frames, that [`PitchShifter`] adds when installed.
+///
+/// It is a 2048-point STFT phase vocoder with a 75% overlap, so the group delay
+/// is one full FFT frame. Measured, not assumed: an impulse fed through
+/// `PitchShifter::new(0.0)` comes out with its energy centroid at sample 2048
+/// (see the `pitch_shifter_latency_matches_constant` test), which is ~42.7 ms at
+/// 48 kHz. Must be kept in step with `pitch_shifter::FFT_SIZE`; the test fails
+/// if it drifts.
+pub const PITCH_SHIFTER_LATENCY_FRAMES: usize = 2048;
+
+/// Level, relative to the peak, at which a decaying tail is treated as over.
+/// -60 dB is the usual RT60 convention.
+const TAIL_FLOOR: f32 = 0.001;
+
+/// Freeverb comb feedback is `room_size * SCALE_ROOM + OFFSET_ROOM`, and the
+/// longest comb is `COMB_DELAYS[7]` frames at `REFERENCE_SAMPLE_RATE`. These
+/// mirror the private constants in `amp::stages::reverb`; `reverb_tail_seconds`
+/// is the only consumer and the `reverb_tail_*` tests pin the result, so a
+/// drift in the reverb's tuning shows up as a test failure rather than silently
+/// wrong tail reporting.
+const REVERB_SCALE_ROOM: f32 = 0.28;
+const REVERB_OFFSET_ROOM: f32 = 0.7;
+const REVERB_LONGEST_COMB_SECONDS: f32 = 1617.0 / 44100.0;
+
+/// Seconds a delay line keeps ringing after its input stops: the time for the
+/// feedback path to decay to [`TAIL_FLOOR`]. Zero when the stage is inaudible
+/// (no wet signal) or has no delay time; one repeat when there is no feedback.
+fn delay_tail_seconds(delay_ms: f32, feedback: f32, mix: f32) -> f32 {
+    if mix <= 0.0 || delay_ms <= 0.0 {
+        return 0.0;
+    }
+    let feedback = feedback.clamp(0.0, 0.999);
+    let repeats = if feedback <= 0.0 {
+        1.0
+    } else {
+        TAIL_FLOOR.log(feedback)
+    };
+    delay_ms * 0.001 * repeats
+}
+
+/// Seconds a Freeverb tank keeps ringing: RT60 of its longest lowpass-feedback
+/// comb. Damping only shortens this (it is a lowpass inside the feedback loop),
+/// so ignoring it errs on the safe side.
+fn reverb_tail_seconds(room_size: f32, mix: f32) -> f32 {
+    if mix <= 0.0 {
+        return 0.0;
+    }
+    let feedback = room_size
+        .clamp(0.0, 1.0)
+        .mul_add(REVERB_SCALE_ROOM, REVERB_OFFSET_ROOM);
+    REVERB_LONGEST_COMB_SECONDS * TAIL_FLOOR.log(feedback)
+}
+
 pub struct PreparedIr {
     pub name: String,
     /// Boxed so it can be swapped into the cabinet on the RT thread without
@@ -65,6 +118,24 @@ pub struct Engine {
     input_lowpass: Option<Box<dyn Stage>>,
     /// When true, skip tuner, peak meter, recorder, and metronome processing.
     lightweight: bool,
+    /// Cached output of [`Engine::recompute_tail`], refreshed whenever a
+    /// message that could change the chain, the IR, or a stage parameter is
+    /// handled — so the audio thread only ever reads a `f32` field.
+    tail_seconds: f32,
+    /// Set once, with the triggering block length, when the oversampling FIFO
+    /// engages. Drained by [`Engine::take_fifo_engaged_event`] so the caller can
+    /// report it off the audio thread.
+    fifo_engaged_event: Option<usize>,
+    /// Set once, with the block length, on the first block that took the
+    /// zero-latency fast path. Drained by [`Engine::take_fast_path_event`].
+    fast_path_event: Option<usize>,
+    /// Latch for `fast_path_event`, so it is recorded once and not once per
+    /// block if the event goes unread.
+    fast_path_reported: bool,
+    /// Set by the master-bus guard when a non-finite sample was replaced.
+    /// Sticky until read via [`Engine::take_nonfinite_seen`]; the RT thread
+    /// only ever sets a `bool` here, reporting happens off the audio thread.
+    nonfinite_seen: bool,
 }
 
 #[derive(Clone)]
@@ -83,24 +154,29 @@ impl Engine {
     ) -> Result<(Self, EngineHandle)> {
         let (engine_sender, engine_receiver) = bounded::<EngineMessage>(128);
 
-        Ok((
-            Self {
-                chain: Box::new(AmplifierChain::new()),
-                ir_cabinet,
-                engine_receiver,
-                rt_drop,
-                samplers: Box::new(samplers),
-                tuner: Some(tuner),
-                recorder: None,
-                peak_meter: Some(peak_meter),
-                metronome: Some(metronome),
-                pitch_shifter: None,
-                input_highpass: None,
-                input_lowpass: None,
-                lightweight: false,
-            },
-            EngineHandle { engine_sender },
-        ))
+        let mut engine = Self {
+            chain: Box::new(AmplifierChain::new()),
+            ir_cabinet,
+            engine_receiver,
+            rt_drop,
+            samplers: Box::new(samplers),
+            tuner: Some(tuner),
+            recorder: None,
+            peak_meter: Some(peak_meter),
+            metronome: Some(metronome),
+            pitch_shifter: None,
+            input_highpass: None,
+            input_lowpass: None,
+            lightweight: false,
+            tail_seconds: 0.0,
+            fifo_engaged_event: None,
+            fast_path_event: None,
+            fast_path_reported: false,
+            nonfinite_seen: false,
+        };
+        engine.recompute_tail();
+
+        Ok((engine, EngineHandle { engine_sender }))
     }
 
     /// Create an engine for plugin use (no JACK, no recorder, no file I/O).
@@ -112,11 +188,15 @@ impl Engine {
         ir_cabinet: Option<IrCabinet>,
         oversample_factor: f64,
     ) -> Result<(Self, EngineHandle, crate::audio::rt_drop::RtDropReceiver)> {
-        let samplers = Samplers::new(max_buffer_size, oversample_factor, sample_rate)?;
+        // Plugin hosts hand out blocks of any length up to `max_buffer_size`
+        // (short blocks happen at loop boundaries, transport start, and during
+        // offline bounce), so the samplers must tolerate that.
+        let samplers =
+            Samplers::new_variable_block(max_buffer_size, oversample_factor, sample_rate)?;
         let (rt_drop_handle, rt_drop_rx) = RtDropHandle::new();
         let (engine_sender, engine_receiver) = bounded::<EngineMessage>(128);
 
-        let engine = Self {
+        let mut engine = Self {
             chain: Box::new(AmplifierChain::new()),
             ir_cabinet,
             engine_receiver,
@@ -130,7 +210,13 @@ impl Engine {
             input_highpass: None,
             input_lowpass: None,
             lightweight: true,
+            tail_seconds: 0.0,
+            fifo_engaged_event: None,
+            fast_path_event: None,
+            fast_path_reported: false,
+            nonfinite_seen: false,
         };
+        engine.recompute_tail();
 
         Ok((engine, EngineHandle { engine_sender }, rt_drop_rx))
     }
@@ -175,6 +261,8 @@ impl Engine {
             cab.process_block(output);
         }
 
+        self.sanitize_master_bus(output);
+
         if let Some(ref mut peak_meter) = self.peak_meter {
             peak_meter.process(output);
         }
@@ -186,6 +274,147 @@ impl Engine {
         }
 
         Ok(())
+    }
+
+    /// Master-bus safety net: replace any non-finite sample with silence.
+    ///
+    /// A NaN or infinity produced anywhere upstream (feedback paths in the
+    /// delay, reverb, or EQ at extreme settings are the usual sources) would
+    /// otherwise reach the output *and* stay wedged in that stage's feedback
+    /// state forever, since every subsequent sample it touches becomes NaN too.
+    /// This does not fix the source — it only stops the damage at the output,
+    /// and records that it happened so a non-RT context can report it once.
+    ///
+    /// One branch per sample on an already-branchy master bus; no logging, no
+    /// allocation, nothing that is unsafe on the audio thread.
+    fn sanitize_master_bus(&mut self, output: &mut [f32]) {
+        let mut seen = false;
+        for s in output.iter_mut() {
+            if !s.is_finite() {
+                *s = 0.0;
+                seen = true;
+            }
+        }
+        self.nonfinite_seen |= seen;
+    }
+
+    /// The fixed number of frames the oversampling resamplers work in. Host
+    /// blocks that are an exact multiple of this take the zero-latency path.
+    pub fn resampler_chunk_frames(&self) -> usize {
+        self.samplers.chunk_frames()
+    }
+
+    /// Whether the oversampling FIFO has engaged. False means every block so
+    /// far took the zero-latency fast path.
+    pub fn fifo_engaged(&self) -> bool {
+        self.samplers.fifo_engaged()
+    }
+
+    /// Read and clear the "oversampling FIFO just engaged" event, yielding the
+    /// block length that triggered it. Fires at most once per activation
+    /// (engagement is sticky). Returning the number instead of logging keeps
+    /// all formatting off the audio thread.
+    pub const fn take_fifo_engaged_event(&mut self) -> Option<usize> {
+        self.fifo_engaged_event.take()
+    }
+
+    /// Read and clear the "first block took the fast path" event, yielding that
+    /// block's length. Fires at most once per activation, so a session that
+    /// never engages the FIFO still leaves evidence that the fast path was
+    /// taken.
+    pub const fn take_fast_path_event(&mut self) -> Option<usize> {
+        self.fast_path_event.take()
+    }
+
+    /// Read and clear the non-finite-output flag set by the master-bus guard.
+    /// Cheap enough to call from the audio thread; the caller is expected to do
+    /// the actual reporting elsewhere.
+    pub const fn take_nonfinite_seen(&mut self) -> bool {
+        let seen = self.nonfinite_seen;
+        self.nonfinite_seen = false;
+        seen
+    }
+
+    /// How long, in seconds, the engine keeps producing sound after its input
+    /// goes silent — the "tail" a plugin host needs in order to not cut off the
+    /// last note when the transport stops.
+    ///
+    /// This is a cached value, recomputed only when a message that could change
+    /// the chain, a stage parameter, or the IR is handled, so reading it on the
+    /// audio thread is a field load. `0.0` means nothing in the current chain
+    /// rings, and the host is free to idle the plugin entirely.
+    pub const fn tail_seconds(&self) -> f32 {
+        self.tail_seconds
+    }
+
+    /// Recompute [`Engine::tail_seconds`] from what is *actually* in the chain
+    /// right now: the max over the active tail sources.
+    ///
+    /// Deliberately not derived from the IR alone — presets frequently run with
+    /// no cab loaded, and a chain with no IR can still ring for seconds via the
+    /// delay or reverb, while a clean chain with neither rings not at all.
+    ///
+    /// Stages are identified by the parameters they expose (`delay_time` is
+    /// unique to the delay stage, `room_size` to the reverb), since `dyn Stage`
+    /// carries no type tag and the chain exposes no iterator. `get_parameter`
+    /// returns `None` only for an out-of-range index, which is what ends the
+    /// scan. Nothing here allocates, locks, or does I/O, but it is off the
+    /// per-block path regardless.
+    fn recompute_tail(&mut self) {
+        let mut tail: f32 = 0.0;
+
+        // The cab only rings while an IR is actually loaded and audible. Its
+        // contribution is bounded by the truncation limit rather than the real
+        // IR length, which the cabinet does not expose — the difference is tens
+        // of milliseconds against delay/reverb tails measured in seconds.
+        if self
+            .ir_cabinet
+            .as_ref()
+            .is_some_and(|cab| cab.has_ir() && !cab.is_bypassed())
+        {
+            #[allow(clippy::cast_precision_loss)]
+            let ir_seconds = crate::ir::cabinet::DEFAULT_MAX_IR_MS as f32 * 0.001;
+            tail = tail.max(ir_seconds);
+        }
+
+        let mut idx = 0;
+        while let Some(delay_time) = self.chain.get_parameter(idx, "delay_time") {
+            if let Ok(delay_ms) = delay_time {
+                let feedback = self.stage_param(idx, "feedback", 0.0);
+                let mix = self.stage_param(idx, "mix", 1.0);
+                tail = tail.max(delay_tail_seconds(delay_ms, feedback, mix));
+            } else if let Some(Ok(room_size)) = self.chain.get_parameter(idx, "room_size") {
+                let mix = self.stage_param(idx, "mix", 1.0);
+                tail = tail.max(reverb_tail_seconds(room_size, mix));
+            }
+            idx += 1;
+        }
+
+        self.tail_seconds = tail;
+    }
+
+    /// Read one parameter off a stage, falling back to `default` when the stage
+    /// does not have it.
+    fn stage_param(&self, idx: usize, name: &str, default: f32) -> f32 {
+        self.chain
+            .get_parameter(idx, name)
+            .and_then(Result::ok)
+            .unwrap_or(default)
+    }
+
+    /// Latency in frames the engine currently adds, at the host sample rate.
+    ///
+    /// Sum of the oversampling path (resampler group delay + variable-block
+    /// FIFO pre-fill, both zero at 1x) and the pitch shifter's STFT delay
+    /// (zero when no shifter is installed, which is the `0 semitones` case).
+    /// Changes when the user changes oversampling or pitch shift, so callers
+    /// must re-read it and re-report to the host.
+    pub fn latency_frames(&self) -> usize {
+        self.samplers.latency_frames()
+            + self
+                .pitch_shifter
+                .as_ref()
+                .map_or(0, |_| PITCH_SHIFTER_LATENCY_FRAMES)
     }
 
     fn apply_input_filters(&mut self, buf: &mut [f32]) {
@@ -208,6 +437,10 @@ impl Engine {
     }
 
     fn process_with_upsampling(&mut self, output: &mut [f32]) -> Result<()> {
+        if self.samplers.is_variable_block() {
+            return self.process_variable_block(output);
+        }
+
         self.samplers.copy_input(output)?;
 
         let upsampled = self.samplers.upsample()?;
@@ -217,6 +450,61 @@ impl Engine {
         let downsampled = self.samplers.downsample()?;
 
         output[..downsampled.len()].copy_from_slice(downsampled);
+
+        Ok(())
+    }
+
+    /// Oversampled processing for a host that may vary its block size.
+    ///
+    /// Two modes, and the cheap one is the default. While the FIFO is
+    /// disengaged, a block whose length is an exact multiple of the resampler
+    /// chunk is run straight through as `len / chunk` back-to-back chunks: no
+    /// queueing, no prefill, and the only latency is the resamplers' own group
+    /// delay. Every standard DAW buffer size (64 … 2048) is a multiple of
+    /// `min(256, max_block)`, so a fixed-block session stays here forever.
+    ///
+    /// Anything else — a short final block, a ragged length, an odd
+    /// `max_buffer_size` — engages the FIFO permanently and takes the buffered
+    /// path from then on. The switch costs one re-reported latency figure and a
+    /// one-time discontinuity as the prefill silence is inserted.
+    fn process_variable_block(&mut self, output: &mut [f32]) -> Result<()> {
+        let chunk = self.samplers.chunk_frames();
+
+        if !self.samplers.fifo_engaged() {
+            if !output.is_empty() && output.len().is_multiple_of(chunk) {
+                for offset in (0..output.len()).step_by(chunk) {
+                    self.samplers.copy_input(&output[offset..offset + chunk])?;
+                    let upsampled = self.samplers.upsample()?;
+                    self.chain.as_mut().process_block(upsampled);
+                    let downsampled = self.samplers.downsample()?;
+                    if downsampled.len() != chunk {
+                        return Err(anyhow::anyhow!(
+                            "downsampler produced {} frames, expected {chunk}",
+                            downsampled.len()
+                        ));
+                    }
+                    output[offset..offset + chunk].copy_from_slice(downsampled);
+                }
+                if !self.fast_path_reported {
+                    self.fast_path_reported = true;
+                    self.fast_path_event = Some(output.len());
+                }
+                return Ok(());
+            }
+
+            self.samplers.engage_fifo();
+            self.fifo_engaged_event = Some(output.len());
+        }
+
+        // Queue the block, run whole chunks through up -> chain -> down, and
+        // serve this block from the output FIFO (see `samplers::BlockFifo`).
+        self.samplers.fifo_push_input(output);
+        while self.samplers.fifo_load_chunk() {
+            let upsampled = self.samplers.upsample()?;
+            self.chain.as_mut().process_block(upsampled);
+            self.samplers.downsample_into_fifo()?;
+        }
+        self.samplers.fifo_pop_output(output);
 
         Ok(())
     }
@@ -238,7 +526,9 @@ impl Engine {
 
     #[allow(clippy::cognitive_complexity)]
     pub fn handle_messages(&mut self) {
+        let mut handled_any = false;
         while let Ok(message) = self.engine_receiver.try_recv() {
+            handled_any = true;
             match message {
                 EngineMessage::SetAmpChain(new_chain) => {
                     let old = std::mem::replace(&mut self.chain, new_chain);
@@ -351,6 +641,14 @@ impl Engine {
                     debug!("Samplers swapped");
                 }
             }
+        }
+
+        // Every mutation of the chain, its parameters, and the IR arrives as a
+        // message, so this is the one place the reported tail can go stale.
+        // Messages are rare (user edits), blocks are not — hence recompute here
+        // and cache, rather than scanning the chain every block.
+        if handled_any {
+            self.recompute_tail();
         }
     }
 
