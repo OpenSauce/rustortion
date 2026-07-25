@@ -26,8 +26,8 @@ const CHANNELS: usize = 1;
 /// Because that latency is not free, the FIFO starts **disengaged**. Blocks
 /// whose length is an exact multiple of `chunk` are processed straight through
 /// (see `Engine::process_with_upsampling`), which is every block in a
-/// fixed-block host: 64, 128, 256, 512, 1024 and 2048 are all multiples of
-/// `min(256, max_block)`. The first block that is not engages the FIFO, for
+/// fixed-block host: 64, 128, 256, 512, 1024 and 2048 are all multiples of the
+/// 64-frame chunk. The first block that is not engages the FIFO, for
 /// good — a session that never sees one never pays the prefill. The buffers are
 /// allocated up front either way, so engaging is a flag flip plus a `fill(0.0)`
 /// of memory already owned, never an allocation.
@@ -297,10 +297,14 @@ impl Samplers {
         Ok(&mut self.downsampled_buffer[0][..downsampled_frames])
     }
 
-    /// Append a host block to the input FIFO. Frames that do not fit (only
-    /// possible if the caller exceeds the maximum block size it declared) are
-    /// dropped rather than panicking — dropping a few frames beats aborting the
-    /// audio thread.
+    /// Append a host block to the input FIFO.
+    ///
+    /// Frames that do not fit are dropped rather than panicking. This is only
+    /// reachable if the caller exceeds the maximum block size it declared, and
+    /// it degrades badly when it happens — a steady stream of oversized blocks
+    /// loses most of each one, because the FIFO drains at the declared rate.
+    /// The plugin therefore clamps and silences oversized blocks before they
+    /// reach here; this is the last line of defence, not the intended path.
     pub fn fifo_push_input(&mut self, input: &[f32]) {
         let Some(fifo) = self.fifo.as_mut() else {
             return;

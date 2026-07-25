@@ -153,7 +153,7 @@ mod variable_block_and_guards {
     }
 
     /// A fixed-block host must never pay for the FIFO. Every standard buffer
-    /// size is an exact multiple of the 256-frame chunk, so the fast path holds
+    /// size is an exact multiple of the 64-frame chunk, so the fast path holds
     /// for the whole session.
     #[test]
     fn fixed_size_blocks_never_engage_the_fifo() {
@@ -301,6 +301,39 @@ mod variable_block_and_guards {
         engine.process(&input, &mut output).unwrap();
         assert!(engine.fifo_engaged(), "300 is not a multiple of 64");
         assert!(output.iter().all(|s| s.is_finite()));
+    }
+
+    /// A zero-length block is a no-op, not a ragged block. It carries no audio,
+    /// so engaging the FIFO for it would cost the session the prefill latency
+    /// and a host playback restart for nothing.
+    #[test]
+    fn zero_length_block_does_not_engage_the_fifo() {
+        let (mut engine, _handle, _rx) =
+            Engine::new_for_plugin(SR, MAX_BLOCK, None, 2.0).expect("engine should construct");
+
+        let latency_before = engine.latency_frames();
+        engine
+            .process(&[], &mut [])
+            .expect("an empty block must not error");
+
+        assert!(
+            !engine.fifo_engaged(),
+            "an empty block must not engage the FIFO"
+        );
+        assert_eq!(
+            engine.latency_frames(),
+            latency_before,
+            "an empty block must not change reported latency"
+        );
+
+        // The fast path must still be available afterwards.
+        let input = vec![0.25_f32; 512];
+        let mut output = vec![0.0_f32; 512];
+        engine.process(&input, &mut output).unwrap();
+        assert!(
+            !engine.fifo_engaged(),
+            "a 512-frame block is a multiple of the chunk and must stay on the fast path"
+        );
     }
 
     /// The engine's latency must reflect the pitch shifter, which is installed

@@ -460,18 +460,25 @@ impl Engine {
     /// disengaged, a block whose length is an exact multiple of the resampler
     /// chunk is run straight through as `len / chunk` back-to-back chunks: no
     /// queueing, no prefill, and the only latency is the resamplers' own group
-    /// delay. Every standard DAW buffer size (64 … 2048) is a multiple of
-    /// `min(256, max_block)`, so a fixed-block session stays here forever.
+    /// delay. Every standard DAW buffer size (64 … 2048) is a multiple of the
+    /// 64-frame chunk, so a fixed-block session stays here forever.
     ///
     /// Anything else — a short final block, a ragged length, an odd
     /// `max_buffer_size` — engages the FIFO permanently and takes the buffered
     /// path from then on. The switch costs one re-reported latency figure and a
     /// one-time discontinuity as the prefill silence is inserted.
     fn process_variable_block(&mut self, output: &mut [f32]) -> Result<()> {
+        // A zero-length block is a no-op, not a ragged one. Falling through
+        // would engage the FIFO permanently — and its prefill latency — for a
+        // block that carries no audio at all.
+        if output.is_empty() {
+            return Ok(());
+        }
+
         let chunk = self.samplers.chunk_frames();
 
         if !self.samplers.fifo_engaged() {
-            if !output.is_empty() && output.len().is_multiple_of(chunk) {
+            if output.len().is_multiple_of(chunk) {
                 for offset in (0..output.len()).step_by(chunk) {
                     self.samplers.copy_input(&output[offset..offset + chunk])?;
                     let upsampled = self.samplers.upsample()?;

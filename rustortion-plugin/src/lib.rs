@@ -119,6 +119,7 @@ impl ReportOnce {
     const NONFINITE: u8 = 1 << 1;
     const FIFO_ENGAGED: u8 = 1 << 2;
     const FAST_PATH: u8 = 1 << 3;
+    const OVERSIZED_BLOCK: u8 = 1 << 4;
 
     /// True the first time `flag` is claimed, false forever after.
     const fn claim(&mut self, flag: u8) -> bool {
@@ -210,6 +211,20 @@ fn log_oversampling_mode(
                              the FIFO stays disengaged. Latency {latency_after} frames ({:.2} ms).",
             ms(latency_after),
         );
+    }
+}
+
+/// Zero every output channel from `from` to the end of the block.
+///
+/// The host copies input into the output buffer before `process()` runs, so
+/// any frame we leave untouched is the unprocessed dry guitar at full level —
+/// on a high-gain amp sim that is both wrong and loud. Anywhere we decline to
+/// process, we silence instead of returning early.
+fn silence(buffer: &mut Buffer, from: usize) {
+    for ch in buffer.as_slice().iter_mut() {
+        if from < ch.len() {
+            ch[from..].fill(0.0);
+        }
     }
 }
 
@@ -817,8 +832,31 @@ impl Plugin for RustortionPlugin {
             }
         }
 
-        if let Some(engine) = &mut self.engine {
-            let num_samples = buffer.samples();
+        let Some(engine) = &mut self.engine else {
+            // No engine: mute rather than fall through. The host copies input
+            // into the output buffer before calling us, so returning without
+            // writing would pass the unprocessed guitar through at full level.
+            silence(buffer, 0);
+            return self.tail_status();
+        };
+
+        {
+            // `input_buf`/`output_buf` are sized once in `initialize()` to the
+            // host's declared `max_buffer_size`. A host that exceeds its own
+            // declaration would otherwise panic here on the audio thread and
+            // take the DAW down with it, so clamp and silence the excess —
+            // dropped frames beat an aborted process.
+            let num_samples = buffer.samples().min(self.input_buf.len());
+            if num_samples < buffer.samples() {
+                silence(buffer, num_samples);
+                if self.reported.claim(ReportOnce::OVERSIZED_BLOCK) {
+                    context.execute_background(PluginTask::LogRuntimeIssue(
+                        "Host supplied a block larger than the max_buffer_size it declared; \
+                         the excess frames were silenced",
+                    ));
+                }
+            }
+
             let input_buf = &mut self.input_buf[..num_samples];
             let output_buf = &mut self.output_buf[..num_samples];
 
