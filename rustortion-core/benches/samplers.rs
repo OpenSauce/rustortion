@@ -1,6 +1,7 @@
 #![allow(clippy::pedantic, clippy::nursery)]
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
+use rustortion_core::audio::denormals::enable_flush_to_zero;
 use std::hint::black_box;
 
 use rubato::audioadapter_buffers::direct::SequentialSliceOfVecs;
@@ -235,6 +236,10 @@ fn run_roundtrip(
 }
 
 fn bench_resampler_roundtrip(c: &mut Criterion) {
+    // Match the RT audio callback: denormals flushed to zero, so the numbers
+    // reflect production rather than denormal-stalled arithmetic.
+    enable_flush_to_zero();
+
     let mut group = c.benchmark_group("Resampler Roundtrip");
     group.throughput(Throughput::Elements(BUFFER_SIZE as u64));
 

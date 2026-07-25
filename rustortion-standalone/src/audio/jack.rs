@@ -6,6 +6,7 @@ use jack::Client;
 use log::{error, warn};
 
 use crate::audio::ports::Ports;
+use rustortion_core::audio::denormals::enable_flush_to_zero;
 use rustortion_core::audio::engine::Engine;
 
 pub struct NotificationHandler {
@@ -67,6 +68,11 @@ impl ProcessHandler {
 
 impl jack::ProcessHandler for ProcessHandler {
     fn process(&mut self, _client: &jack::Client, ps: &jack::ProcessScope) -> jack::Control {
+        // MXCSR/FPCR are per-thread state and JACK may hand us a different thread after a graph
+        // change, so this is re-applied every callback rather than once at thread start. It costs a
+        // register read and (usually not even) a write. See `denormals` for the full rationale.
+        enable_flush_to_zero();
+
         let input = self.ports.get_input(ps);
 
         if let Err(e) = self.audio_engine.process(input, self.buffer.as_mut_slice()) {

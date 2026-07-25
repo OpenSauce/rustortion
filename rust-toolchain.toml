@@ -1,0 +1,10 @@
+[toolchain]
+# Pinned deliberately. CI uses dtolnay/rust-toolchain@stable, and new clippy
+# lints have failed CI on main before through no change of ours. During a
+# release that means a toolchain bump can fail the tag build *after* the tag
+# has been pushed.
+#
+# Bump this in its own PR so toolchain drift shows up as a green/red signal
+# rather than as a surprise inside an unrelated change.
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]

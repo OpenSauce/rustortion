@@ -1,6 +1,7 @@
 #![allow(clippy::pedantic, clippy::nursery)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use rustortion_core::audio::denormals::enable_flush_to_zero;
 use std::hint::black_box;
 
 use rustortion_core::ir::convolver::{FirConvolver, TwoStageConvolver};
@@ -31,6 +32,10 @@ fn generate_test_input(size: usize) -> Vec<f32> {
 }
 
 pub fn fir_vs_two_stage_benchmark(c: &mut Criterion) {
+    // Match the RT audio callback: denormals flushed to zero, so the numbers
+    // reflect production rather than denormal-stalled arithmetic.
+    enable_flush_to_zero();
+
     let mut group = c.benchmark_group("FIR vs TwoStage");
 
     // Test at different IR lengths relevant to cabinet simulation

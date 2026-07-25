@@ -1,3 +1,4 @@
+pub mod denormals;
 pub mod engine;
 pub mod peak_meter;
 pub mod pitch_shifter;

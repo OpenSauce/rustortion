@@ -13,6 +13,7 @@ use rustortion_core::amp::stages::{
     preamp::PreampStage,
     tonestack::{ToneStackModel, ToneStackStage},
 };
+use rustortion_core::audio::denormals::enable_flush_to_zero;
 use rustortion_core::nam::{NamLoader, registry};
 use std::hint::black_box;
 use std::path::Path;
@@ -74,6 +75,10 @@ fn build_chain(sample_rate: f32) -> AmplifierChain {
 }
 
 fn bench_sample_vs_block(c: &mut Criterion) {
+    // Match the RT audio callback: denormals flushed to zero, so the numbers
+    // reflect production rather than denormal-stalled arithmetic.
+    enable_flush_to_zero();
+
     let mut group = c.benchmark_group("Sample vs Block Processing");
 
     for &oversample in &[1.0, 4.0, 8.0, 16.0] {
@@ -126,6 +131,10 @@ fn load_first_nam_model() -> Option<String> {
 }
 
 fn bench_nam_sample_vs_block(c: &mut Criterion) {
+    // Match the RT audio callback: denormals flushed to zero, so the numbers
+    // reflect production rather than denormal-stalled arithmetic.
+    enable_flush_to_zero();
+
     let Some(model_name) = load_first_nam_model() else {
         eprintln!("skipping NAM bench: no .nam model found in tests/fixtures");
         return;
@@ -177,6 +186,10 @@ fn bench_nam_sample_vs_block(c: &mut Criterion) {
 /// loop on the same model, no chain, no gain/mix. This is the maximum speedup a
 /// `NamStage::process_block` override could capture by calling `process_buffer`.
 fn bench_nam_buffer_vs_sample(c: &mut Criterion) {
+    // Match the RT audio callback: denormals flushed to zero, so the numbers
+    // reflect production rather than denormal-stalled arithmetic.
+    enable_flush_to_zero();
+
     let Some(model_name) = load_first_nam_model() else {
         eprintln!("skipping NAM ceiling bench: no .nam model found");
         return;

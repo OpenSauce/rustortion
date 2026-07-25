@@ -320,8 +320,11 @@ impl<B: ParamBackend> SharedApp<B> {
         };
         let signal_minimap =
             minimap::view(&self.stages, &self.input_filter_config, self.active_tab);
-        let footer =
-            row![self.peak_meter_display.view_status(), signal_minimap,].align_y(Alignment::Center);
+        let mut footer = row![].align_y(Alignment::Center);
+        if self.backend.capabilities().has_peak_meter {
+            footer = footer.push(self.peak_meter_display.view_status());
+        }
+        footer = footer.push(signal_minimap);
 
         column![
             header,
@@ -339,9 +342,12 @@ impl<B: ParamBackend> SharedApp<B> {
     fn view_header(&self) -> Element<'_, Message> {
         let caps = self.backend.capabilities();
 
-        let mut header_row = row![self.peak_meter_display.view(), space::horizontal(),]
-            .spacing(SPACING_TIGHT)
-            .align_y(Alignment::Center);
+        let mut header_row = row![].spacing(SPACING_TIGHT).align_y(Alignment::Center);
+
+        if caps.has_peak_meter {
+            header_row = header_row.push(self.peak_meter_display.view());
+        }
+        header_row = header_row.push(space::horizontal());
 
         // Standalone-only buttons are guarded by capabilities
         if caps.has_midi_config {
@@ -637,8 +643,11 @@ impl<B: ParamBackend> SharedApp<B> {
             time::every(REBUILD_INTERVAL).map(|_| Message::RebuildTick)
         };
 
-        let peak_meter_sub =
-            time::every(PEAK_METER_POLL_INTERVAL).map(|_| Message::PeakMeterUpdate);
+        let peak_meter_sub = if self.backend.capabilities().has_peak_meter {
+            time::every(PEAK_METER_POLL_INTERVAL).map(|_| Message::PeakMeterUpdate)
+        } else {
+            Subscription::none()
+        };
 
         let keyboard_sub = keyboard::listen().filter_map(|event| match event {
             keyboard::Event::KeyPressed {

@@ -72,6 +72,21 @@ impl FirConvolver {
         }
     }
 
+    /// Drops the loaded IR entirely, leaving the convolver in a pass-through
+    /// state.
+    ///
+    /// RT-safe: `Vec::clear` keeps the allocation and `f32` has no destructor,
+    /// so nothing is freed here.
+    pub fn clear_ir(&mut self) {
+        self.coefficients.clear();
+        self.reset();
+    }
+
+    /// Whether an IR is currently loaded.
+    pub const fn has_ir(&self) -> bool {
+        !self.coefficients.is_empty()
+    }
+
     pub fn reset(&mut self) {
         self.input_buffer.fill(0.0);
         self.write_pos = 0;

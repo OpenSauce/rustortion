@@ -32,6 +32,28 @@ enum PluginTask {
         factor: u32,
         preset_name: Option<String>,
     },
+    /// Report a problem detected on the audio thread. The audio thread only
+    /// hands over a `&'static str` (no formatting, no allocation); the logging
+    /// itself happens here, off the RT path, and each condition is reported at
+    /// most once per activation.
+    LogRuntimeIssue(&'static str),
+    /// Report which oversampling path the audio thread settled on. Every field
+    /// is a plain integer the RT thread already had in hand — no formatting and
+    /// no allocation there; the message is assembled in the task executor.
+    LogOversamplingMode {
+        /// False for the first fast-path block, true when the FIFO engaged.
+        engaged: bool,
+        /// Host block length that triggered the event. For `engaged`, this is
+        /// the length that was not an exact multiple of `chunk_frames`.
+        block_len: u32,
+        /// Fixed resampler chunk size in frames.
+        chunk_frames: u32,
+        /// Reported latency before and after the event, in frames.
+        latency_before: u32,
+        latency_after: u32,
+        /// Host sample rate, for rendering the frame counts as milliseconds.
+        sample_rate: f32,
+    },
 }
 
 pub(crate) struct SharedState {
@@ -78,6 +100,40 @@ struct RustortionPlugin {
     active_oversampling: u32,
     input_buf: Vec<f32>,
     output_buf: Vec<f32>,
+    /// Latency last reported to the host, so `set_latency_samples` is only
+    /// called when it actually changes (it can restart host playback).
+    reported_latency: u32,
+    /// One-shot guards so an event on the audio thread is logged once per
+    /// activation instead of once per block.
+    reported: ReportOnce,
+}
+
+/// Bitmask of "already reported" flags. A bitmask rather than a field per
+/// event so adding one does not grow the struct, and so the whole set resets in
+/// a single store on activation.
+#[derive(Default)]
+struct ReportOnce(u8);
+
+impl ReportOnce {
+    const PROCESS_ERROR: u8 = 1 << 0;
+    const NONFINITE: u8 = 1 << 1;
+    const FIFO_ENGAGED: u8 = 1 << 2;
+    const FAST_PATH: u8 = 1 << 3;
+    const OVERSIZED_BLOCK: u8 = 1 << 4;
+
+    /// True the first time `flag` is claimed, false forever after.
+    const fn claim(&mut self, flag: u8) -> bool {
+        if self.0 & flag == 0 {
+            self.0 |= flag;
+            true
+        } else {
+            false
+        }
+    }
+
+    const fn reset(&mut self) {
+        self.0 = 0;
+    }
 }
 
 impl Default for RustortionPlugin {
@@ -105,8 +161,96 @@ impl Default for RustortionPlugin {
             active_oversampling: 1, // 1x (no oversampling)
             input_buf: Vec::new(),
             output_buf: Vec::new(),
+            reported_latency: 0,
+            reported: ReportOnce::default(),
         }
     }
+}
+
+/// Tail length at or above which the plugin reports `KeepAlive` instead of a
+/// finite tail, in seconds.
+///
+/// Reached only by a delay at very high feedback or a reverb at a very large
+/// room size — settings whose ring is, in musical terms, self-sustaining. A
+/// finite tail there would be a lie the host acts on by suspending mid-ring, so
+/// this specific case gets `KeepAlive`. Everything below it reports the real
+/// computed figure, and a chain with nothing that rings reports `Normal` so the
+/// host can genuinely idle the instance.
+const KEEP_ALIVE_THRESHOLD_SECONDS: f32 = 60.0;
+
+/// Format and emit the oversampling-mode message. Lives off the audio thread:
+/// the RT side only ever hands over the integers below.
+fn log_oversampling_mode(
+    engaged: bool,
+    block_len: u32,
+    chunk_frames: u32,
+    latency_before: u32,
+    latency_after: u32,
+    sample_rate: f32,
+) {
+    let ms = |frames: u32| {
+        if sample_rate > 0.0 {
+            f64::from(frames) * 1000.0 / f64::from(sample_rate)
+        } else {
+            0.0
+        }
+    };
+    if engaged {
+        nih_log!(
+            "Oversampling FIFO engaged: host block of {block_len} frames is not \
+                             an exact multiple of the {chunk_frames}-frame resampler chunk. \
+                             Latency {latency_before} frames ({:.2} ms) -> {latency_after} frames \
+                             ({:.2} ms). This is permanent for the lifetime of this instance.",
+            ms(latency_before),
+            ms(latency_after),
+        );
+    } else {
+        log::debug!(
+            "Oversampling fast path in use: host block of {block_len} frames is \
+                             an exact multiple of the {chunk_frames}-frame resampler chunk, so \
+                             the FIFO stays disengaged. Latency {latency_after} frames ({:.2} ms).",
+            ms(latency_after),
+        );
+    }
+}
+
+/// Zero every output channel from `from` to the end of the block.
+///
+/// The host copies input into the output buffer before `process()` runs, so
+/// any frame we leave untouched is the unprocessed dry guitar at full level —
+/// on a high-gain amp sim that is both wrong and loud. Anywhere we decline to
+/// process, we silence instead of returning early.
+fn silence(buffer: &mut Buffer, from: usize) {
+    for ch in buffer.as_slice().iter_mut() {
+        if from < ch.len() {
+            ch[from..].fill(0.0);
+        }
+    }
+}
+
+/// Sum every input channel into `input_buf` at unity average gain.
+fn sum_to_mono(buffer: &Buffer, input_buf: &mut [f32], num_samples: usize) {
+    let channel_slices = buffer.as_slice_immutable();
+    if channel_slices.is_empty() {
+        return;
+    }
+    #[allow(clippy::cast_precision_loss)] // channel count < 2^24
+    let scale = 1.0 / channel_slices.len() as f32;
+    for (i, out) in input_buf.iter_mut().enumerate().take(num_samples) {
+        let mut sum = 0.0;
+        for ch in channel_slices {
+            sum += ch[i];
+        }
+        *out = sum * scale;
+    }
+}
+
+/// What the audio thread observed about the oversampling path this block.
+struct OversamplingEvent {
+    engaged_block: Option<usize>,
+    fast_path_block: Option<usize>,
+    chunk_frames: u32,
+    latency_after: u32,
 }
 
 fn do_load_preset(
@@ -186,6 +330,76 @@ fn do_load_preset(
     handle.set_input_filters(hp, lp);
 }
 
+impl RustortionPlugin {
+    /// Hand an oversampling-path change to the background thread to log.
+    ///
+    /// The engine's events are already one-shot; the [`ReportOnce`] latch makes
+    /// that belt-and-braces, so a bug upstream can never turn this into a
+    /// per-block log. Everything passed is a plain integer — no formatting and
+    /// no allocation happens here.
+    fn report_oversampling_mode(
+        &mut self,
+        context: &impl ProcessContext<Self>,
+        event: &OversamplingEvent,
+    ) {
+        let (engaged, block_len) = if let Some(len) = event.engaged_block {
+            if !self.reported.claim(ReportOnce::FIFO_ENGAGED) {
+                return;
+            }
+            (true, len)
+        } else if let Some(len) = event.fast_path_block {
+            if !self.reported.claim(ReportOnce::FAST_PATH) {
+                return;
+            }
+            (false, len)
+        } else {
+            return;
+        };
+
+        context.execute_background(PluginTask::LogOversamplingMode {
+            engaged,
+            block_len: u32::try_from(block_len).unwrap_or(u32::MAX),
+            chunk_frames: event.chunk_frames,
+            latency_before: self.reported_latency,
+            latency_after: event.latency_after,
+            sample_rate: self.sample_rate,
+        });
+    }
+
+    /// What to report to the host about this instance's tail.
+    ///
+    /// Derived from what is actually in the chain right now (see
+    /// `Engine::tail_seconds`), not from a constant and not from the IR alone —
+    /// presets often run with no cab, and delay/reverb ring without one.
+    ///
+    /// The floor is the plugin's own reported latency: even a chain that does
+    /// not ring at all has in-flight audio sitting in the oversampling FIFO and
+    /// the pitch shifter, and reporting `Normal` while that is queued would let
+    /// the host suspend before it drains.
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    fn tail_status(&self) -> ProcessStatus {
+        let Some(engine) = self.engine.as_ref() else {
+            return ProcessStatus::Normal;
+        };
+
+        let tail_seconds = engine.tail_seconds();
+        if tail_seconds >= KEEP_ALIVE_THRESHOLD_SECONDS {
+            return ProcessStatus::KeepAlive;
+        }
+
+        let ring = (self.sample_rate * tail_seconds) as u32;
+        let in_flight = u32::try_from(engine.latency_frames()).unwrap_or(u32::MAX);
+        let tail = ring.max(in_flight);
+
+        if tail == 0 {
+            // Nothing rings and nothing is buffered: let the host idle us.
+            ProcessStatus::Normal
+        } else {
+            ProcessStatus::Tail(tail)
+        }
+    }
+}
+
 impl Plugin for RustortionPlugin {
     const NAME: &'static str = "Rustortion";
     const VENDOR: &'static str = "OpenSauce";
@@ -226,10 +440,41 @@ impl Plugin for RustortionPlugin {
         let shared = self.shared.clone();
 
         Box::new(move |task| {
+            // Logging tasks carry no engine work, so handle them before the
+            // engine-handle lookup (which is `None` once deactivated).
+            match task {
+                PluginTask::LogRuntimeIssue(msg) => {
+                    nih_log!("{msg}");
+                    return;
+                }
+                PluginTask::LogOversamplingMode {
+                    engaged,
+                    block_len,
+                    chunk_frames,
+                    latency_before,
+                    latency_after,
+                    sample_rate,
+                } => {
+                    log_oversampling_mode(
+                        engaged,
+                        block_len,
+                        chunk_frames,
+                        latency_before,
+                        latency_after,
+                        sample_rate,
+                    );
+                    return;
+                }
+                _ => {}
+            }
+
             let handle = shared.engine_handle.lock().ok().and_then(|g| g.clone());
             let Some(handle) = handle else { return };
 
             match task {
+                PluginTask::LogRuntimeIssue(_) | PluginTask::LogOversamplingMode { .. } => {
+                    unreachable!("handled above")
+                }
                 PluginTask::LoadPreset(name) => {
                     let mgr = shared.preset_manager.lock().ok().and_then(|g| g.clone());
                     let loader = shared.ir_loader.lock().ok().and_then(|g| g.clone());
@@ -252,7 +497,7 @@ impl Plugin for RustortionPlugin {
                     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
                     let sample_rate_usize = sample_rate as usize;
                     let max_buf = shared.max_buffer_size.load(Ordering::Relaxed) as usize;
-                    match rustortion_core::audio::samplers::Samplers::new(
+                    match rustortion_core::audio::samplers::Samplers::new_variable_block(
                         max_buf,
                         f64::from(factor),
                         sample_rate_usize,
@@ -311,8 +556,9 @@ impl Plugin for RustortionPlugin {
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        context: &mut impl InitContext<Self>,
     ) -> bool {
+        self.reported.reset();
         self.sample_rate = buffer_config.sample_rate;
         self.shared
             .sample_rate
@@ -515,6 +761,18 @@ impl Plugin for RustortionPlugin {
                     }
                 }
 
+                // Report plugin delay compensation. The chain and pitch shifter
+                // are configured above via engine messages, which the engine
+                // only applies on its next `process()` call, so this initial
+                // figure covers the oversampling path; `process()` re-reports
+                // as soon as the real latency differs.
+                let latency = self
+                    .engine
+                    .as_ref()
+                    .map_or(0, |e| u32::try_from(e.latency_frames()).unwrap_or(u32::MAX));
+                context.set_latency_samples(latency);
+                self.reported_latency = latency;
+
                 true
             }
             Err(e) => {
@@ -574,43 +832,100 @@ impl Plugin for RustortionPlugin {
             }
         }
 
-        if let Some(engine) = &mut self.engine {
-            let num_samples = buffer.samples();
+        let Some(engine) = &mut self.engine else {
+            // No engine: mute rather than fall through. The host copies input
+            // into the output buffer before calling us, so returning without
+            // writing would pass the unprocessed guitar through at full level.
+            silence(buffer, 0);
+            return self.tail_status();
+        };
+
+        {
+            // `input_buf`/`output_buf` are sized once in `initialize()` to the
+            // host's declared `max_buffer_size`. A host that exceeds its own
+            // declaration would otherwise panic here on the audio thread and
+            // take the DAW down with it, so clamp and silence the excess —
+            // dropped frames beat an aborted process.
+            let num_samples = buffer.samples().min(self.input_buf.len());
+            if num_samples < buffer.samples() {
+                silence(buffer, num_samples);
+                if self.reported.claim(ReportOnce::OVERSIZED_BLOCK) {
+                    context.execute_background(PluginTask::LogRuntimeIssue(
+                        "Host supplied a block larger than the max_buffer_size it declared; \
+                         the excess frames were silenced",
+                    ));
+                }
+            }
+
             let input_buf = &mut self.input_buf[..num_samples];
             let output_buf = &mut self.output_buf[..num_samples];
 
-            // Sum all input channels to mono
-            {
-                let channel_slices = buffer.as_slice_immutable();
-                if !channel_slices.is_empty() {
-                    #[allow(clippy::cast_precision_loss)] // channel count < 2^24
-                    let scale = 1.0 / channel_slices.len() as f32;
-                    for i in 0..num_samples {
-                        let mut sum = 0.0;
-                        for ch in channel_slices {
-                            sum += ch[i];
-                        }
-                        input_buf[i] = sum * scale;
-                    }
+            sum_to_mono(buffer, input_buf, num_samples);
+
+            let failed = engine.process(input_buf, output_buf).is_err();
+            let nonfinite = engine.take_nonfinite_seen();
+            // Plain integer reads; the message is formatted off the RT thread.
+            let engaged_block = engine.take_fifo_engaged_event();
+            let fast_path_block = engine.take_fast_path_event();
+            let chunk_frames = u32::try_from(engine.resampler_chunk_frames()).unwrap_or(u32::MAX);
+
+            if failed {
+                // Never let the host's dry input pass through: with no output
+                // written the DAW would hear the unprocessed guitar at full
+                // level, which on a high-gain amp sim is both wrong and loud.
+                for ch in buffer.as_slice().iter_mut() {
+                    ch[..num_samples].fill(0.0);
                 }
+                if self.reported.claim(ReportOnce::PROCESS_ERROR) {
+                    context.execute_background(PluginTask::LogRuntimeIssue(
+                        "Engine process error; output muted for the affected blocks",
+                    ));
+                }
+                return self.tail_status();
             }
 
-            if let Err(e) = engine.process(input_buf, output_buf) {
-                nih_log!("Engine process error: {e}");
-                return ProcessStatus::Normal;
+            if nonfinite && self.reported.claim(ReportOnce::NONFINITE) {
+                context.execute_background(PluginTask::LogRuntimeIssue(
+                    "Non-finite sample(s) reached the master bus and were replaced with silence",
+                ));
             }
+
+            let latency_after = u32::try_from(engine.latency_frames()).unwrap_or(u32::MAX);
 
             // Write mono output to all channels with output level applied
             let output_slices = buffer.as_slice();
-            for i in 0..num_samples {
+            for (i, &sample) in output_buf.iter().enumerate().take(num_samples) {
                 let gain = self.params.output_level.smoothed.next();
                 for ch in output_slices.iter_mut() {
-                    ch[i] = output_buf[i] * gain;
+                    ch[i] = sample * gain;
                 }
+            }
+
+            // Log the oversampling path *before* re-reporting latency, so the
+            // message can quote the previous figure as `latency_before`.
+            self.report_oversampling_mode(
+                context,
+                &OversamplingEvent {
+                    engaged_block,
+                    fast_path_block,
+                    chunk_frames,
+                    latency_after,
+                },
+            );
+
+            // Latency changes when the user changes oversampling or pitch
+            // shift, or when the FIFO engages, so re-report whenever it moves.
+            if latency_after != self.reported_latency {
+                context.set_latency_samples(latency_after);
+                self.reported_latency = latency_after;
             }
         }
 
-        ProcessStatus::Normal
+        // Reporting `Normal` unconditionally lets the host suspend us the
+        // moment the input goes quiet, chopping the IR, delay, and reverb
+        // tails on transport stop. `tail_status` reports `Normal` only when
+        // there is genuinely nothing left to hear.
+        self.tail_status()
     }
 
     fn deactivate(&mut self) {
