@@ -11,7 +11,6 @@ pub const BAND_FREQS: [f64; NUM_BANDS] = [
 ];
 pub const MIN_GAIN_DB: f32 = -12.0;
 pub const MAX_GAIN_DB: f32 = 12.0;
-const DENORMAL_THRESHOLD: f64 = 1e-20;
 
 /// Bandwidth in octaves: 10 octaves / 16 bands
 const BANDWIDTH: f64 = 10.0 / NUM_BANDS as f64;
@@ -125,9 +124,6 @@ impl Biquad {
             .b0
             .mul_add(input, self.b1.mul_add(self.x1, self.b2 * self.x2))
             - self.a1.mul_add(self.y1, self.a2 * self.y2);
-
-        // Flush denormals
-        let y = if y.abs() < DENORMAL_THRESHOLD { 0.0 } else { y };
 
         self.x2 = self.x1;
         self.x1 = input;
@@ -311,23 +307,6 @@ mod tests {
         // Unknown parameter name
         assert!(eq.set_parameter("volume", 0.0).is_err());
         assert!(eq.get_parameter("volume").is_err());
-    }
-
-    #[test]
-    fn denormal_flushing() {
-        let mut eq = EqStage::new(flat_gains(), SAMPLE_RATE);
-
-        // Feed very small signal, then silence — state should not accumulate denormals
-        for _ in 0..100 {
-            eq.process(1e-30);
-        }
-        for _ in 0..1000 {
-            let out = eq.process(0.0);
-            assert!(
-                out == 0.0 || out.abs() >= f32::MIN_POSITIVE,
-                "Should not produce denormal values, got {out}"
-            );
-        }
     }
 
     #[test]

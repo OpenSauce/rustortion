@@ -13,8 +13,6 @@ const SCALE_DAMP: f32 = 0.4;
 const INPUT_GAIN: f32 = 0.015;
 const ALLPASS_FEEDBACK: f32 = 0.5;
 
-const DENORMAL_THRESHOLD: f32 = 1e-20;
-
 /// Lowpass-feedback comb filter used in Freeverb.
 struct CombFilter {
     buffer: Vec<f32>,
@@ -42,16 +40,8 @@ impl CombFilter {
 
         // One-pole lowpass in feedback path
         self.filterstore = self.damp2.mul_add(output, self.damp1 * self.filterstore);
-        if self.filterstore.abs() < DENORMAL_THRESHOLD {
-            self.filterstore = 0.0;
-        }
 
-        let write_val = self.feedback.mul_add(self.filterstore, input);
-        self.buffer[self.write_pos] = if write_val.abs() < DENORMAL_THRESHOLD {
-            0.0
-        } else {
-            write_val
-        };
+        self.buffer[self.write_pos] = self.feedback.mul_add(self.filterstore, input);
 
         self.write_pos += 1;
         if self.write_pos >= self.buffer.len() {
@@ -89,12 +79,7 @@ impl AllpassFilter {
         let bufout = self.buffer[self.write_pos];
         let output = bufout - input;
 
-        let write_val = ALLPASS_FEEDBACK.mul_add(bufout, input);
-        self.buffer[self.write_pos] = if write_val.abs() < DENORMAL_THRESHOLD {
-            0.0
-        } else {
-            write_val
-        };
+        self.buffer[self.write_pos] = ALLPASS_FEEDBACK.mul_add(bufout, input);
 
         self.write_pos += 1;
         if self.write_pos >= self.buffer.len() {
@@ -169,11 +154,6 @@ impl Stage for ReverbStage {
         // Pass through 4 series allpass filters
         for allpass in &mut self.allpasses {
             out = allpass.process(out);
-        }
-
-        // Flush denormals
-        if out.abs() < DENORMAL_THRESHOLD {
-            out = 0.0;
         }
 
         // Dry/wet mix

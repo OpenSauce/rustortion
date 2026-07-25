@@ -61,10 +61,6 @@ impl Stage for PowerAmpStage {
 
         self.sag_envelope.process(driven);
 
-        if self.sag_envelope.value().abs() < 1e-20 {
-            self.sag_envelope.reset();
-        }
-
         let ceiling = (self.sag * self.sag_envelope.value())
             .mul_add(-0.5, 1.0)
             .max(0.1);
@@ -268,22 +264,6 @@ mod tests {
         // Out of range should fail
         assert!(stage.set_parameter("sag_release", 201.0).is_err());
         assert!(stage.set_parameter("sag_release", 39.0).is_err());
-    }
-
-    #[test]
-    fn test_denormal_protection() {
-        let mut stage = make_stage(PowerAmpType::ClassAB, 0.5, 0.5, 120.0);
-        for _ in 0..1000 {
-            stage.process(1.0);
-        }
-        for _ in 0..100_000 {
-            stage.process(0.0);
-        }
-        let envelope = stage.sag_envelope.value();
-        assert!(
-            envelope == 0.0 || envelope.abs() > 1e-20,
-            "envelope should be zero or normal, got {envelope}"
-        );
     }
 
     #[test]
