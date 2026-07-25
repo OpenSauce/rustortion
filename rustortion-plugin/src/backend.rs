@@ -13,7 +13,6 @@ use rustortion_ui::backend::{Capabilities, ExternalEvent, ParamBackend};
 use crate::SharedState;
 use crate::params::RustortionParams;
 pub struct PluginBackend {
-    engine_handle: EngineHandle,
     params: Arc<RustortionParams>,
     context: Arc<dyn GuiContext>,
     ir_loader: Option<Arc<IrLoader>>,
@@ -24,7 +23,6 @@ pub struct PluginBackend {
 
 impl PluginBackend {
     pub fn new(
-        engine_handle: EngineHandle,
         params: Arc<RustortionParams>,
         context: Arc<dyn GuiContext>,
         ir_loader: Option<Arc<IrLoader>>,
@@ -32,7 +30,6 @@ impl PluginBackend {
         sample_rate: f32,
     ) -> Self {
         Self {
-            engine_handle,
             params,
             context,
             ir_loader,
@@ -40,6 +37,20 @@ impl PluginBackend {
             capabilities: Capabilities::plugin(),
             sample_rate,
         }
+    }
+
+    /// The handle for the engine that is running *right now*.
+    ///
+    /// Deliberately resolved per call rather than cached. `deactivate()` drops
+    /// the engine — which drops the receiving end of the channel — and a
+    /// subsequent `initialize()` builds a new engine with a new channel. A
+    /// handle cloned when the editor opened would still point at the old,
+    /// disconnected channel, so every GUI edit would be silently discarded
+    /// while audio kept flowing through the new engine. That is exactly what
+    /// happens when a host's enable/disable toggle is used with the editor
+    /// open, and it is why this returns an `Option` instead of holding a field.
+    fn engine(&self) -> Option<EngineHandle> {
+        self.shared_state.engine_handle.lock().ok()?.clone()
     }
 
     /// Read DAW-persisted chain state (from `#[persist]` field).
@@ -74,13 +85,17 @@ impl PluginBackend {
 
 impl ParamBackend for PluginBackend {
     fn set_parameter(&self, stage_idx: usize, name: &'static str, value: f32) {
-        self.engine_handle.set_parameter(stage_idx, name, value);
+        if let Some(engine) = self.engine() {
+            engine.set_parameter(stage_idx, name, value);
+        }
     }
 
     fn rebuild_stage(&self, stage_idx: usize, config: &StageConfig) {
         let sr = self.effective_sample_rate();
         let runtime_stage = config.to_runtime(sr);
-        self.engine_handle.replace_stage(stage_idx, runtime_stage);
+        if let Some(engine) = self.engine() {
+            engine.replace_stage(stage_idx, runtime_stage);
+        }
     }
 
     fn set_amp_chain(&self, stages: &[StageConfig]) {
@@ -94,35 +109,48 @@ impl ParamBackend for PluginBackend {
                 chain.set_bypassed(i, true);
             }
         }
-        self.engine_handle.set_amp_chain(chain);
+        if let Some(engine) = self.engine() {
+            engine.set_amp_chain(chain);
+        }
     }
 
     fn set_bypass(&self, stage_idx: usize, bypassed: bool) {
-        self.engine_handle.set_stage_bypassed(stage_idx, bypassed);
+        if let Some(engine) = self.engine() {
+            engine.set_stage_bypassed(stage_idx, bypassed);
+        }
     }
 
     fn add_stage(&self, idx: usize, config: &StageConfig) {
         let sr = self.effective_sample_rate();
         let runtime_stage = config.to_runtime(sr);
-        self.engine_handle.add_stage(idx, runtime_stage);
+        if let Some(engine) = self.engine() {
+            engine.add_stage(idx, runtime_stage);
+        }
     }
 
     fn remove_stage(&self, idx: usize) {
-        self.engine_handle.remove_stage(idx);
+        if let Some(engine) = self.engine() {
+            engine.remove_stage(idx);
+        }
     }
 
     fn swap_stages(&self, a: usize, b: usize) {
-        self.engine_handle.swap_stages(a, b);
+        if let Some(engine) = self.engine() {
+            engine.swap_stages(a, b);
+        }
     }
 
     fn set_ir(&self, name: &str) {
         let Some(loader) = &self.ir_loader else {
             return;
         };
+        let Some(engine) = self.engine() else {
+            return;
+        };
         // Try embedded factory IR first
         if let Some(bytes) = crate::factory::get_factory_ir(name) {
             crate::ir_helper::load_and_set_ir_from_bytes(
-                &self.engine_handle,
+                &engine,
                 loader,
                 name,
                 &bytes,
@@ -130,18 +158,22 @@ impl ParamBackend for PluginBackend {
             );
         } else {
             // Fall back to filesystem (user-added IRs)
-            crate::ir_helper::load_and_set_ir(&self.engine_handle, loader, name, self.sample_rate);
+            crate::ir_helper::load_and_set_ir(&engine, loader, name, self.sample_rate);
         }
     }
 
     fn set_ir_bypass(&self, bypassed: bool) {
-        self.engine_handle.set_ir_bypass(bypassed);
+        if let Some(engine) = self.engine() {
+            engine.set_ir_bypass(bypassed);
+        }
         let param = &self.params.ir_bypass;
         self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(bypassed));
     }
 
     fn set_ir_gain(&self, gain: f32) {
-        self.engine_handle.set_ir_gain(gain);
+        if let Some(engine) = self.engine() {
+            engine.set_ir_gain(gain);
+        }
         let param = &self.params.ir_gain;
         self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(gain));
     }
@@ -165,7 +197,9 @@ impl ParamBackend for PluginBackend {
         } else {
             None
         };
-        self.engine_handle.set_input_filters(hp, lp);
+        if let Some(engine) = self.engine() {
+            engine.set_input_filters(hp, lp);
+        }
 
         // Sync filter params to host
         let p = &self.params.hp_enabled;
@@ -179,7 +213,9 @@ impl ParamBackend for PluginBackend {
     }
 
     fn set_pitch_shift(&self, semitones: i32) {
-        self.engine_handle.set_pitch_shift(semitones);
+        if let Some(engine) = self.engine() {
+            engine.set_pitch_shift(semitones);
+        }
         let param = &self.params.pitch_shift;
         self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(semitones));
     }

@@ -268,10 +268,6 @@ pub struct Translations {
     // Peak meter / status
     pub xruns: &'static str,
     pub cpu: &'static str,
-
-    // Plugin editor
-    pub plugin_inactive_title: &'static str,
-    pub plugin_inactive_hint: &'static str,
 }
 
 impl Translations {
@@ -481,10 +477,6 @@ pub static EN: Translations = Translations {
     // Peak meter / status
     xruns: "xruns",
     cpu: "CPU",
-
-    // Plugin editor
-    plugin_inactive_title: "Plugin not active",
-    plugin_inactive_hint: "Enable the plugin in your host, then reopen this window.",
 };
 
 pub static ZH_CN: Translations = Translations {
@@ -685,8 +677,4 @@ pub static ZH_CN: Translations = Translations {
     // Peak meter / status
     xruns: "欠载",
     cpu: "CPU",
-
-    // Plugin editor
-    plugin_inactive_title: "插件未激活",
-    plugin_inactive_hint: "请在宿主中启用插件，然后重新打开此窗口。",
 };

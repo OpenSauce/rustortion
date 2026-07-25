@@ -61,13 +61,9 @@ impl Editor for PluginEditor {
         parent: nih_plug::editor::ParentWindowHandle,
         context: Arc<dyn GuiContext>,
     ) -> Box<dyn std::any::Any + Send> {
-        // Gather engine state for the backend
-        let engine_handle = self
-            .shared_state
-            .engine_handle
-            .lock()
-            .ok()
-            .and_then(|g| g.clone());
+        // NOTE: the engine handle is deliberately NOT captured here. It is
+        // resolved per call in `PluginBackend`, because a host enable/disable
+        // cycle replaces the engine (and its channel) underneath us.
         let ir_loader = self
             .shared_state
             .ir_loader
@@ -85,7 +81,6 @@ impl Editor for PluginEditor {
             params: self.params.clone(),
             context,
             shared_state: self.shared_state.clone(),
-            engine_handle,
             ir_loader,
             sample_rate,
             restored_preset_idx,
@@ -135,21 +130,13 @@ struct PluginAppFlags {
     params: Arc<RustortionParams>,
     context: Arc<dyn GuiContext>,
     shared_state: Arc<crate::SharedState>,
-    engine_handle: Option<rustortion_core::audio::engine::EngineHandle>,
     ir_loader: Option<Arc<rustortion_core::ir::loader::IrLoader>>,
     sample_rate: f32,
     restored_preset_idx: i32,
 }
 
 struct PluginApp {
-    /// `None` when the editor was opened while the plugin is inactive.
-    ///
-    /// `deactivate()` nulls the shared engine handle, so a host that opens the
-    /// editor on an inactive instance leaves us with nothing to drive. That is a
-    /// legitimate host behaviour, not a bug, so we render a placeholder rather
-    /// than panicking — a panic here runs on the host's UI thread and takes the
-    /// whole DAW down with it.
-    shared: Option<SharedApp<PluginBackend>>,
+    shared: SharedApp<PluginBackend>,
 }
 
 impl iced_baseview::Application for PluginApp {
@@ -159,16 +146,7 @@ impl iced_baseview::Application for PluginApp {
     type Flags = PluginAppFlags;
 
     fn new(flags: Self::Flags) -> (Self, iced_baseview::Task<Self::Message>) {
-        let Some(engine_handle) = flags.engine_handle else {
-            nih_plug::nih_log!(
-                "Editor opened without an engine handle (plugin inactive); \
-                 showing placeholder"
-            );
-            return (Self { shared: None }, iced_baseview::Task::none());
-        };
-
         let backend = PluginBackend::new(
-            engine_handle,
             flags.params,
             flags.context,
             flags.ir_loader,
@@ -241,20 +219,11 @@ impl iced_baseview::Application for PluginApp {
             |stages| iced_baseview::Task::done(Message::SetStages(stages)),
         );
 
-        (
-            Self {
-                shared: Some(shared),
-            },
-            init_task,
-        )
+        (Self { shared }, init_task)
     }
 
     fn update(&mut self, message: Self::Message) -> iced_baseview::Task<Self::Message> {
-        let Some(shared) = self.shared.as_mut() else {
-            return iced_baseview::Task::none();
-        };
-
-        match shared.update(message) {
+        match self.shared.update(message) {
             UpdateResult::Handled(task) => task,
             UpdateResult::Unhandled(_msg) => {
                 // Standalone-only messages (Settings, Midi, Tuner, Recording)
@@ -267,9 +236,7 @@ impl iced_baseview::Application for PluginApp {
     fn view(
         &self,
     ) -> iced_baseview::Element<'_, Self::Message, Self::Theme, iced_baseview::Renderer> {
-        self.shared
-            .as_ref()
-            .map_or_else(inactive_view, SharedApp::view)
+        self.shared.view()
     }
 
     fn theme(&self) -> Self::Theme {
@@ -280,29 +247,6 @@ impl iced_baseview::Application for PluginApp {
         &self,
         _window_subs: &mut iced_baseview::WindowSubs<Self::Message>,
     ) -> iced_baseview::futures::Subscription<Self::Message> {
-        self.shared.as_ref().map_or_else(
-            iced_baseview::futures::Subscription::none,
-            SharedApp::subscription,
-        )
+        self.shared.subscription()
     }
-}
-
-/// Placeholder shown when the editor is opened on an inactive plugin instance.
-fn inactive_view<'a>()
--> iced_baseview::Element<'a, Message, iced_baseview::Theme, iced_baseview::Renderer> {
-    use iced_baseview::widget::{Column, container, text};
-
-    let t = rustortion_ui::i18n::translations();
-
-    container(
-        Column::with_children(vec![
-            text(t.plugin_inactive_title).size(20).into(),
-            text(t.plugin_inactive_hint).size(14).into(),
-        ])
-        .spacing(8)
-        .align_x(iced_baseview::Center),
-    )
-    .center_x(iced_baseview::Fill)
-    .center_y(iced_baseview::Fill)
-    .into()
 }
