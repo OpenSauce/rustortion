@@ -4,5 +4,11 @@ version = "0.1.0"
 edition = "2024"
 repository = "https://github.com/OpenSauce/rustortion"
 
+# `xtask` is a build helper, never a release artifact. Without this, bumping its
+# version to match the workspace would make cargo-dist silently start shipping an
+# `xtask` binary in every release tarball.
+[package.metadata.dist]
+dist = false
+
 [dependencies]
 nih_plug_xtask = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "28b149ec" }

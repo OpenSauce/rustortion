@@ -50,3 +50,44 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Test
         run: make test
+
+  plugin:
+    name: Plugin bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            libjack-jackd2-dev libasound2-dev pkg-config \
+            libgl-dev libx11-dev libx11-xcb-dev libxcb1-dev \
+            libxcursor-dev libxfixes-dev libxft-dev libxi-dev \
+            libxinerama-dev libxmu-dev libxrandr-dev libxrender-dev \
+            libxss-dev libxt-dev libxtst-dev libxxf86vm-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libxpresent-dev \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-icccm4-dev libxcb-dri2-0-dev
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # nih_plug_xtask never cleans target/bundled, and rust-cache restores
+      # target/ across runs. Without this, bundles from other platforms (e.g. a
+      # stale Contents/x86_64-win/) survive and get shipped as Linux artifacts.
+      - name: Clean stale bundle output
+        run: rm -rf target/bundled
+      - name: Bundle plugin
+        run: cargo xtask bundle rustortion-plugin --release --locked
+      - name: Verify bundle structure
+        run: |
+          set -euo pipefail
+          test -f target/bundled/Rustortion.clap
+          test -f target/bundled/Rustortion.vst3/Contents/x86_64-linux/Rustortion.so
+          # Nothing from another OS/arch may be present.
+          unexpected="$(find target/bundled/Rustortion.vst3/Contents \
+            -mindepth 1 -maxdepth 1 -not -name 'x86_64-linux' -print)"
+          if [ -n "$unexpected" ]; then
+            echo "Unexpected entries in the VST3 bundle:"
+            echo "$unexpected"
+            exit 1
+          fi
+          find target/bundled
