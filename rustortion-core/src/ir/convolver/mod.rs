@@ -51,4 +51,24 @@ impl Convolver {
             Self::TwoStage(c) => c.reset(),
         }
     }
+
+    /// Discards the loaded IR coefficients *and* the delay-line state.
+    ///
+    /// Unlike [`Self::reset`] (which only zeroes the delay line and leaves the
+    /// IR in place) this leaves the convolver with no IR at all. RT-safe: no
+    /// allocation or deallocation on either implementation.
+    pub fn clear_ir(&mut self) {
+        match self {
+            Self::Fir(c) => c.clear_ir(),
+            Self::TwoStage(c) => c.clear_ir(),
+        }
+    }
+
+    /// Whether an IR is currently loaded.
+    pub const fn has_ir(&self) -> bool {
+        match self {
+            Self::Fir(c) => c.has_ir(),
+            Self::TwoStage(c) => c.has_ir(),
+        }
+    }
 }

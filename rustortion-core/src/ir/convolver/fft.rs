@@ -29,6 +29,9 @@ pub struct TwoStageConvolver {
     tail_partitions: Vec<Vec<Complex<f32>>>,
     num_tail_partitions: usize,
 
+    /// Whether a non-empty IR is currently loaded.
+    has_ir: bool,
+
     // FFT planners
     r2c: Arc<dyn RealToComplex<f32>>,
     c2r: Arc<dyn ComplexToReal<f32>>,
@@ -89,6 +92,7 @@ impl TwoStageConvolver {
 
             tail_partitions: Vec::new(),
             num_tail_partitions: 0,
+            has_ir: false,
 
             r2c,
             c2r,
@@ -118,6 +122,8 @@ impl TwoStageConvolver {
             self.tail_partitions.clear();
             self.num_tail_partitions = 0;
             self.history.clear();
+            self.has_ir = false;
+            self.reset();
             return Ok(());
         }
 
@@ -136,10 +142,31 @@ impl TwoStageConvolver {
             self.history.clear();
         }
 
+        self.has_ir = true;
+
         // Reset state
         self.reset();
 
         Ok(())
+    }
+
+    /// Drops the loaded IR entirely, leaving the convolver silent (the cabinet
+    /// short-circuits to pass-through once `has_ir()` is false).
+    ///
+    /// RT-safe: nothing is freed. `tail_partitions` and `history` keep their
+    /// (now stale) allocations — zeroing the head and disabling the tail is
+    /// enough to stop the old IR from contributing, and `set_ir` rebuilds both
+    /// off the RT thread.
+    pub fn clear_ir(&mut self) {
+        self.head_coeffs.fill(0.0);
+        self.num_tail_partitions = 0;
+        self.has_ir = false;
+        self.reset();
+    }
+
+    /// Whether an IR is currently loaded.
+    pub const fn has_ir(&self) -> bool {
+        self.has_ir
     }
 
     fn partition_tail(&mut self, tail: &[f32]) -> Result<()> {

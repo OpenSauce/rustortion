@@ -9,8 +9,10 @@ pub struct Capabilities {
     pub has_tuner: bool,
     pub has_recorder: bool,
     pub has_midi_config: bool,
-    pub has_jack_settings: bool,
     pub has_preset_management: bool,
+    /// Whether the backend actually publishes peak-meter data. When false the
+    /// GUI neither renders the meter nor runs its polling subscription.
+    pub has_peak_meter: bool,
 }
 
 impl Capabilities {
@@ -20,8 +22,8 @@ impl Capabilities {
             has_tuner: true,
             has_recorder: true,
             has_midi_config: true,
-            has_jack_settings: true,
             has_preset_management: true,
+            has_peak_meter: true,
         }
     }
 
@@ -31,8 +33,8 @@ impl Capabilities {
             has_tuner: false,
             has_recorder: false,
             has_midi_config: false,
-            has_jack_settings: false,
             has_preset_management: false,
+            has_peak_meter: false,
         }
     }
 }
