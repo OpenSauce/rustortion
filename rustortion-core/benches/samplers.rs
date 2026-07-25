@@ -38,14 +38,14 @@ type PairFactory = fn(usize) -> ResamplerPair;
 fn create_sinc_current(factor: usize) -> ResamplerPair {
     let up_params = SincInterpolationParameters {
         sinc_len: 128,
-        f_cutoff: 0.95,
+        f_cutoff: Some(0.95),
         interpolation: SincInterpolationType::Linear,
         oversampling_factor: 128,
         window: WindowFunction::BlackmanHarris2,
     };
     let down_params = SincInterpolationParameters {
         sinc_len: 128,
-        f_cutoff: 0.95,
+        f_cutoff: Some(0.95),
         interpolation: SincInterpolationType::Linear,
         oversampling_factor: 128,
         window: WindowFunction::BlackmanHarris2,
@@ -80,14 +80,14 @@ fn create_sinc_current(factor: usize) -> ResamplerPair {
 fn create_sinc_veryfast(factor: usize) -> ResamplerPair {
     let up_params = SincInterpolationParameters {
         sinc_len: 64,
-        f_cutoff: 0.91,
+        f_cutoff: Some(0.91),
         interpolation: SincInterpolationType::Linear,
         oversampling_factor: 1024,
         window: WindowFunction::Hann2,
     };
     let down_params = SincInterpolationParameters {
         sinc_len: 64,
-        f_cutoff: 0.91,
+        f_cutoff: Some(0.91),
         interpolation: SincInterpolationType::Linear,
         oversampling_factor: 1024,
         window: WindowFunction::Hann2,
@@ -176,23 +176,25 @@ fn create_fast_linear(factor: usize) -> ResamplerPair {
 fn create_fft(factor: usize) -> ResamplerPair {
     ResamplerPair {
         up: Box::new(
-            Fft::<f32>::new(
+            Fft::<f32>::new_custom(
                 SAMPLE_RATE,
                 SAMPLE_RATE * factor,
                 BUFFER_SIZE,
                 SUB_CHUNKS,
                 CHANNELS,
+                WindowFunction::BlackmanHarris2,
                 FixedSync::Input,
             )
             .unwrap(),
         ),
         down: Box::new(
-            Fft::<f32>::new(
+            Fft::<f32>::new_custom(
                 SAMPLE_RATE * factor,
                 SAMPLE_RATE,
                 BUFFER_SIZE,
                 SUB_CHUNKS,
                 CHANNELS,
+                WindowFunction::BlackmanHarris2,
                 FixedSync::Output,
             )
             .unwrap(),

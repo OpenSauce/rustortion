@@ -85,7 +85,7 @@ impl IrCabinetControl {
             text(gain_label).width(Length::Fixed(80.0)),
             slider(0.0..=1.0, self.gain, Message::IrGainChanged)
                 .width(Length::FillPortion(7))
-                .step(0.01),
+                .step(0.01_f32),
             text(format!("{:.0}%", self.gain * 100.0)).width(Length::FillPortion(2)),
         ]
         .spacing(SPACING_NORMAL)
