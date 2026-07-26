@@ -212,6 +212,88 @@ impl StageConfig {
 mod tests {
     use super::*;
 
+    /// The externally-tagged JSON key each `StageConfig` variant serializes to.
+    ///
+    /// These strings are a **file format**: they appear in every preset in
+    /// `~/.config/rustortion/presets/` and in every DAW project that persisted a
+    /// plugin chain. Renaming a variant (or adding `#[serde(rename)]`) would
+    /// silently make every existing preset unreadable, so they are pinned here
+    /// as literals rather than derived from the enum.
+    const WIRE_NAMES: &[(StageType, &str)] = &[
+        (StageType::Preamp, "Preamp"),
+        (StageType::Compressor, "Compressor"),
+        (StageType::ToneStack, "ToneStack"),
+        (StageType::PowerAmp, "PowerAmp"),
+        (StageType::Level, "Level"),
+        (StageType::NoiseGate, "NoiseGate"),
+        (StageType::MultibandSaturator, "MultibandSaturator"),
+        (StageType::Nam, "Nam"),
+        (StageType::Delay, "Delay"),
+        (StageType::Reverb, "Reverb"),
+        (StageType::Eq, "Eq"),
+        (StageType::Tremolo, "Tremolo"),
+    ];
+
+    /// Fails if a stage is registered in `StageType::ALL` but not pinned above,
+    /// so adding a 13th stage forces its wire name into the guard below.
+    #[test]
+    fn every_registered_stage_has_a_pinned_wire_name() {
+        assert_eq!(WIRE_NAMES.len(), StageType::ALL.len());
+        for stage_type in StageType::ALL {
+            assert!(
+                WIRE_NAMES.iter().any(|(t, _)| t == stage_type),
+                "{stage_type} is registered but has no pinned wire name"
+            );
+        }
+    }
+
+    #[test]
+    fn every_stage_config_variant_round_trips_under_a_stable_name() {
+        for (stage_type, wire_name) in WIRE_NAMES {
+            let config = StageConfig::from(*stage_type);
+
+            let value = serde_json::to_value(&config)
+                .unwrap_or_else(|e| panic!("serialize {stage_type}: {e}"));
+            let obj = value
+                .as_object()
+                .unwrap_or_else(|| panic!("{stage_type} did not serialize as a tagged object"));
+            assert_eq!(obj.len(), 1, "{stage_type} serialized to more than one key");
+            assert_eq!(
+                obj.keys().next().unwrap(),
+                wire_name,
+                "{stage_type} changed its on-disk key — this breaks existing presets"
+            );
+
+            let restored: StageConfig = serde_json::from_value(value.clone())
+                .unwrap_or_else(|e| panic!("deserialize {stage_type}: {e}"));
+            assert_eq!(restored.stage_type(), *stage_type);
+            assert_eq!(
+                serde_json::to_value(&restored).unwrap(),
+                value,
+                "{stage_type} lost or renamed a field across the round trip"
+            );
+        }
+    }
+
+    /// The default configs are mostly zeroes and falses, which would hide a
+    /// field rename that happens to share a default. Flip a field that every
+    /// variant has and prove it survives.
+    #[test]
+    fn every_stage_config_variant_round_trips_a_non_default_field() {
+        for (stage_type, _) in WIRE_NAMES {
+            let mut config = StageConfig::from(*stage_type);
+            assert!(!config.bypassed(), "{stage_type} defaults to bypassed");
+            config.set_bypassed(true);
+
+            let json = serde_json::to_string(&config).unwrap();
+            let restored: StageConfig = serde_json::from_str(&json)
+                .unwrap_or_else(|e| panic!("deserialize {stage_type}: {e}"));
+
+            assert_eq!(restored.stage_type(), *stage_type);
+            assert!(restored.bypassed(), "{stage_type} lost its bypass flag");
+        }
+    }
+
     /// The plugin persists its chain as `Vec<StageConfig>` JSON in `chain_state`
     /// (nih-plug `#[persist]`), and a NAM stage stores its model BY NAME. This is
     /// the exact path that recalls a selected model when a DAW project reopens, so

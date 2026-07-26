@@ -42,10 +42,9 @@ impl PresetBar {
                 self.set_new_preset_name(name);
             }
             PresetGuiMessage::ConfirmOverwrite => {
+                let name = std::mem::take(&mut self.overwrite_target);
                 self.hide_overwrite_confirmation();
-                return Task::done(Message::Preset(PresetMessage::Save(
-                    self.preset_name_input.clone(),
-                )));
+                return Task::done(Message::Preset(PresetMessage::SaveConfirmed(name)));
             }
             PresetGuiMessage::CancelOverwrite => {
                 self.hide_overwrite_confirmation();
@@ -71,6 +70,12 @@ impl PresetBar {
     pub fn show_overwrite_confirmation(&mut self, preset_name: String) {
         self.show_overwrite_confirmation = true;
         self.overwrite_target = preset_name;
+    }
+
+    /// Is the overwrite prompt currently up? Hosts block key events while a
+    /// dialog is open, and this one is modal in every way that matters.
+    pub const fn is_overwrite_confirmation_visible(&self) -> bool {
+        self.show_overwrite_confirmation
     }
 
     pub fn hide_overwrite_confirmation(&mut self) {

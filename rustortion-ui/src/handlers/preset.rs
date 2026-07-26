@@ -70,6 +70,26 @@ impl PresetHandler {
             PresetMessage::Save(name) => {
                 debug!("Saving preset... {name}");
                 if !name.trim().is_empty() {
+                    // Saves are destructive and not undoable, so ask before
+                    // clobbering someone else's preset. `Update` is exempt:
+                    // overwriting the selected preset is the whole point.
+                    if self.preset_manager.preset_exists(&name) {
+                        self.preset_bar.show_overwrite_confirmation(name);
+                    } else {
+                        self.save_preset_named(
+                            &name,
+                            stages,
+                            ir_name,
+                            ir_gain,
+                            pitch_shift_semitones,
+                            input_filters,
+                        );
+                    }
+                }
+            }
+            PresetMessage::SaveConfirmed(name) => {
+                debug!("Overwriting preset... {name}");
+                if !name.trim().is_empty() {
                     self.save_preset_named(
                         &name,
                         stages,
@@ -122,6 +142,20 @@ impl PresetHandler {
 
     pub fn get_available_presets(&self) -> &[String] {
         &self.available_presets
+    }
+
+    /// The preset the handler currently considers selected.
+    ///
+    /// Only moves when a select or save actually succeeded, so callers can use
+    /// it to decide whether a `Save` did any work or merely raised the
+    /// overwrite prompt.
+    pub fn selected_preset_name(&self) -> Option<&str> {
+        self.selected_preset.as_deref()
+    }
+
+    /// Whether the overwrite confirmation prompt is on screen.
+    pub const fn is_overwrite_confirmation_visible(&self) -> bool {
+        self.preset_bar.is_overwrite_confirmation_visible()
     }
 
     pub fn selected_preset_index(&self) -> Option<usize> {

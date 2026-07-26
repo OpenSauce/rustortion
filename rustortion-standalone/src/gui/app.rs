@@ -225,17 +225,15 @@ impl AmplifierApp {
             Message::Hotkey(HotkeyMessage::ConfirmMapping | HotkeyMessage::RemoveMapping(_))
         );
 
-        let is_preset_select_or_save = matches!(
-            message,
-            Message::Preset(PresetMessage::Select(_) | PresetMessage::Save(_))
-        );
         let is_preset_delete = matches!(message, Message::Preset(PresetMessage::Delete(_)));
 
         // Clone preset name for persistence if needed
         let preset_name_for_persist = match &message {
-            Message::Preset(PresetMessage::Select(name) | PresetMessage::Save(name)) => {
-                Some(name.clone())
-            }
+            Message::Preset(
+                PresetMessage::Select(name)
+                | PresetMessage::Save(name)
+                | PresetMessage::SaveConfirmed(name),
+            ) => Some(name.clone()),
             _ => None,
         };
         let deleted_preset_name = match &message {
@@ -283,7 +281,15 @@ impl AmplifierApp {
             self.save_settings();
         }
 
-        if is_preset_select_or_save && let Some(name) = preset_name_for_persist {
+        // Persist the selection only when the message actually moved it. `Save`
+        // may do nothing but raise the overwrite prompt, and writing the new
+        // name to settings.json before the user answers means cancelling still
+        // leaves the next launch opening a preset that was never saved. The
+        // handler advances its own selection only when the work really
+        // happened, so mirror that rather than guessing from the message.
+        if let Some(name) = preset_name_for_persist
+            && self.shared.preset_handler.selected_preset_name() == Some(name.as_str())
+        {
             self.settings.selected_preset = Some(name);
             self.save_settings();
         }
@@ -388,6 +394,10 @@ impl AmplifierApp {
             || self.tuner_handler.is_visible()
             || self.midi_handler.is_visible()
             || self.shared.hotkey_handler.is_visible()
+            // A preset-switch hotkey fired between Save and Yes would swap the
+            // whole chain out from under the pending confirmation, which then
+            // writes the newly loaded chain over the confirmed name.
+            || self.shared.preset_handler.is_overwrite_confirmation_visible()
     }
 
     fn persist_collapse_state(&mut self) {

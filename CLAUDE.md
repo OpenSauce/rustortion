@@ -55,8 +55,14 @@ There are **12** registered stages. The `gui_stage_registry!` macro in
 
 ## Pitfalls
 
-- **Preset files** — one JSON per preset in `~/.config/rustortion/presets/`. Saves are not atomic
-  and filenames collide on non-ASCII names (REV-7); don't build on the current behavior.
+- **Preset files** — one JSON per preset in `preset_dir`, which defaults to `./presets` (CWD-relative,
+  and the *shipped* `presets/` is that live writable directory). `~/.config/rustortion/` holds
+  `settings.json`, not presets. Filenames are percent-encoded (`[A-Za-z0-9-_]` kept verbatim), but a
+  preset is identified by the `name` field *inside* the JSON — `Manager` remembers the path each
+  preset was loaded from so saves/deletes reuse legacy filenames, and `path_for` refuses any
+  candidate another preset already occupies (falling back to a digest-suffixed stem). Saves are
+  still not atomic (`fs::write`) and save/delete failures are only logged, never surfaced in the UI
+  (REV-7 remainder).
 - **NAM models** (`.nam`, WaveNet + LSTM via `nam-rs`) load from a user folder with rescan, into a
   process-global registry; stages resolve them **by name**. No rfd file-picker — rfd/gtk3 breaks CI.
 - **IR files** live in `impulse_responses/` and `~/.config/rustortion/impulse_responses/`; loading
