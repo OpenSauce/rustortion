@@ -23,5 +23,11 @@ impulse_responses/*
 
 # Local-only NAM test preset. `rustortion-plugin` embeds all of `presets/` via
 # rust-embed, and no `.nam` models are tracked or shipped, so committing this
-# would ship a factory preset whose NAM stage resolves to nothing.
+# would ship a factory preset naming a model nobody else has — the NAM stage
+# would fall back to passthrough and log a "model not found" warning.
+#
+# `NAM_Starter.json` *is* tracked and ships: it names no model at all, so the
+# passthrough is deliberate rather than a failure, and it exists to surface the
+# model picker, models directory and rescan button to people who have never
+# loaded a `.nam` file.
 /presets/NAM.json

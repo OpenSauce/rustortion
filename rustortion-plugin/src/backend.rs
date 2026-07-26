@@ -193,6 +193,14 @@ impl ParamBackend for PluginBackend {
     }
 
     fn set_ir(&self, name: &str) {
+        // Record the choice before attempting the load, so it is persisted with
+        // the project even if the load itself is dropped for want of an engine.
+        // The next activation then restores the cabinet the user actually asked
+        // for rather than the preset's.
+        if let Ok(mut persisted) = self.params.ir_name.lock() {
+            *persisted = Some(name.to_owned());
+        }
+
         // The IR runs after downsampling, so it is built at the host rate, not
         // the oversampled one.
         let (Some(loader), Some(engine), Some(sr)) =

@@ -97,6 +97,12 @@ struct RustortionPlugin {
     editor_preset_names: Arc<Mutex<Vec<String>>>,
     last_preset_idx: i32,
     last_ir_gain: f32,
+    /// Last IR-bypass value pushed into the engine, or `None` when nothing has
+    /// been pushed since activation. `None` rather than a plain `bool` so the
+    /// `process()` delta check cannot mistake "carried over from the previous
+    /// activation" for "already applied to this engine" — the same hazard
+    /// `last_ir_gain`'s `NEG_INFINITY` sentinel guards against.
+    last_ir_bypass: Option<bool>,
     active_oversampling: u32,
     input_buf: Vec<f32>,
     output_buf: Vec<f32>,
@@ -158,6 +164,7 @@ impl Default for RustortionPlugin {
             editor_preset_names: Arc::new(Mutex::new(Vec::new())),
             last_preset_idx: -1,
             last_ir_gain: util::db_to_gain(-20.0),
+            last_ir_bypass: None,
             active_oversampling: 1, // 1x (no oversampling)
             input_buf: Vec::new(),
             output_buf: Vec::new(),
@@ -253,6 +260,48 @@ struct OversamplingEvent {
     latency_after: u32,
 }
 
+/// Load a cabinet IR by name, preferring the embedded factory copy and falling
+/// back to the filesystem for user-added IRs.
+fn load_ir_by_name(handle: &EngineHandle, loader: &IrLoader, ir_name: &str, sample_rate: f32) {
+    if let Some(bytes) = factory::get_factory_ir(ir_name) {
+        ir_helper::load_and_set_ir_from_bytes(handle, loader, ir_name, &bytes, sample_rate);
+    } else {
+        ir_helper::load_and_set_ir(handle, loader, ir_name, sample_rate);
+    }
+}
+
+/// Push the host's input-filter parameters into a freshly built engine.
+///
+/// Only correct when restoring: on a fresh insert the params still hold their
+/// defaults while the preset's own filters have already been applied, so calling
+/// this unconditionally would overwrite them.
+fn apply_input_filters_from_params(
+    handle: &EngineHandle,
+    params: &RustortionParams,
+    sample_rate: f32,
+) {
+    use rustortion_core::amp::stages::Stage;
+    use rustortion_core::amp::stages::filter::{FilterStage, FilterType};
+
+    // Input filters sit ahead of the upsampler, so they are built at the host
+    // rate — not the oversampled rate the amp chain runs at.
+    let hp: Option<Box<dyn Stage>> = params.hp_enabled.value().then(|| {
+        Box::new(FilterStage::new(
+            FilterType::Highpass,
+            params.hp_cutoff.value(),
+            sample_rate,
+        )) as Box<dyn Stage>
+    });
+    let lp: Option<Box<dyn Stage>> = params.lp_enabled.value().then(|| {
+        Box::new(FilterStage::new(
+            FilterType::Lowpass,
+            params.lp_cutoff.value(),
+            sample_rate,
+        )) as Box<dyn Stage>
+    });
+    handle.set_input_filters(hp, lp);
+}
+
 fn do_load_preset(
     handle: &EngineHandle,
     manager: Option<&rustortion_core::preset::Manager>,
@@ -290,11 +339,7 @@ fn do_load_preset(
     // Load IR if specified
     if let Some(ir_name) = &preset.ir_name {
         if let Some(loader) = ir_loader {
-            if let Some(bytes) = factory::get_factory_ir(ir_name) {
-                ir_helper::load_and_set_ir_from_bytes(handle, loader, ir_name, &bytes, sample_rate);
-            } else {
-                ir_helper::load_and_set_ir(handle, loader, ir_name, sample_rate);
-            }
+            load_ir_by_name(handle, loader, ir_name, sample_rate);
         }
     } else {
         handle.clear_ir();
@@ -331,6 +376,49 @@ fn do_load_preset(
 }
 
 impl RustortionPlugin {
+    /// Push changed host parameters into the engine, once per block.
+    ///
+    /// Every check is gated on a delta, so an untouched parameter costs nothing.
+    /// The sentinels reset in [`Plugin::initialize`] are what make the first
+    /// block of each activation push the real values into the freshly built
+    /// engine — that is what stops a setting from silently reverting to the
+    /// engine's own default after a disable/re-enable cycle.
+    ///
+    /// Only parameters whose engine message is allocation-free belong here.
+    /// Pitch shift and the input filters have to build stages, so they are
+    /// applied on the main thread in [`Plugin::initialize`] instead.
+    fn apply_host_params(&mut self, block_samples: u32) {
+        // Leave the smoother untouched with no engine attached, so the value is
+        // not consumed against an engine that never received it.
+        if self.engine_handle.is_none() {
+            return;
+        }
+
+        let ir_gain = self.params.ir_gain.smoothed.next_step(block_samples);
+        let ir_bypass = self.params.ir_bypass.value();
+
+        let gain_changed = (ir_gain - self.last_ir_gain).abs() > f32::EPSILON;
+        let bypass_changed = self.last_ir_bypass != Some(ir_bypass);
+
+        if let Some(handle) = &self.engine_handle {
+            if gain_changed {
+                handle.set_ir_gain(ir_gain);
+            }
+            // Safe from the RT thread: `SetIrBypass` carries a plain `bool` over
+            // the bounded engine channel, so there is nothing to allocate.
+            if bypass_changed {
+                handle.set_ir_bypass(ir_bypass);
+            }
+        }
+
+        if gain_changed {
+            self.last_ir_gain = ir_gain;
+        }
+        if bypass_changed {
+            self.last_ir_bypass = Some(ir_bypass);
+        }
+    }
+
     /// Hand an oversampling-path change to the background thread to log.
     ///
     /// The engine's events are already one-shot; the [`ReportOnce`] latch makes
@@ -566,6 +654,10 @@ impl Plugin for RustortionPlugin {
         // what used to swallow the correction after a reload. (`NEG_INFINITY`,
         // not `NAN` — a `NaN` comparison is false and would swallow it again.)
         self.last_ir_gain = f32::NEG_INFINITY;
+        // Same contract for IR bypass, which had the same defect: the fresh
+        // engine below starts unbypassed regardless of what the host has
+        // persisted, so the delta check must fire on the first block.
+        self.last_ir_bypass = None;
         self.sample_rate = buffer_config.sample_rate;
         self.shared
             .sample_rate
@@ -682,6 +774,13 @@ impl Plugin for RustortionPlugin {
                     .and_then(|g| g.clone())
                     .or_else(|| self.params.chain_state.lock().ok().and_then(|g| g.clone()));
 
+                // Whether this activation is restoring existing state (a
+                // disable/re-enable cycle, or a reopened project) rather than a
+                // fresh insert. The host's parameters only describe reality in
+                // the former case — see the restore block at the end of this
+                // `if let`.
+                let restoring = persisted_stages.is_some();
+
                 if let Some(handle) = &self.engine_handle {
                     if let Some(stages) = &persisted_stages {
                         // Restore from DAW-persisted chain state
@@ -701,37 +800,40 @@ impl Plugin for RustortionPlugin {
                         // Also load IR/filters/pitch from preset (those are
                         // persisted via nih-plug params and applied separately)
                         #[allow(clippy::cast_sign_loss)]
-                        if let Some(name) = self.preset_names.get(restored_idx as usize).cloned()
-                            && let Some(mgr) = self
-                                .shared
-                                .preset_manager
-                                .lock()
-                                .ok()
-                                .and_then(|g| g.clone())
-                            && let Some(preset) = mgr.get_preset_by_name(&name)
+                        let preset = self
+                            .preset_names
+                            .get(restored_idx as usize)
+                            .cloned()
+                            .and_then(|name| {
+                                self.shared
+                                    .preset_manager
+                                    .lock()
+                                    .ok()
+                                    .and_then(|g| g.clone())
+                                    .and_then(|mgr| mgr.get_preset_by_name(&name).cloned())
+                            });
+
+                        // Cabinet: prefer the IR the user picked (persisted with
+                        // the project) over the preset's own, the same
+                        // precedence `chain_state` takes over the preset's
+                        // stages. Without this a chosen cabinet reverted to the
+                        // preset's on every reactivation and project reload.
+                        let ir_to_load = self
+                            .params
+                            .ir_name
+                            .lock()
+                            .ok()
+                            .and_then(|g| g.clone())
+                            .or_else(|| preset.as_ref().and_then(|p| p.ir_name.clone()));
+
+                        if let Some(ir_name) = &ir_to_load
+                            && let Some(loader) =
+                                self.shared.ir_loader.lock().ok().and_then(|g| g.clone())
                         {
-                            if let Some(ir_name) = &preset.ir_name {
-                                let loader =
-                                    self.shared.ir_loader.lock().ok().and_then(|g| g.clone());
-                                if let Some(loader) = &loader {
-                                    if let Some(bytes) = factory::get_factory_ir(ir_name) {
-                                        ir_helper::load_and_set_ir_from_bytes(
-                                            handle,
-                                            loader,
-                                            ir_name,
-                                            &bytes,
-                                            self.sample_rate,
-                                        );
-                                    } else {
-                                        ir_helper::load_and_set_ir(
-                                            handle,
-                                            loader,
-                                            ir_name,
-                                            self.sample_rate,
-                                        );
-                                    }
-                                }
-                            }
+                            load_ir_by_name(handle, &loader, ir_name, self.sample_rate);
+                        }
+
+                        if let Some(preset) = &preset {
                             handle.set_ir_gain(preset.ir_gain);
                             handle.set_pitch_shift(preset.pitch_shift_semitones);
                         }
@@ -765,6 +867,25 @@ impl Plugin for RustortionPlugin {
                     let gui_already_set = self.shared.gui_stages.lock().is_ok_and(|g| g.is_some());
                     if !gui_already_set && let Some(stages) = persisted_stages {
                         self.shared.store_gui_stages(&stages);
+                    }
+
+                    // Re-apply the host's pitch shift and input filters to the
+                    // fresh engine. `deactivate()` dropped the previous one and
+                    // the replacement starts at *its* own defaults, so without
+                    // this the user's settings silently vanish on every
+                    // disable/re-enable cycle. Both allocate (a pitch shifter
+                    // builds FFT plans, filters build stages), which is why
+                    // they are applied here on the main thread rather than
+                    // through a `process()` delta check like IR gain and bypass.
+                    //
+                    // Gated on `restoring`: on a fresh insert the params still
+                    // hold their defaults while `do_load_preset` above has
+                    // already applied the preset's own pitch shift and filters,
+                    // and overwriting those with defaults would trade this bug
+                    // for a worse one.
+                    if restoring {
+                        handle.set_pitch_shift(self.params.pitch_shift.value());
+                        apply_input_filters_from_params(handle, &self.params, self.sample_rate);
                     }
                 }
 
@@ -825,19 +946,8 @@ impl Plugin for RustortionPlugin {
             self.active_oversampling = requested_os;
         }
 
-        // Apply IR gain from DAW parameter
-        if let Some(handle) = &self.engine_handle {
-            #[allow(clippy::cast_possible_truncation)]
-            let ir_gain = self
-                .params
-                .ir_gain
-                .smoothed
-                .next_step(buffer.samples() as u32);
-            if (ir_gain - self.last_ir_gain).abs() > f32::EPSILON {
-                handle.set_ir_gain(ir_gain);
-                self.last_ir_gain = ir_gain;
-            }
-        }
+        #[allow(clippy::cast_possible_truncation)]
+        self.apply_host_params(buffer.samples() as u32);
 
         let Some(engine) = &mut self.engine else {
             // No engine: mute rather than fall through. The host copies input
