@@ -227,15 +227,19 @@ impl AmplifierApp {
 
         let is_preset_select_or_save = matches!(
             message,
-            Message::Preset(PresetMessage::Select(_) | PresetMessage::Save(_))
+            Message::Preset(
+                PresetMessage::Select(_) | PresetMessage::Save(_) | PresetMessage::SaveConfirmed(_)
+            )
         );
         let is_preset_delete = matches!(message, Message::Preset(PresetMessage::Delete(_)));
 
         // Clone preset name for persistence if needed
         let preset_name_for_persist = match &message {
-            Message::Preset(PresetMessage::Select(name) | PresetMessage::Save(name)) => {
-                Some(name.clone())
-            }
+            Message::Preset(
+                PresetMessage::Select(name)
+                | PresetMessage::Save(name)
+                | PresetMessage::SaveConfirmed(name),
+            ) => Some(name.clone()),
             _ => None,
         };
         let deleted_preset_name = match &message {

@@ -42,10 +42,9 @@ impl PresetBar {
                 self.set_new_preset_name(name);
             }
             PresetGuiMessage::ConfirmOverwrite => {
+                let name = std::mem::take(&mut self.overwrite_target);
                 self.hide_overwrite_confirmation();
-                return Task::done(Message::Preset(PresetMessage::Save(
-                    self.preset_name_input.clone(),
-                )));
+                return Task::done(Message::Preset(PresetMessage::SaveConfirmed(name)));
             }
             PresetGuiMessage::CancelOverwrite => {
                 self.hide_overwrite_confirmation();

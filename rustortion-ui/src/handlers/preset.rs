@@ -70,6 +70,26 @@ impl PresetHandler {
             PresetMessage::Save(name) => {
                 debug!("Saving preset... {name}");
                 if !name.trim().is_empty() {
+                    // Saves are destructive and not undoable, so ask before
+                    // clobbering someone else's preset. `Update` is exempt:
+                    // overwriting the selected preset is the whole point.
+                    if self.preset_manager.preset_exists(&name) {
+                        self.preset_bar.show_overwrite_confirmation(name);
+                    } else {
+                        self.save_preset_named(
+                            &name,
+                            stages,
+                            ir_name,
+                            ir_gain,
+                            pitch_shift_semitones,
+                            input_filters,
+                        );
+                    }
+                }
+            }
+            PresetMessage::SaveConfirmed(name) => {
+                debug!("Overwriting preset... {name}");
+                if !name.trim().is_empty() {
                     self.save_preset_named(
                         &name,
                         stages,
