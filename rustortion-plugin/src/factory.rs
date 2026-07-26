@@ -112,6 +112,38 @@ mod tests {
         );
     }
 
+    /// Narrowing the shipped IR set must not orphan a preset. A missing IR
+    /// doesn't fail loudly or even leave the preset cabinet-less — neither
+    /// binary clears the convolver on a failed load, so the *previous*
+    /// preset's cabinet stays installed while the GUI shows the missing one as
+    /// active.
+    #[test]
+    fn every_preset_ir_is_embedded() {
+        let embedded = factory_ir_names();
+        let presets = load_factory_presets();
+
+        let referenced: Vec<String> = presets.iter().filter_map(|p| p.ir_name.clone()).collect();
+
+        // Renaming `ir_name` would deserialize to None everywhere without
+        // erroring, leaving the check below iterating nothing.
+        assert!(
+            !referenced.is_empty(),
+            "no factory preset references an IR — has Preset::ir_name been \
+             renamed or removed? This guard is vacuous until it is fixed"
+        );
+
+        let missing: Vec<&String> = referenced
+            .iter()
+            .filter(|ir| !embedded.contains(ir))
+            .collect();
+
+        assert!(
+            missing.is_empty(),
+            "factory presets reference IRs that are not embedded: {missing:?}\n\
+             either restore them under impulse_responses/ or repoint the preset"
+        );
+    }
+
     /// Same vacuity guard for the IR embed, plus the round-trip every caller
     /// relies on: a name from `factory_ir_names` must resolve to bytes.
     #[test]
