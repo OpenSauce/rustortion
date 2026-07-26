@@ -139,7 +139,11 @@ jobs:
           Compress-Archive -Path Rustortion.clap, Rustortion.vst3 `
             -DestinationPath "$env:GITHUB_WORKSPACE\${{ matrix.asset }}"
         working-directory: target/bundled
+      # shell: bash is load-bearing on Windows. The default shell there is pwsh,
+      # which does not expand `$RELEASE_TAG` — it silently becomes an empty
+      # string and `gh release upload ""` fails with "release not found".
       - name: Upload to release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$RELEASE_TAG" "${{ matrix.asset }}" --clobber
