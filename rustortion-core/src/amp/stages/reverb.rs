@@ -51,6 +51,13 @@ impl CombFilter {
         output
     }
 
+    /// Empty the comb's delay line and its lowpass memory, keeping the tuning.
+    fn reset(&mut self) {
+        self.buffer.fill(0.0);
+        self.write_pos = 0;
+        self.filterstore = 0.0;
+    }
+
     const fn set_feedback(&mut self, feedback: f32) {
         self.feedback = feedback;
     }
@@ -73,6 +80,12 @@ impl AllpassFilter {
             buffer: vec![0.0; size],
             write_pos: 0,
         }
+    }
+
+    /// Empty the allpass delay line.
+    fn reset(&mut self) {
+        self.buffer.fill(0.0);
+        self.write_pos = 0;
     }
 
     fn process(&mut self, input: f32) -> f32 {
@@ -158,6 +171,18 @@ impl Stage for ReverbStage {
 
         // Dry/wet mix
         (1.0 - self.mix).mul_add(input, self.mix * out)
+    }
+
+    /// Drains the whole tank: all 8 comb delay lines (and their damping
+    /// lowpasses) plus the 4 series allpasses. This is the stage the missing
+    /// reset was most audible on — a Freeverb tail rings for seconds.
+    fn reset(&mut self) {
+        for comb in &mut self.combs {
+            comb.reset();
+        }
+        for allpass in &mut self.allpasses {
+            allpass.reset();
+        }
     }
 
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
@@ -406,6 +431,68 @@ mod tests {
             max_out < 5.0,
             "Output should stay bounded with sustained input, got max {max_out}"
         );
+    }
+
+    /// PLUG-2: a Freeverb tank rings for seconds. On a transport jump that tail
+    /// must be gone, not fading over the new position.
+    #[test]
+    fn reset_drains_the_tank() {
+        let mut reverb = ReverbStage::new(0.9, 0.2, 1.0, SAMPLE_RATE);
+
+        // Excite the tank hard and let it fill.
+        for _ in 0..SAMPLE_RATE as usize / 10 {
+            reverb.process(1.0);
+        }
+        // Sanity: it really is ringing.
+        let ringing = (0..1000)
+            .map(|_| reverb.process(0.0).abs())
+            .fold(0.0_f32, f32::max);
+        assert!(ringing > 1e-4, "tank should be ringing, got {ringing}");
+
+        reverb.reset();
+
+        for i in 0..SAMPLE_RATE as usize {
+            let out = reverb.process(0.0);
+            assert!(
+                out.abs() < 1e-9,
+                "reverb tail survived reset at sample {i}: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn reset_preserves_parameters() {
+        let mut reverb = ReverbStage::new(0.7, 0.3, 0.4, SAMPLE_RATE);
+        reverb.process(1.0);
+        reverb.reset();
+
+        assert!((reverb.get_parameter("room_size").unwrap() - 0.7).abs() < 1e-6);
+        assert!((reverb.get_parameter("damping").unwrap() - 0.3).abs() < 1e-6);
+        assert!((reverb.get_parameter("mix").unwrap() - 0.4).abs() < 1e-6);
+    }
+
+    /// A reset tank must behave exactly like a freshly built one, not merely
+    /// "quiet" — the combs' write cursors and damping memory have to go back to
+    /// their initial positions too, or the next impulse comes out different.
+    #[test]
+    fn reset_matches_a_fresh_stage() {
+        let mut used = ReverbStage::new(0.5, 0.5, 1.0, SAMPLE_RATE);
+        for _ in 0..5000 {
+            used.process(0.7);
+        }
+        used.reset();
+
+        let mut fresh = ReverbStage::new(0.5, 0.5, 1.0, SAMPLE_RATE);
+
+        for i in 0..4096 {
+            let input = if i == 0 { 1.0 } else { 0.0 };
+            let a = used.process(input);
+            let b = fresh.process(input);
+            assert!(
+                (a - b).abs() < 1e-9,
+                "sample {i}: reset stage gave {a}, fresh stage {b}"
+            );
+        }
     }
 
     #[test]

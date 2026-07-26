@@ -51,6 +51,14 @@ impl Biquad {
         }
     }
 
+    /// Zero the Direct Form 1 delay registers, keeping the coefficients.
+    const fn reset(&mut self) {
+        self.x1 = 0.0;
+        self.x2 = 0.0;
+        self.y1 = 0.0;
+        self.y2 = 0.0;
+    }
+
     /// Set coefficients for a peaking EQ band using Audio EQ Cookbook formulas.
     ///
     /// Uses the BW-in-octaves alpha formula so that every band maintains
@@ -179,6 +187,14 @@ impl Stage for EqStage {
         out
     }
 
+    /// Clears the delay registers of all 16 cascaded biquads. Band gains (the
+    /// coefficients) are parameters, not state, and are left alone.
+    fn reset(&mut self) {
+        for biquad in &mut self.biquads {
+            biquad.reset();
+        }
+    }
+
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         let idx =
             Self::parse_band_index(name).ok_or("Unknown parameter (expected band_0..=band_15)")?;
@@ -216,6 +232,42 @@ mod tests {
 
     fn flat_gains() -> [f32; NUM_BANDS] {
         [0.0; NUM_BANDS]
+    }
+
+    /// PLUG-2: 16 cascaded Direct Form 1 biquads hold 4 registers each. Reset
+    /// clears all 64 while leaving the band gains — which are coefficients, not
+    /// state — untouched.
+    #[test]
+    fn reset_clears_biquad_state() {
+        let mut gains = flat_gains();
+        gains[2] = 9.0;
+        gains[8] = -7.0;
+        gains[14] = 5.0;
+
+        let mut used = EqStage::new(gains, SAMPLE_RATE);
+        for i in 0..4096 {
+            used.process((i as f32 * 0.07).sin());
+        }
+        used.reset();
+
+        let mut fresh = EqStage::new(gains, SAMPLE_RATE);
+        for i in 0..2048 {
+            let input = (i as f32 * 0.13).sin();
+            let a = used.process(input);
+            let b = fresh.process(input);
+            assert!(
+                (a - b).abs() < 1e-6,
+                "sample {i}: reset EQ gave {a}, fresh EQ {b}"
+            );
+        }
+
+        for (i, &gain) in gains.iter().enumerate() {
+            let name = EqStage::band_param_name(i);
+            assert!(
+                (used.get_parameter(&name).unwrap() - gain).abs() < 1e-6,
+                "reset lost the gain of band {i}"
+            );
+        }
     }
 
     #[test]

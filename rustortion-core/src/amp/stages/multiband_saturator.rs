@@ -49,6 +49,18 @@ impl LR4Filter {
         filter
     }
 
+    /// Zero both cascaded biquads' delay registers, keeping the cutoff.
+    const fn reset(&mut self) {
+        self.x1_1 = 0.0;
+        self.x2_1 = 0.0;
+        self.y1_1 = 0.0;
+        self.y2_1 = 0.0;
+        self.x1_2 = 0.0;
+        self.x2_2 = 0.0;
+        self.y1_2 = 0.0;
+        self.y2_2 = 0.0;
+    }
+
     fn set_cutoff(&mut self, cutoff_hz: f32, sample_rate: f32) {
         // Butterworth Q for LR4 cascade
         let q = std::f32::consts::FRAC_1_SQRT_2;
@@ -254,6 +266,30 @@ impl Stage for MultibandSaturatorStage {
 
         // Mix bands with level controls and sum
         low_clean * self.low_level + mid_clean * self.mid_level + high_clean * self.high_level
+    }
+
+    /// Clears every piece of per-band memory: the six LR4 crossover /
+    /// phase-compensation filters (8 registers each), the three envelope
+    /// followers, and the three DC blockers.
+    fn reset(&mut self) {
+        for filter in [
+            &mut self.low_lp,
+            &mut self.mid_hp_low,
+            &mut self.mid_lp_high,
+            &mut self.high_hp,
+            &mut self.low_allpass_lp,
+            &mut self.low_allpass_hp,
+        ] {
+            filter.reset();
+        }
+
+        self.low_env.reset();
+        self.mid_env.reset();
+        self.high_env.reset();
+
+        self.low_dc.reset();
+        self.mid_dc.reset();
+        self.high_dc.reset();
     }
 
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {

@@ -81,6 +81,12 @@ impl Stage for FilterStage {
         }
     }
 
+    /// Clears the one-sample input/output memory of the first-order section.
+    fn reset(&mut self) {
+        self.prev_input = 0.0;
+        self.prev_output = 0.0;
+    }
+
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "cutoff" => {
@@ -157,6 +163,33 @@ mod tests {
             hf_avg_abs > 0.5,
             "High-frequency attenuated too much: avg_abs={hf_avg_abs}"
         );
+    }
+
+    /// PLUG-2: the engine runs two of these as input filters, so their one-pole
+    /// memory has to clear on a seek like everything else.
+    #[test]
+    fn reset_clears_filter_memory() {
+        for filter_type in [FilterType::Highpass, FilterType::Lowpass] {
+            let mut used = FilterStage::new(filter_type, 1_000.0, 48_000.0);
+            for _ in 0..1000 {
+                used.process(1.0);
+            }
+            used.reset();
+
+            let mut fresh = FilterStage::new(filter_type, 1_000.0, 48_000.0);
+            for i in 0..256 {
+                let input = (i as f32 * 0.1).sin();
+                let a = used.process(input);
+                let b = fresh.process(input);
+                assert!(
+                    (a - b).abs() < 1e-9,
+                    "{filter_type:?} sample {i}: reset gave {a}, fresh {b}"
+                );
+            }
+
+            // Cutoff is a parameter, not state.
+            assert!((used.get_parameter("cutoff").unwrap() - 1_000.0).abs() < 1e-6);
+        }
     }
 
     #[test]

@@ -336,6 +336,280 @@ mod stages {
 }
 
 // ---------------------------------------------------------------------------
+// Reset path (PLUG-2)
+// ---------------------------------------------------------------------------
+
+mod reset {
+    //! `Stage::reset` and `Engine::reset` exist because nih-plug calls
+    //! `Plugin::reset` on transport locate — and it documents that as callable
+    //! "at any other time from the audio thread". So the whole reset path is RT
+    //! path: it must zero state **in place** and must never be wired to the
+    //! engine-rebuild machinery, which allocates.
+    //!
+    //! Every stage is exercised with real audio *before* the audit, so each one
+    //! has genuine state to clear rather than trivially-already-zero buffers.
+
+    use super::*;
+    use rustortion_core::amp::stages::nam::NamConfig;
+
+    /// One live instance of every `Stage` impl in the workspace. Kept exhaustive
+    /// by hand; `Stage::reset` is a required trait method, so a new stage cannot
+    /// silently skip `reset` itself, but it *can* skip this audit — hence the
+    /// count assertion below.
+    fn all_stages() -> Vec<Box<dyn Stage>> {
+        vec![
+            Box::new(PreampStage::new(
+                5.0,
+                0.2,
+                ClipperType::Asymmetric,
+                SAMPLE_RATE_F32,
+            )),
+            Box::new(CompressorStage::new(
+                1.0,
+                50.0,
+                -20.0,
+                4.0,
+                0.0,
+                SAMPLE_RATE_F32,
+            )),
+            Box::new(ToneStackStage::new(
+                ToneStackModel::British,
+                1.2,
+                0.8,
+                1.4,
+                1.0,
+                SAMPLE_RATE_F32,
+            )),
+            Box::new(PowerAmpStage::new(
+                0.5,
+                PowerAmpType::ClassAB,
+                0.6,
+                80.0,
+                SAMPLE_RATE_F32,
+            )),
+            Box::new(LevelStage::new(0.5)),
+            Box::new(NoiseGateStage::new(
+                -30.0,
+                10.0,
+                1.0,
+                50.0,
+                50.0,
+                SAMPLE_RATE_F32,
+            )),
+            Box::new(MultibandSaturatorStage::new(
+                0.5,
+                0.5,
+                0.5,
+                1.0,
+                1.0,
+                1.0,
+                200.0,
+                2000.0,
+                SAMPLE_RATE_F32,
+            )),
+            // Passthrough NAM stage: no `.nam` file on disk in CI, so this
+            // covers the `model: None` arm. The loaded arm delegates straight
+            // to `nam_rs::Model::reset`, which nam-rs audits on its own side.
+            Box::new(NamConfig::default().to_stage(SAMPLE_RATE_F32)),
+            Box::new(DelayStage::new(250.0, 0.4, 0.5, SAMPLE_RATE_F32)),
+            Box::new(ReverbStage::new(0.7, 0.4, 0.5, SAMPLE_RATE_F32)),
+            Box::new(EqStage::new([3.0; NUM_BANDS], SAMPLE_RATE_F32)),
+            Box::new(TremoloStage::new(5.0, 0.7, 0.5, SAMPLE_RATE_F32)),
+            // Not in the GUI stage registry, but it is a `Stage` impl and the
+            // engine runs two of them as the input filters.
+            Box::new(FilterStage::new(
+                FilterType::Highpass,
+                80.0,
+                SAMPLE_RATE_F32,
+            )),
+        ]
+    }
+
+    #[test]
+    fn stage_reset_does_not_allocate() {
+        // Covers: `Stage::reset` on every impl. Buffer-backed stages (delay
+        // ring, reverb combs/allpasses) must `fill(0.0)` rather than
+        // reallocate; the rest are field assignments.
+        let mut stages = all_stages();
+        assert_eq!(
+            stages.len(),
+            13,
+            "all_stages() is out of date — every `impl Stage` must be audited here"
+        );
+
+        // Load every stage up with real state first, so `reset` has something
+        // to clear. Done outside the audit: `process_block` is covered by the
+        // per-stage tests above.
+        let mut block: Vec<f32> = (0..BUFFER_SIZE)
+            .map(|i| (i as f32 * 0.11).sin() * 0.8)
+            .collect();
+        for stage in &mut stages {
+            for _ in 0..8 {
+                stage.process_block(&mut block);
+            }
+        }
+
+        let violations = check_no_alloc(|| {
+            for stage in &mut stages {
+                stage.reset();
+            }
+        });
+        assert_eq!(
+            violations, 0,
+            "Stage::reset allocated {violations} time(s) on the RT path"
+        );
+    }
+
+    #[test]
+    fn chain_reset_does_not_allocate() {
+        // Covers: AmplifierChain::reset walking every stage, bypassed included.
+        let mut chain = AmplifierChain::new();
+        for stage in all_stages() {
+            chain.add_stage(stage);
+        }
+        chain.set_bypassed(0, true);
+
+        let mut block = vec![0.4_f32; BUFFER_SIZE];
+        chain.process_block(&mut block);
+
+        let violations = check_no_alloc(|| chain.reset());
+        assert_eq!(
+            violations, 0,
+            "AmplifierChain::reset allocated {violations} time(s) on the RT path"
+        );
+    }
+
+    /// Build a plugin engine with as much stateful machinery installed as
+    /// possible — oversampling resamplers, a loaded IR cabinet, a pitch shifter,
+    /// input filters and a chain of buffer-backed stages — then run audio
+    /// through it so every buffer holds something.
+    fn loaded_engine(
+        oversample: f64,
+    ) -> (Engine, EngineHandle, RtDropReceiver, Vec<f32>, Vec<f32>) {
+        let max_ir_samples = (SAMPLE_RATE * DEFAULT_MAX_IR_MS) / 1000;
+        let mut cabinet = IrCabinet::new(ConvolverType::Fir, max_ir_samples);
+        cabinet.set_convolver(make_fir_convolver());
+
+        let (mut engine, handle, rx) = plugin_engine_with_ir(oversample, cabinet);
+
+        let mut chain = AmplifierChain::new();
+        for stage in all_stages() {
+            chain.add_stage(stage);
+        }
+        handle.set_amp_chain(chain);
+        handle.set_input_filters(
+            Some(Box::new(FilterStage::new(
+                FilterType::Highpass,
+                80.0,
+                SAMPLE_RATE_F32,
+            ))),
+            Some(Box::new(FilterStage::new(
+                FilterType::Lowpass,
+                8000.0,
+                SAMPLE_RATE_F32,
+            ))),
+        );
+        // Built off the RT thread inside the handle, like the GUI would.
+        handle.set_pitch_shift(7);
+
+        let (input, mut output) = buffers();
+        // Drain the queued messages and fill every buffer with real audio,
+        // outside any audit.
+        for _ in 0..8 {
+            engine.process(&input, &mut output).unwrap();
+        }
+        (engine, handle, rx, input, output)
+    }
+
+    #[test]
+    fn engine_reset_does_not_allocate() {
+        // Covers: the full Engine::reset fan-out — input filters, samplers
+        // (rubato resampler state + staging buffers), chain, pitch shifter
+        // (STFT ring + overlap-add + phase state), IR cabinet delay line.
+        // Asserted at 1x so the resamplers are bypassed by the engine but
+        // still reset, and with several blocks of steady state afterwards so a
+        // reset that left the engine in a state needing re-allocation on the
+        // next block would still be caught.
+        let (mut engine, _handle, _rx, input, mut output) = loaded_engine(1.0);
+
+        let violations = check_no_alloc(|| {
+            for _ in 0..4 {
+                engine.reset();
+                for _ in 0..4 {
+                    engine.process(&input, &mut output).unwrap();
+                }
+            }
+        });
+        assert_eq!(
+            violations, 0,
+            "Engine::reset allocated {violations} time(s) on the RT path"
+        );
+    }
+
+    #[test]
+    fn engine_reset_with_oversampling_does_not_allocate() {
+        // Covers: `Samplers::reset` for real — `rubato`'s `Fft::reset` zeroes
+        // overlap/scratch buffers it already owns, and `update_chunk_sizes` is
+        // a no-op for the `FixedSync::Both` resamplers built here.
+        let (mut engine, _handle, _rx, input, mut output) = loaded_engine(4.0);
+
+        let violations = check_no_alloc(|| {
+            for _ in 0..4 {
+                engine.reset();
+                for _ in 0..4 {
+                    engine.process(&input, &mut output).unwrap();
+                }
+            }
+        });
+        assert_eq!(
+            violations, 0,
+            "Engine::reset at 4x allocated {violations} time(s) on the RT path"
+        );
+    }
+
+    #[test]
+    fn engine_reset_with_engaged_fifo_does_not_allocate() {
+        // Covers: `BlockFifo::reset`, which re-primes the pre-fill (a fill of
+        // memory owned since `new_variable_block`) rather than emptying the
+        // FIFO, so the latency it implies survives the reset.
+        let (mut engine, _handle, _rx, _input, _output) = loaded_engine(4.0);
+
+        // A ragged block engages the FIFO permanently — outside the audit,
+        // since engagement itself is covered by its own test above.
+        let ragged = vec![0.5_f32; 37];
+        let mut ragged_out = vec![0.0_f32; 37];
+        for _ in 0..4 {
+            engine.process(&ragged, &mut ragged_out).unwrap();
+        }
+        assert!(
+            engine.fifo_engaged(),
+            "the ragged block should have engaged"
+        );
+
+        let latency_before = engine.latency_frames();
+        let violations = check_no_alloc(|| {
+            for _ in 0..4 {
+                engine.reset();
+                for _ in 0..4 {
+                    engine.process(&ragged, &mut ragged_out).unwrap();
+                }
+            }
+        });
+        assert_eq!(
+            violations, 0,
+            "Engine::reset with an engaged FIFO allocated {violations} time(s) on the RT path"
+        );
+        assert!(engine.fifo_engaged(), "reset must not disengage the FIFO");
+        assert_eq!(
+            engine.latency_frames(),
+            latency_before,
+            "reset must not change the latency the host was told about — the \
+             audio thread has no way to re-report it"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
 // IR cabinet tests
 // ---------------------------------------------------------------------------
 

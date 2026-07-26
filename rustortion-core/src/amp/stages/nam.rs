@@ -107,6 +107,20 @@ impl Stage for NamStage {
         }
     }
 
+    /// Returns the neural model to its initial conditions —
+    /// [`nam_rs::Model::reset`] clears the WaveNet ring buffers / LSTM
+    /// recurrent state (and every submodel of a slimmable model), allocating
+    /// nothing. A passthrough or rate-mismatch bypass has no state at all.
+    ///
+    /// The `dry` scratch buffer is deliberately left alone: every sample of it
+    /// that `process_block` reads is written earlier in the same call, and
+    /// keeping the allocation is the whole point of holding it.
+    fn reset(&mut self) {
+        if let Some(model) = self.model.as_mut() {
+            model.reset();
+        }
+    }
+
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "input_gain_db" => {

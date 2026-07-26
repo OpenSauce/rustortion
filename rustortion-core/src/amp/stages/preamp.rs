@@ -54,6 +54,14 @@ impl Stage for PreampStage {
         self.dc_blocker.process(clipped)
     }
 
+    /// Clears the inter-stage lowpass and the output DC blocker. The
+    /// waveshapers themselves are memoryless, so those two filters are the
+    /// stage's entire state.
+    fn reset(&mut self) {
+        self.interstage_lp.reset();
+        self.dc_blocker.reset();
+    }
+
     fn set_parameter(&mut self, p: &str, v: f32) -> Result<(), &'static str> {
         match p {
             "gain" => {

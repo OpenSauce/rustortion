@@ -66,6 +66,19 @@ impl AmplifierChain {
         }
     }
 
+    /// Clear the accumulated state of every stage (see [`Stage::reset`]).
+    ///
+    /// Bypassed stages are reset too: their state is frozen, not gone, and
+    /// un-bypassing one that still held a pre-seek delay line would spill that
+    /// audio into the present.
+    ///
+    /// RT-safe — every `Stage::reset` zeroes in place.
+    pub fn reset(&mut self) {
+        for stage in &mut self.stages {
+            stage.inner.reset();
+        }
+    }
+
     /// Forward a parameter change to a live stage.
     pub fn set_parameter(
         &mut self,
@@ -292,6 +305,61 @@ mod tests {
             (out - 1.0).abs() < 1e-6,
             "remaining bypassed stage should pass through"
         );
+    }
+
+    /// PLUG-2: the chain must forward `reset` to every stage it holds.
+    #[test]
+    fn reset_clears_every_stage() {
+        use crate::amp::stages::delay::DelayStage;
+
+        let mut chain = AmplifierChain::new();
+        chain.add_stage(Box::new(DelayStage::new(20.0, 0.8, 1.0, 48_000.0)));
+        chain.add_stage(Box::new(DelayStage::new(30.0, 0.8, 1.0, 48_000.0)));
+
+        // Load both delay lines up.
+        for _ in 0..48_000 {
+            chain.process(0.0);
+        }
+        chain.process(1.0);
+        for _ in 0..500 {
+            chain.process(0.0);
+        }
+
+        chain.reset();
+
+        for i in 0..48_000 {
+            let out = chain.process(0.0);
+            assert!(out.abs() < 1e-9, "stage state survived reset at {i}: {out}");
+        }
+    }
+
+    /// A bypassed stage's state is frozen, not gone. Un-bypassing one that
+    /// still held pre-seek audio would spill it into the present, so `reset`
+    /// covers bypassed stages too.
+    #[test]
+    fn reset_also_clears_bypassed_stages() {
+        use crate::amp::stages::delay::DelayStage;
+
+        let mut chain = AmplifierChain::new();
+        chain.add_stage(Box::new(DelayStage::new(20.0, 0.8, 1.0, 48_000.0)));
+
+        for _ in 0..48_000 {
+            chain.process(0.0);
+        }
+        chain.process(1.0);
+
+        // Bypass it, reset the chain, then bring it back.
+        chain.set_bypassed(0, true);
+        chain.reset();
+        chain.set_bypassed(0, false);
+
+        for i in 0..48_000 {
+            let out = chain.process(0.0);
+            assert!(
+                out.abs() < 1e-9,
+                "bypassed stage kept its state through reset at {i}: {out}"
+            );
+        }
     }
 
     #[test]

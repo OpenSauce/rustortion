@@ -64,6 +64,12 @@ impl Stage for CompressorStage {
         input * gain_reduction * self.makeup
     }
 
+    /// Drops the level envelope back to zero, so the first block after a seek
+    /// is not gain-reduced by whatever was loud before it.
+    fn reset(&mut self) {
+        self.envelope.reset();
+    }
+
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "threshold" => {
