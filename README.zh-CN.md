@@ -41,8 +41,8 @@
 
 ```bash
 sudo apt-get install libjack-jackd2-0
-tar -xf rustortion-x86_64-unknown-linux-gnu.tar.xz
-cd rustortion-x86_64-unknown-linux-gnu
+tar -xf rustortion-standalone-x86_64-unknown-linux-gnu.tar.xz
+cd rustortion-standalone-x86_64-unknown-linux-gnu
 ./rustortion
 ```
 

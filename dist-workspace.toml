@@ -19,7 +19,21 @@ install-updater = false
 include = ["impulse_responses", "presets", "README.md", "LICENSE"]
 # Skip checking whether the specified configuration files are up to date
 allow-dirty = ["ci"]
+# Build only the packages that actually produce release artifacts, i.e. the
+# `rustortion` bin from rustortion-standalone.
+#
+# Without this, dist runs `cargo build --workspace` and compiles every member —
+# including rustortion-plugin, whose iced_baseview -> baseview dep needs x11-xcb
+# headers at build time. That plugin build is pure waste here: its output is
+# discarded, and plugin-release.yml builds the real bundles on `release:
+# published`. It also broke the v0.3.0 tag, because the apt list below covers
+# what the standalone needs (x11-dl, dlopened at runtime) and not what baseview
+# needs, and nothing on the PR path exercises the dist build.
+precise-builds = true
 
+# Only the packages the *standalone* needs. It reaches X11 through x11-dl,
+# which dlopens at runtime and needs nothing at build time — see precise-builds
+# above for why the plugin's build-time X11 requirements are not our problem.
 [dist.dependencies.apt]
 libjack-jackd2-dev = '*'
 pkg-config = '*'
