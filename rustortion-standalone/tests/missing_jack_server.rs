@@ -22,9 +22,11 @@ fn missing_jack_server_is_reported_as_an_error() {
         .err()
         .expect("expected an error when no JACK server is reachable");
 
+    // Asserts on the stable part of the message, not its exact prose, so
+    // rewording the hint does not require editing this test in lockstep.
     let rendered = format!("{error:#}");
     assert!(
-        rendered.contains("JACK server not running"),
-        "expected an actionable message, got: {rendered}"
+        rendered.contains("JACK"),
+        "expected an actionable message naming JACK, got: {rendered}"
     );
 }

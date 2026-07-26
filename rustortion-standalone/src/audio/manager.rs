@@ -40,8 +40,11 @@ impl Manager {
     pub fn new(settings: Settings) -> Result<Self> {
         clipper::init();
 
-        let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
-            .context("JACK server not running — start PipeWire/JACK and retry")?;
+        // A hint, not an assertion: this also fires when libjack is missing
+        // entirely, or on a version mismatch where a server *is* running.
+        let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER).context(
+            "could not connect to a JACK server — is PipeWire/JACK installed and running?",
+        )?;
 
         let sample_rate = client.sample_rate() as usize;
         let buffer_size = client.buffer_size() as usize;
