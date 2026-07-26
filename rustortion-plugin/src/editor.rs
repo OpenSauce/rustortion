@@ -61,28 +61,19 @@ impl Editor for PluginEditor {
         parent: nih_plug::editor::ParentWindowHandle,
         context: Arc<dyn GuiContext>,
     ) -> Box<dyn std::any::Any + Send> {
-        // NOTE: the engine handle is deliberately NOT captured here. It is
-        // resolved per call in `PluginBackend`, because a host enable/disable
-        // cycle replaces the engine (and its channel) underneath us.
-        let ir_loader = self
-            .shared_state
-            .ir_loader
-            .lock()
-            .ok()
-            .and_then(|g| g.clone());
-        let sample_rate = f32::from_bits(
-            self.shared_state
-                .sample_rate
-                .load(std::sync::atomic::Ordering::Relaxed),
-        );
+        // NOTE: no engine state is captured here — not the engine handle, not
+        // the IR loader, not the sample rate. All three are owned by the engine,
+        // all three are replaced by a `deactivate()`/`initialize()` cycle, and
+        // this window outlives that cycle. `PluginBackend` resolves each of them
+        // from `SharedState` per call instead. `restored_preset_idx` is safe to
+        // read once: it is the DAW's restored value at open time, not engine
+        // state.
         let restored_preset_idx = self.params.preset_idx.value();
 
         let flags = PluginAppFlags {
             params: self.params.clone(),
             context,
             shared_state: self.shared_state.clone(),
-            ir_loader,
-            sample_rate,
             restored_preset_idx,
         };
 
@@ -130,8 +121,6 @@ struct PluginAppFlags {
     params: Arc<RustortionParams>,
     context: Arc<dyn GuiContext>,
     shared_state: Arc<crate::SharedState>,
-    ir_loader: Option<Arc<rustortion_core::ir::loader::IrLoader>>,
-    sample_rate: f32,
     restored_preset_idx: i32,
 }
 
@@ -146,13 +135,7 @@ impl iced_baseview::Application for PluginApp {
     type Flags = PluginAppFlags;
 
     fn new(flags: Self::Flags) -> (Self, iced_baseview::Task<Self::Message>) {
-        let backend = PluginBackend::new(
-            flags.params,
-            flags.context,
-            flags.ir_loader,
-            flags.shared_state.clone(),
-            flags.sample_rate,
-        );
+        let backend = PluginBackend::new(flags.params, flags.context, flags.shared_state.clone());
 
         let available_irs = backend.get_available_irs();
 

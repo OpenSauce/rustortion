@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::sync::atomic::Ordering;
 
 use nih_plug::prelude::{GuiContext, Param};
 use rustortion_core::amp::chain::AmplifierChain;
@@ -12,45 +13,85 @@ use rustortion_ui::backend::{Capabilities, ExternalEvent, ParamBackend};
 
 use crate::SharedState;
 use crate::params::RustortionParams;
+
+/// GUI-side driver for the plugin's engine.
+///
+/// Holds **no** snapshot of engine state. Everything the engine owns — the
+/// message channel, the IR loader, the sample rate — is resolved from
+/// [`SharedState`] on each call.
+///
+/// That is not a style preference. `deactivate()` drops the engine (and with
+/// it the receiving end of the channel) and nulls the shared slots; a
+/// subsequent `initialize()` rebuilds all of them, possibly at a different
+/// sample rate. nih-plug also permits `initialize()` to run repeatedly with no
+/// intervening `deactivate()` while restoring state. Anything captured when the
+/// editor window opened outlives every one of those transitions, and the editor
+/// window is not reopened in between — so a captured value is a value that goes
+/// quietly wrong while the UI keeps looking alive.
 pub struct PluginBackend {
     params: Arc<RustortionParams>,
     context: Arc<dyn GuiContext>,
-    ir_loader: Option<Arc<IrLoader>>,
     shared_state: Arc<SharedState>,
     capabilities: Capabilities,
-    sample_rate: f32,
 }
 
 impl PluginBackend {
     pub fn new(
         params: Arc<RustortionParams>,
         context: Arc<dyn GuiContext>,
-        ir_loader: Option<Arc<IrLoader>>,
         shared_state: Arc<SharedState>,
-        sample_rate: f32,
     ) -> Self {
         Self {
             params,
             context,
-            ir_loader,
             shared_state,
             capabilities: Capabilities::plugin(),
-            sample_rate,
         }
     }
 
-    /// The handle for the engine that is running *right now*.
-    ///
-    /// Deliberately resolved per call rather than cached. `deactivate()` drops
-    /// the engine — which drops the receiving end of the channel — and a
-    /// subsequent `initialize()` builds a new engine with a new channel. A
-    /// handle cloned when the editor opened would still point at the old,
-    /// disconnected channel, so every GUI edit would be silently discarded
-    /// while audio kept flowing through the new engine. That is exactly what
-    /// happens when a host's enable/disable toggle is used with the editor
-    /// open, and it is why this returns an `Option` instead of holding a field.
+    /// The handle for the engine that is running *right now*, or `None` between
+    /// `deactivate()` and the next `initialize()`.
     fn engine(&self) -> Option<EngineHandle> {
         self.shared_state.engine_handle.lock().ok()?.clone()
+    }
+
+    /// The IR loader belonging to the current engine.
+    ///
+    /// Rebuilt by `initialize()` bound to the then-current sample rate, since
+    /// the loader is what resamples IRs on the way in. A loader from a previous
+    /// activation resamples to the wrong rate; one captured while the plugin
+    /// was inactive is `None` forever and silently disables IR selection.
+    fn ir_loader(&self) -> Option<Arc<IrLoader>> {
+        self.shared_state.ir_loader.lock().ok()?.clone()
+    }
+
+    /// The host's sample rate, or `None` before the first `initialize()`.
+    ///
+    /// The shared slot starts at zero, and a host may open the editor before it
+    /// activates the plugin. Building a stage at 0 Hz is not merely inaccurate:
+    /// `FilterStage`'s alpha divides by the rate, so a lowpass comes out with a
+    /// NaN coefficient. Callers bail rather than hand that to a live engine.
+    fn host_sample_rate(&self) -> Option<f32> {
+        let sr = f32::from_bits(self.shared_state.sample_rate.load(Ordering::Relaxed));
+        (sr.is_finite() && sr > 0.0).then_some(sr)
+    }
+
+    /// Engine handle plus the effective rate to build stages at.
+    ///
+    /// Both or neither: a stage built at the wrong rate is no better than one
+    /// that never arrives, and it is harder to notice.
+    fn engine_with_effective_rate(&self) -> Option<(EngineHandle, f32)> {
+        Some((self.engine()?, self.effective_sample_rate()?))
+    }
+
+    /// Note a GUI edit that could not be delivered.
+    ///
+    /// No engine is a legitimate state, not an error, so this is `debug` rather
+    /// than `warn`. But it is also how the stale-handle bug stayed hidden for
+    /// four months: every dropped edit went into a log line nobody was running
+    /// with. Leave a trail for the next `NIH_LOG=debug` session.
+    fn note_dropped_edit(what: &str) {
+        log::debug!("GUI edit '{what}' dropped: no active engine");
     }
 
     /// Read DAW-persisted chain state (from `#[persist]` field).
@@ -62,12 +103,12 @@ impl PluginBackend {
     /// not the requested one. This ensures chain rebuilds match the current
     /// sampler state.
     #[allow(clippy::cast_precision_loss)]
-    fn effective_sample_rate(&self) -> f32 {
+    fn effective_sample_rate(&self) -> Option<f32> {
         let active = self
             .shared_state
             .active_oversampling
-            .load(std::sync::atomic::Ordering::Relaxed);
-        self.sample_rate * active as f32
+            .load(Ordering::Relaxed);
+        Some(self.host_sample_rate()? * active as f32)
     }
 
     /// Notify the host that a parameter value changed from the GUI.
@@ -85,21 +126,28 @@ impl PluginBackend {
 
 impl ParamBackend for PluginBackend {
     fn set_parameter(&self, stage_idx: usize, name: &'static str, value: f32) {
-        if let Some(engine) = self.engine() {
-            engine.set_parameter(stage_idx, name, value);
-        }
+        let Some(engine) = self.engine() else {
+            Self::note_dropped_edit("set_parameter");
+            return;
+        };
+        engine.set_parameter(stage_idx, name, value);
     }
 
     fn rebuild_stage(&self, stage_idx: usize, config: &StageConfig) {
-        let sr = self.effective_sample_rate();
-        let runtime_stage = config.to_runtime(sr);
-        if let Some(engine) = self.engine() {
-            engine.replace_stage(stage_idx, runtime_stage);
-        }
+        // Resolve before building: with no engine the stage would be allocated
+        // only to be dropped, and with no rate it would be built wrong.
+        let Some((engine, sr)) = self.engine_with_effective_rate() else {
+            Self::note_dropped_edit("rebuild_stage");
+            return;
+        };
+        engine.replace_stage(stage_idx, config.to_runtime(sr));
     }
 
     fn set_amp_chain(&self, stages: &[StageConfig]) {
-        let sr = self.effective_sample_rate();
+        let Some((engine, sr)) = self.engine_with_effective_rate() else {
+            Self::note_dropped_edit("set_amp_chain");
+            return;
+        };
         let mut chain = AmplifierChain::new();
         for cfg in stages {
             chain.add_stage(cfg.to_runtime(sr));
@@ -109,62 +157,64 @@ impl ParamBackend for PluginBackend {
                 chain.set_bypassed(i, true);
             }
         }
-        if let Some(engine) = self.engine() {
-            engine.set_amp_chain(chain);
-        }
+        engine.set_amp_chain(chain);
     }
 
     fn set_bypass(&self, stage_idx: usize, bypassed: bool) {
-        if let Some(engine) = self.engine() {
-            engine.set_stage_bypassed(stage_idx, bypassed);
-        }
+        let Some(engine) = self.engine() else {
+            Self::note_dropped_edit("set_bypass");
+            return;
+        };
+        engine.set_stage_bypassed(stage_idx, bypassed);
     }
 
     fn add_stage(&self, idx: usize, config: &StageConfig) {
-        let sr = self.effective_sample_rate();
-        let runtime_stage = config.to_runtime(sr);
-        if let Some(engine) = self.engine() {
-            engine.add_stage(idx, runtime_stage);
-        }
+        let Some((engine, sr)) = self.engine_with_effective_rate() else {
+            Self::note_dropped_edit("add_stage");
+            return;
+        };
+        engine.add_stage(idx, config.to_runtime(sr));
     }
 
     fn remove_stage(&self, idx: usize) {
-        if let Some(engine) = self.engine() {
-            engine.remove_stage(idx);
-        }
+        let Some(engine) = self.engine() else {
+            Self::note_dropped_edit("remove_stage");
+            return;
+        };
+        engine.remove_stage(idx);
     }
 
     fn swap_stages(&self, a: usize, b: usize) {
-        if let Some(engine) = self.engine() {
-            engine.swap_stages(a, b);
-        }
+        let Some(engine) = self.engine() else {
+            Self::note_dropped_edit("swap_stages");
+            return;
+        };
+        engine.swap_stages(a, b);
     }
 
     fn set_ir(&self, name: &str) {
-        let Some(loader) = &self.ir_loader else {
-            return;
-        };
-        let Some(engine) = self.engine() else {
+        // The IR runs after downsampling, so it is built at the host rate, not
+        // the oversampled one.
+        let (Some(loader), Some(engine), Some(sr)) =
+            (self.ir_loader(), self.engine(), self.host_sample_rate())
+        else {
+            Self::note_dropped_edit("set_ir");
             return;
         };
         // Try embedded factory IR first
         if let Some(bytes) = crate::factory::get_factory_ir(name) {
-            crate::ir_helper::load_and_set_ir_from_bytes(
-                &engine,
-                loader,
-                name,
-                &bytes,
-                self.sample_rate,
-            );
+            crate::ir_helper::load_and_set_ir_from_bytes(&engine, &loader, name, &bytes, sr);
         } else {
             // Fall back to filesystem (user-added IRs)
-            crate::ir_helper::load_and_set_ir(&engine, loader, name, self.sample_rate);
+            crate::ir_helper::load_and_set_ir(&engine, &loader, name, sr);
         }
     }
 
     fn set_ir_bypass(&self, bypassed: bool) {
         if let Some(engine) = self.engine() {
             engine.set_ir_bypass(bypassed);
+        } else {
+            Self::note_dropped_edit("set_ir_bypass");
         }
         let param = &self.params.ir_bypass;
         self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(bypassed));
@@ -173,32 +223,29 @@ impl ParamBackend for PluginBackend {
     fn set_ir_gain(&self, gain: f32) {
         if let Some(engine) = self.engine() {
             engine.set_ir_gain(gain);
+        } else {
+            Self::note_dropped_edit("set_ir_gain");
         }
         let param = &self.params.ir_gain;
         self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(gain));
     }
 
     fn set_input_filter(&self, filter: &InputFilterConfig) {
-        let hp: Option<Box<dyn Stage>> = if filter.hp_enabled {
-            Some(Box::new(FilterStage::new(
-                FilterType::Highpass,
-                filter.hp_cutoff,
-                self.sample_rate,
-            )))
-        } else {
-            None
-        };
-        let lp: Option<Box<dyn Stage>> = if filter.lp_enabled {
-            Some(Box::new(FilterStage::new(
-                FilterType::Lowpass,
-                filter.lp_cutoff,
-                self.sample_rate,
-            )))
-        } else {
-            None
-        };
-        if let Some(engine) = self.engine() {
+        // Input filters sit ahead of the upsampler, so they too are built at the
+        // host rate. Host param sync below happens either way — those are the
+        // host's parameters, and they stay valid with no engine attached.
+        if let (Some(engine), Some(sr)) = (self.engine(), self.host_sample_rate()) {
+            let hp: Option<Box<dyn Stage>> = filter.hp_enabled.then(|| {
+                Box::new(FilterStage::new(FilterType::Highpass, filter.hp_cutoff, sr))
+                    as Box<dyn Stage>
+            });
+            let lp: Option<Box<dyn Stage>> = filter.lp_enabled.then(|| {
+                Box::new(FilterStage::new(FilterType::Lowpass, filter.lp_cutoff, sr))
+                    as Box<dyn Stage>
+            });
             engine.set_input_filters(hp, lp);
+        } else {
+            Self::note_dropped_edit("set_input_filter");
         }
 
         // Sync filter params to host
@@ -215,6 +262,8 @@ impl ParamBackend for PluginBackend {
     fn set_pitch_shift(&self, semitones: i32) {
         if let Some(engine) = self.engine() {
             engine.set_pitch_shift(semitones);
+        } else {
+            Self::note_dropped_edit("set_pitch_shift");
         }
         let param = &self.params.pitch_shift;
         self.notify_host_param_changed(param.as_ptr(), param.preview_normalized(semitones));
@@ -234,11 +283,11 @@ impl ParamBackend for PluginBackend {
         );
         self.shared_state
             .requested_oversampling
-            .store(factor, std::sync::atomic::Ordering::Relaxed);
+            .store(factor, Ordering::Relaxed);
         // Sync to params for DAW project persistence
         self.params
             .oversampling_factor
-            .store(factor, std::sync::atomic::Ordering::Relaxed);
+            .store(factor, Ordering::Relaxed);
         // Mark DAW session dirty so the new value is saved with the project.
         // #[persist] fields are serialized passively and don't trigger a save.
         let param = &self.params.preset_idx;
@@ -246,16 +295,18 @@ impl ParamBackend for PluginBackend {
         self.notify_host_param_changed(param.as_ptr(), current);
     }
 
+    /// Zero until the host activates the plugin. Read live so the NAM stage's
+    /// rate-mismatch badge reflects the engine that is actually running.
     fn sample_rate(&self) -> u32 {
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let sr = self.sample_rate as u32;
+        let sr = self.host_sample_rate().unwrap_or(0.0) as u32;
         sr
     }
 
     fn oversampling_factor(&self) -> u32 {
         self.shared_state
             .requested_oversampling
-            .load(std::sync::atomic::Ordering::Relaxed)
+            .load(Ordering::Relaxed)
     }
 
     fn capabilities(&self) -> &Capabilities {
@@ -265,7 +316,7 @@ impl ParamBackend for PluginBackend {
     fn get_available_irs(&self) -> Vec<String> {
         let mut names = crate::factory::factory_ir_names();
         // Also include any user IRs from filesystem
-        if let Some(loader) = &self.ir_loader {
+        if let Some(loader) = self.ir_loader() {
             for name in loader.available_ir_names() {
                 if !names.contains(&name) {
                     names.push(name);
