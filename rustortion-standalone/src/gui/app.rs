@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use anyhow::{Context, Result};
 use iced::widget::container;
 use iced::{Element, Length, Subscription, Task, Theme, time, time::Duration};
 use log::{debug, error};
@@ -35,9 +36,15 @@ pub struct AmplifierApp {
 }
 
 impl AmplifierApp {
-    pub fn boot(settings: Settings) -> (Self, Task<Message>) {
-        let audio_manager = Manager::new(settings.clone()).unwrap();
-        let mut preset_handler = PresetHandler::new(&settings.preset_dir).unwrap();
+    /// Build the application state.
+    ///
+    /// Fallible on purpose, and deliberately called *before* the iced runtime
+    /// starts: a missing JACK server is an expected condition and must surface
+    /// as a clean error, not as a panic inside the boot closure.
+    pub fn new(settings: Settings) -> Result<Self> {
+        let audio_manager = Manager::new(settings.clone())?;
+        let mut preset_handler = PresetHandler::new(&settings.preset_dir)
+            .with_context(|| format!("failed to open preset directory {}", settings.preset_dir))?;
 
         // Try and load the last opened preset
         if let Some(last_opened_preset) = settings.selected_preset.as_deref() {
@@ -144,16 +151,13 @@ impl AmplifierApp {
             is_recording: false,
         };
 
-        (
-            Self {
-                shared,
-                settings,
-                settings_handler,
-                tuner_handler: TunerHandler::new(),
-                midi_handler,
-            },
-            Task::none(),
-        )
+        Ok(Self {
+            shared,
+            settings,
+            settings_handler,
+            tuner_handler: TunerHandler::new(),
+            midi_handler,
+        })
     }
 
     pub fn view(&self) -> Element<'_, Message> {
