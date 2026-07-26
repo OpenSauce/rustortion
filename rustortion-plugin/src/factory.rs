@@ -112,6 +112,27 @@ mod tests {
         );
     }
 
+    /// The embedded IR set is curated, so a factory preset can now name an IR
+    /// that is no longer shipped — which fails silently at load time as a
+    /// preset with no cabinet. This is the guard that ties the two embeds
+    /// together: narrowing `FactoryIrs` must not orphan a preset.
+    #[test]
+    fn every_preset_ir_is_embedded() {
+        let embedded = factory_ir_names();
+        let missing: Vec<String> = load_factory_presets()
+            .iter()
+            .filter_map(|p| p.ir_name.clone())
+            .filter(|ir| !embedded.contains(ir))
+            .collect();
+
+        assert!(
+            missing.is_empty(),
+            "factory presets reference IRs that are not embedded:\n  {}\n\
+             either re-include them in FactoryIrs or repoint the preset",
+            missing.join("\n  ")
+        );
+    }
+
     /// Same vacuity guard for the IR embed, plus the round-trip every caller
     /// relies on: a name from `factory_ir_names` must resolve to bytes.
     #[test]
