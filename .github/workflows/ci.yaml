@@ -51,12 +51,45 @@ jobs:
       - name: Test
         run: make test
 
+  # Builds the plugin natively on every platform we care about. Only
+  # linux-x86_64 is shipped as a release artifact today (see
+  # plugin-release.yml); the other two exist to turn "the dep tree resolves"
+  # into "it actually links and bundles", which nothing has ever verified.
+  #
+  # Native runners on purpose — cross-compiling the iced_baseview GUI needs a
+  # full target sysroot for X11/xcb/OpenGL, which is the blocker the README
+  # documents. Building on ubuntu-24.04-arm sidesteps it entirely.
   plugin:
-    name: Plugin bundle
-    runs-on: ubuntu-latest
+    name: Plugin bundle (${{ matrix.label }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # One platform failing should not hide the result for the others — the
+      # whole point of these jobs is finding out which ones work.
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-x86_64
+            runner: ubuntu-latest
+            vst3_dir: x86_64-linux
+            vst3_lib: Rustortion.so
+          - label: linux-aarch64
+            # Free for public repositories. Native arm64, no sysroot needed.
+            runner: ubuntu-24.04-arm
+            vst3_dir: aarch64-linux
+            vst3_lib: Rustortion.so
+          - label: windows-x86_64
+            runner: windows-latest
+            vst3_dir: x86_64-win
+            # On Windows the VST3 payload is a DLL that keeps the .vst3
+            # extension, not a .so — see nih_plug_xtask's
+            # `vst3_bundle_library_name`.
+            vst3_lib: Rustortion.vst3
     steps:
       - uses: actions/checkout@v6
+      # X11/GL headers for the plugin GUI. Windows needs no equivalent — wgpu
+      # goes through DX12 and the window backend is win32.
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y \
             libjack-jackd2-dev libasound2-dev pkg-config \
@@ -70,24 +103,42 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Keep each platform's target/ separate; a shared cache is how
+          # foreign-arch artifacts leak into a bundle in the first place.
+          key: ${{ matrix.label }}
       # nih_plug_xtask never cleans target/bundled, and rust-cache restores
       # target/ across runs. Without this, bundles from other platforms (e.g. a
       # stale Contents/x86_64-win/) survive and get shipped as Linux artifacts.
       - name: Clean stale bundle output
+        shell: bash
         run: rm -rf target/bundled
       - name: Bundle plugin
         run: cargo xtask bundle rustortion-plugin --release --locked
       - name: Verify bundle structure
+        shell: bash
         run: |
           set -euo pipefail
           test -f target/bundled/Rustortion.clap
-          test -f target/bundled/Rustortion.vst3/Contents/x86_64-linux/Rustortion.so
+          test -f "target/bundled/Rustortion.vst3/Contents/${{ matrix.vst3_dir }}/${{ matrix.vst3_lib }}"
           # Nothing from another OS/arch may be present.
           unexpected="$(find target/bundled/Rustortion.vst3/Contents \
-            -mindepth 1 -maxdepth 1 -not -name 'x86_64-linux' -print)"
+            -mindepth 1 -maxdepth 1 -not -name '${{ matrix.vst3_dir }}' -print)"
           if [ -n "$unexpected" ]; then
             echo "Unexpected entries in the VST3 bundle:"
             echo "$unexpected"
             exit 1
           fi
           find target/bundled
+      # A green build only proves the plugin links, not that a DAW will load
+      # it. Publishing the bundles makes the untested platforms hand-testable
+      # from the run's Artifacts section without cutting a release.
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: Rustortion-${{ matrix.label }}
+          path: |
+            target/bundled/Rustortion.clap
+            target/bundled/Rustortion.vst3
+          if-no-files-found: error
+          retention-days: 14
