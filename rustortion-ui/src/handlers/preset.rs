@@ -144,6 +144,20 @@ impl PresetHandler {
         &self.available_presets
     }
 
+    /// The preset the handler currently considers selected.
+    ///
+    /// Only moves when a select or save actually succeeded, so callers can use
+    /// it to decide whether a `Save` did any work or merely raised the
+    /// overwrite prompt.
+    pub fn selected_preset_name(&self) -> Option<&str> {
+        self.selected_preset.as_deref()
+    }
+
+    /// Whether the overwrite confirmation prompt is on screen.
+    pub const fn is_overwrite_confirmation_visible(&self) -> bool {
+        self.preset_bar.is_overwrite_confirmation_visible()
+    }
+
     pub fn selected_preset_index(&self) -> Option<usize> {
         let name = self.selected_preset.as_ref()?;
         self.available_presets.iter().position(|n| n == name)

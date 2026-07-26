@@ -72,6 +72,12 @@ impl PresetBar {
         self.overwrite_target = preset_name;
     }
 
+    /// Is the overwrite prompt currently up? Hosts block key events while a
+    /// dialog is open, and this one is modal in every way that matters.
+    pub const fn is_overwrite_confirmation_visible(&self) -> bool {
+        self.show_overwrite_confirmation
+    }
+
     pub fn hide_overwrite_confirmation(&mut self) {
         self.show_overwrite_confirmation = false;
         self.overwrite_target.clear();

@@ -114,18 +114,24 @@ impl Manager {
         if self.presets_dir.as_os_str().is_empty() {
             return Err(anyhow::anyhow!("Cannot delete presets in read-only mode"));
         }
-        let path = self.path_for(preset_name);
 
-        if path.exists() {
-            fs::remove_file(&path).context("Failed to delete preset file")?;
+        // Only ever remove a file we positively attributed to this preset when
+        // it was loaded. Deriving a path from the name instead would let
+        // `delete_preset("My_Preset")` delete `My_Preset.json` — which may well
+        // hold a *different* preset named `My Preset` — and report success.
+        let path = self
+            .preset_paths
+            .get(preset_name)
+            .filter(|path| path.exists())
+            .ok_or_else(|| anyhow::anyhow!("Preset file not found: {preset_name}"))?
+            .clone();
 
-            // Reload presets to reflect the deletion
-            self.load_presets()?;
+        fs::remove_file(&path).context("Failed to delete preset file")?;
 
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!("Preset file not found: {preset_name}"))
-        }
+        // Reload presets to reflect the deletion
+        self.load_presets()?;
+
+        Ok(())
     }
 
     pub fn preset_exists(&self, name: &str) -> bool {
@@ -140,20 +146,60 @@ impl Manager {
         self.presets.iter().find(|p| p.name == name)
     }
 
-    /// Resolve the file a preset should be written to (or deleted from).
+    /// Resolve the file a preset should be written to.
     ///
     /// If the preset is already on disk we reuse the exact path it was loaded
     /// from, so presets saved by older versions keep their existing filenames
-    /// and never end up duplicated. Only presets that do not exist yet get a
-    /// freshly encoded filename.
+    /// and never end up duplicated.
+    ///
+    /// A preset we have never seen gets a freshly encoded filename — but only
+    /// if nothing else already occupies it. Encoding is the identity on names
+    /// drawn from `[A-Za-z0-9-_]`, which is exactly the alphabet the old lossy
+    /// scheme emitted, so a *new* preset called `High_Gain` would otherwise
+    /// land on the shipped `High_Gain.json` holding `High Gain` and destroy it.
+    /// When the candidate is taken we fall back to the digest-suffixed stem
+    /// instead. Filenames carry no user-visible identity — the `name` field
+    /// inside the JSON does — so disambiguating silently is strictly
+    /// data-preserving and invisible to the user. Same-*name* overwrites are a
+    /// separate question, gated by the GUI's confirmation prompt.
     fn path_for(&self, preset_name: &str) -> PathBuf {
-        self.preset_paths.get(preset_name).map_or_else(
-            || {
-                self.presets_dir
-                    .join(format!("{}.json", sanitize_filename(preset_name)))
-            },
-            Clone::clone,
-        )
+        if let Some(existing) = self.preset_paths.get(preset_name) {
+            return existing.clone();
+        }
+
+        let candidate = self.file_for_stem(&sanitize_filename(preset_name));
+        if self.is_unoccupied(&candidate) {
+            return candidate;
+        }
+
+        let hashed = hashed_stem(preset_name);
+        let candidate = self.file_for_stem(&hashed);
+        if self.is_unoccupied(&candidate) {
+            return candidate;
+        }
+
+        // The digest stem is taken too — only reachable if some preset is
+        // literally named after it. Walk a counter; every step is still a
+        // deterministic filename. Exhausting the range would need a thousand
+        // such presets, so falling back to the digest stem is unreachable in
+        // practice rather than a silent overwrite waiting to happen.
+        (1..=MAX_DISAMBIGUATION_ATTEMPTS)
+            .map(|n| self.file_for_stem(&format!("{hashed}-{n}")))
+            .find(|path| self.is_unoccupied(path))
+            .unwrap_or(candidate)
+    }
+
+    fn file_for_stem(&self, stem: &str) -> PathBuf {
+        self.presets_dir.join(format!("{stem}.json"))
+    }
+
+    /// Is `path` free for a preset we are about to write?
+    ///
+    /// Callers reach this only after `path_for` has ruled out the preset's own
+    /// file, so anything already on disk belongs to something else — including
+    /// files that failed to parse and so never made it into `preset_paths`.
+    fn is_unoccupied(&self, path: &Path) -> bool {
+        !path.exists() && !self.preset_paths.values().any(|owned| owned == path)
     }
 }
 
@@ -263,6 +309,11 @@ const MAX_STEM_BYTES: usize = 200;
 /// `'-'` plus 16 hex digits, appended to truncated stems.
 const HASH_SUFFIX_BYTES: usize = 17;
 
+/// How far `Manager::path_for` will count when even the digest-suffixed stem is
+/// already occupied. Reaching the end needs a preset named after the digest
+/// stem *and* a thousand more named after its numbered variants.
+const MAX_DISAMBIGUATION_ATTEMPTS: u32 = 1000;
+
 const HEX_DIGITS: [u8; 16] = *b"0123456789ABCDEF";
 
 /// 64-bit FNV-1a.
@@ -303,16 +354,34 @@ fn percent_encode(name: &str, budget: usize) -> (String, bool) {
     (out, false)
 }
 
-/// Turn a preset name into a filename stem that is unique to that name.
+/// A readable prefix of `name` plus a digest of the whole of it, short enough
+/// to survive the filesystem's per-component byte limit.
 ///
-/// Percent-encoding every byte outside `[A-Za-z0-9-_]` is injective, so two
-/// different preset names can never land on the same file. It is also stable
-/// and reversible, and — crucially for existing installs — it is the identity
-/// on names that only use the allowed characters, which is exactly the set of
-/// names the old scheme left untouched.
+/// Used both for pathologically long names and, by `Manager::path_for`, to step
+/// aside when the plain encoding is already occupied.
+fn hashed_stem(name: &str) -> String {
+    let (stem, _) = percent_encode(name, MAX_STEM_BYTES - HASH_SUFFIX_BYTES);
+    let hash = stable_hash(name.as_bytes());
+    format!("{stem}-{hash:016x}")
+}
+
+/// Turn a preset name into a filename stem.
 ///
-/// The old scheme mapped everything else to `_`, which collapsed *every*
-/// non-ASCII name (a whole locale's worth of preset names) onto a single file.
+/// Percent-encoding every byte outside `[A-Za-z0-9-_]` is stable, reversible,
+/// and — crucially for existing installs — the identity on names that only use
+/// the allowed characters, which is exactly the set of names the old scheme
+/// left untouched. The old scheme mapped everything else to `_`, which
+/// collapsed *every* non-ASCII name (a whole locale's worth of preset names)
+/// onto a single file.
+///
+/// **The mapping is not injective.** It is injective on names short enough to
+/// encode whole, but longer names are truncated and digest-suffixed, and `-`
+/// and `0-9a-f` are all unreserved — so the suffixed stem is itself a valid
+/// identity encoding of some other, shorter name. `"x".repeat(500)` and a
+/// preset named literally `xxx…x-b6822c71b0501b75` produce the same stem.
+/// Callers must not assume distinct names yield distinct filenames;
+/// `Manager::path_for` checks that its candidate is unoccupied before handing
+/// it out, which is what actually keeps two presets off one file.
 fn sanitize_filename(name: &str) -> String {
     if name.is_empty() {
         // The encoder never emits a bare `%` — every `%` it writes is followed
@@ -321,16 +390,11 @@ fn sanitize_filename(name: &str) -> String {
     }
 
     let (encoded, truncated) = percent_encode(name, MAX_STEM_BYTES);
-    if !truncated {
-        return encoded;
+    if truncated {
+        hashed_stem(name)
+    } else {
+        encoded
     }
-
-    // Pathologically long names get a readable prefix plus a digest of the full
-    // name, which keeps distinct names distinct without blowing the filesystem's
-    // per-component byte limit.
-    let (stem, _) = percent_encode(name, MAX_STEM_BYTES - HASH_SUFFIX_BYTES);
-    let hash = stable_hash(name.as_bytes());
-    format!("{stem}-{hash:016x}")
 }
 
 #[cfg(test)]
@@ -349,6 +413,14 @@ mod tests {
             -2,
             InputFilterConfig::default(),
         )
+    }
+
+    fn json_files(dir: &Path) -> HashSet<PathBuf> {
+        fs::read_dir(dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.extension().and_then(|s| s.to_str()) == Some("json"))
+            .collect()
     }
 
     /// Existing installs already have files on disk. Any name the old scheme
@@ -428,6 +500,41 @@ mod tests {
         );
     }
 
+    /// The empty name has no encoding of its own, so it gets a stem the encoder
+    /// can never produce. Justified by a comment since the PR that added it,
+    /// but never actually checked.
+    #[test]
+    fn sanitize_filename_handles_the_empty_name() {
+        assert_eq!(sanitize_filename(""), "%");
+        assert_eq!(sanitize_filename("%"), "%25");
+        assert_ne!(sanitize_filename(""), sanitize_filename("%"));
+    }
+
+    /// `stable_hash` is hand-rolled FNV-1a precisely because `DefaultHasher`'s
+    /// algorithm is not stable across Rust releases, and these digests end up in
+    /// filenames. Determinism *within* a process proves nothing about that — pin
+    /// literals so a toolchain that changed them fails here instead of silently
+    /// orphaning every long-named preset.
+    #[test]
+    fn stable_hash_matches_pinned_values() {
+        assert_eq!(stable_hash(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(stable_hash(b"rustortion"), 0x79c8_6023_c73e_36c0);
+        assert_eq!(stable_hash("重金属".as_bytes()), 0x980e_d7b0_0cf5_300d);
+        assert_eq!(
+            stable_hash("x".repeat(500).as_bytes()),
+            0xb682_2c71_b050_1b75
+        );
+
+        // ...and the filename that digest produces.
+        assert_eq!(
+            sanitize_filename(&"x".repeat(500)),
+            format!(
+                "{}-b6822c71b0501b75",
+                "x".repeat(MAX_STEM_BYTES - HASH_SUFFIX_BYTES)
+            )
+        );
+    }
+
     #[test]
     fn sanitize_filename_is_deterministic() {
         assert_eq!(sanitize_filename("重金属"), sanitize_filename("重金属"));
@@ -504,6 +611,91 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    /// The path-occupancy hole. `presets/High_Gain.json` ships with the app and
+    /// holds a preset *named* `High Gain`. Encoding is the identity on
+    /// `High_Gain`, so saving a preset under that literal name computed the very
+    /// same path — no dialog, since the overwrite gate compares names — and the
+    /// factory preset was gone.
+    #[test]
+    fn saving_a_name_that_lands_on_another_presets_file_keeps_both() {
+        let dir = tempfile::tempdir().unwrap();
+        let factory_path = dir.path().join("High_Gain.json");
+        fs::write(
+            &factory_path,
+            serde_json::to_string(&preset_named("High Gain")).unwrap(),
+        )
+        .unwrap();
+
+        let mut manager = Manager::new(dir.path()).unwrap();
+        manager.save_preset(&preset_named("High_Gain")).unwrap();
+
+        // The shipped file still holds the shipped preset.
+        let on_disk: Preset =
+            serde_json::from_str(&fs::read_to_string(&factory_path).unwrap()).unwrap();
+        assert_eq!(on_disk.name, "High Gain", "factory preset was clobbered");
+
+        // The new preset stepped aside onto the digest-suffixed stem.
+        let disambiguated = dir
+            .path()
+            .join(format!("High_Gain-{:016x}.json", stable_hash(b"High_Gain")));
+        assert!(disambiguated.exists(), "no separate file for `High_Gain`");
+
+        // Two presets, two files, nothing lost — proven through a fresh reload.
+        assert_eq!(json_files(dir.path()).len(), 2);
+        let reloaded = Manager::new(dir.path()).unwrap();
+        assert_eq!(reloaded.get_presets().len(), 2);
+        assert!(reloaded.get_preset_by_name("High Gain").is_some());
+        assert!(reloaded.get_preset_by_name("High_Gain").is_some());
+    }
+
+    /// `sanitize_filename` is injective only below the truncation boundary: a
+    /// digest-suffixed stem is itself a valid identity encoding. `path_for`'s
+    /// occupancy check, not the encoding, is what keeps the two names apart.
+    #[test]
+    fn a_long_name_and_its_digest_stem_namesake_get_separate_files() {
+        let long = "x".repeat(500);
+        let namesake = sanitize_filename(&long);
+        assert_eq!(
+            sanitize_filename(&namesake),
+            namesake,
+            "expected the stems to collide"
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let mut manager = Manager::new(dir.path()).unwrap();
+        manager.save_preset(&preset_named(&long)).unwrap();
+        manager.save_preset(&preset_named(&namesake)).unwrap();
+
+        assert_eq!(json_files(dir.path()).len(), 2);
+        let reloaded = Manager::new(dir.path()).unwrap();
+        assert_eq!(reloaded.get_presets().len(), 2);
+        assert!(reloaded.get_preset_by_name(&long).is_some());
+        assert!(reloaded.get_preset_by_name(&namesake).is_some());
+    }
+
+    /// Deleting by name must never fall back to a name-derived path: the file it
+    /// computes may belong to a different preset entirely.
+    #[test]
+    fn deleting_a_name_that_lands_on_another_presets_file_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let other_path = dir.path().join("My_Preset.json");
+        fs::write(
+            &other_path,
+            serde_json::to_string(&preset_named("My Preset")).unwrap(),
+        )
+        .unwrap();
+
+        let mut manager = Manager::new(dir.path()).unwrap();
+        let err = manager.delete_preset("My_Preset").unwrap_err();
+
+        assert!(
+            err.to_string().contains("Preset file not found"),
+            "unexpected error: {err}"
+        );
+        assert!(other_path.exists(), "deleted another preset's file");
+        assert!(manager.get_preset_by_name("My Preset").is_some());
     }
 
     #[test]
