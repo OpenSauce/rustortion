@@ -41,10 +41,15 @@
 
 ```bash
 sudo apt-get install libjack-jackd2-0
-tar -xf rustortion-x86_64-unknown-linux-gnu.tar.xz
-cd rustortion-x86_64-unknown-linux-gnu
+tar -xf rustortion-standalone-x86_64-unknown-linux-gnu.tar.xz
+cd rustortion-standalone-x86_64-unknown-linux-gnu
 ./rustortion
 ```
+
+> [!NOTE]
+> 在 v0.2.0 及更早版本中，独立版压缩包名为 `rustortion-<target>.tar.xz`；自 v0.3.0 起，
+> 随着 crate 重命名，压缩包名为 `rustortion-standalone-<target>.tar.xz`。包内的可执行文件
+> 仍为 `rustortion`。树莓派请将 `x86_64` 替换为 `aarch64`。
 
 ### 从源码运行/编译
 
