@@ -30,7 +30,5 @@ __________                __                 __  .__
     info!("v{}", env!("CARGO_PKG_VERSION"));
     info!("{settings}");
 
-    start(settings).map_err(|e| anyhow::anyhow!("GUI error: {e}"))?;
-
-    Ok(())
+    start(settings)
 }

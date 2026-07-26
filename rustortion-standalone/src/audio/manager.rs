@@ -41,7 +41,7 @@ impl Manager {
         clipper::init();
 
         let (client, _) = Client::new("rustortion", ClientOptions::NO_START_SERVER)
-            .context("failed to create JACK client")?;
+            .context("JACK server not running — start PipeWire/JACK and retry")?;
 
         let sample_rate = client.sample_rate() as usize;
         let buffer_size = client.buffer_size() as usize;
