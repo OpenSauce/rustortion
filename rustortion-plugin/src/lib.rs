@@ -561,8 +561,8 @@ impl Plugin for RustortionPlugin {
         self.reported.reset();
         // REV-24: the engine built below starts with its own default IR gain,
         // so the `process()` delta check must fire on the very first block to
-        // push the real parameter value into it. A sentinel no gain can equal
-        // guarantees that; carrying the previous activation's value over is
+        // push the real parameter value into it. A sentinel that no gain can
+        // equal guarantees that; carrying the previous activation's value over is
         // what used to swallow the correction after a reload. (`NEG_INFINITY`,
         // not `NAN` — a `NaN` comparison is false and would swallow it again.)
         self.last_ir_gain = f32::NEG_INFINITY;

@@ -42,6 +42,22 @@ pub trait Stage: Send + Sync + 'static {
     /// allocate, free, lock, or perform I/O. `rustortion-core/tests/no_alloc.rs`
     /// enforces this.
     ///
+    /// # This is a discontinuity, by design
+    ///
+    /// Returning to construction state means the output *steps*. That is
+    /// correct at a locate, where the input is discontinuous anyway, but
+    /// nih-plug documents `Plugin::reset` as callable "at any other time from
+    /// the audio thread" — landing on continuous audio, it is audible. Measured
+    /// mid-signal: a dry preamp → power amp → tone stack chain steps 0.89 full
+    /// scale and settles over ~59 ms, as the DC blockers restart from zero.
+    /// Worst relative offender is the compressor, whose envelope drops to 0, so
+    /// the first ~20 ms after a locate is **uncompressed at full makeup gain**
+    /// (peak error 264% of the signal's own peak) — an overshoot into whatever
+    /// follows it.
+    ///
+    /// Softening this (output ramp, DC-blocker priming) is deliberately not
+    /// done here; it is a DSP design decision, not part of the flush contract.
+    ///
     /// Required rather than defaulted on purpose: adding a stage should force
     /// the author to decide what its state is, and the compiler lists every
     /// impl that has not.

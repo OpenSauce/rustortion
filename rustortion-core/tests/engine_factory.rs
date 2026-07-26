@@ -640,8 +640,13 @@ mod reset {
 
     /// Largest absolute sample the engine emits over `blocks` blocks of silence.
     fn peak_over_silence(engine: &mut Engine, blocks: usize) -> f32 {
-        let input = vec![0.0_f32; BLOCK];
-        let mut output = vec![0.0_f32; BLOCK];
+        peak_over_silence_blocks(engine, BLOCK, blocks)
+    }
+
+    /// As [`peak_over_silence`], for engines built around a different block size.
+    fn peak_over_silence_blocks(engine: &mut Engine, block: usize, blocks: usize) -> f32 {
+        let input = vec![0.0_f32; block];
+        let mut output = vec![0.0_f32; block];
         let mut peak = 0.0_f32;
         for _ in 0..blocks {
             engine.process(&input, &mut output).unwrap();
@@ -837,6 +842,89 @@ mod reset {
                 "{oversample}x: reset changed FIFO engagement"
             );
         }
+    }
+
+    /// The engaged variable-block FIFO is the riskiest thing `reset` touches.
+    /// `BlockFifo::reset` deliberately re-primes the pre-fill instead of
+    /// emptying the queue, because the audio thread cannot re-report latency —
+    /// and that has to leave the stream *aligned*, not merely quiet. The other
+    /// reset tests never reach this path: their blocks are exact multiples of
+    /// the resampler chunk, so they stay on the zero-latency fast path forever.
+    ///
+    /// Emptying the FIFO instead of re-priming it would shift everything after
+    /// the seek by `max_block + chunk` frames against the latency the host was
+    /// already told about, which is exactly what the impulse assertion catches.
+    #[test]
+    fn reset_keeps_the_engaged_fifo_aligned() {
+        const MAX_BLOCK: usize = 512;
+
+        let (mut engine, _handle, _rx) =
+            Engine::new_for_plugin(SR, MAX_BLOCK, None, 4.0).expect("engine should construct");
+
+        let silence = vec![0.0_f32; MAX_BLOCK];
+        let mut out = vec![0.0_f32; MAX_BLOCK];
+        engine.process(&silence, &mut out).unwrap();
+
+        // A ragged block engages the FIFO permanently.
+        let ragged = vec![0.0_f32; 37];
+        let mut ragged_out = vec![0.0_f32; 37];
+        engine.process(&ragged, &mut ragged_out).unwrap();
+        assert!(
+            engine.fifo_engaged(),
+            "the ragged block should have engaged the FIFO"
+        );
+
+        // Load the FIFO and both resamplers up with loud audio, then seek.
+        let loud = vec![0.85_f32; MAX_BLOCK];
+        for _ in 0..20 {
+            engine.process(&loud, &mut out).unwrap();
+        }
+
+        let latency = engine.latency_frames();
+        engine.reset();
+        assert_eq!(
+            engine.latency_frames(),
+            latency,
+            "reset changed the latency the host was told about"
+        );
+
+        // Silence in, silence out — from the very first block. Nothing of the
+        // loud pre-seek audio is left queued in the FIFO or held in the
+        // resamplers' overlap buffers.
+        let leak = peak_over_silence_blocks(&mut engine, MAX_BLOCK, 20);
+        assert!(
+            leak < 1e-9,
+            "pre-seek audio survived the reset: peak {leak}"
+        );
+
+        // Feed an impulse into the now-quiet pipeline.
+        let mut stream = vec![0.0_f32; MAX_BLOCK * 20];
+        stream[0] = 1.0;
+        let mut got = Vec::with_capacity(stream.len());
+        for block in stream.chunks(MAX_BLOCK) {
+            engine.process(block, &mut out).unwrap();
+            got.extend_from_slice(&out);
+        }
+
+        // It comes back at exactly the reported latency. (The resamplers are
+        // linear phase, so the main lobe straddles that centre — hence the peak
+        // position rather than the first non-zero sample.)
+        let (peak_at, peak) =
+            got.iter()
+                .enumerate()
+                .fold((0_usize, 0.0_f32), |(best_i, best), (i, &s)| {
+                    if s.abs() > best {
+                        (i, s.abs())
+                    } else {
+                        (best_i, best)
+                    }
+                });
+        assert!(peak > 0.1, "the impulse never arrived: peak {peak}");
+        assert!(
+            peak_at.abs_diff(latency) <= 1,
+            "impulse landed at {peak_at}, expected the reported latency {latency} — \
+             the FIFO was left half-primed"
+        );
     }
 
     /// Reset is state-only: every setting must survive it.

@@ -123,9 +123,14 @@ impl Stage for TremoloStage {
     }
 
     /// Rewinds the LFO to phase zero and snaps the depth smoother to its
-    /// target. Restarting the sweep at the top of the cycle is what makes a
-    /// tremolo line up with the bar after a locate; the alternative — free
-    /// running phase — puts the chop in a different place on every take.
+    /// target.
+    ///
+    /// Phase zero is the sine's rising zero crossing, so the sweep restarts
+    /// mid-travel at a gain of `1 - depth / 2` — not at the top. The point is
+    /// not musical alignment: the LFO free-runs in Hz with no tempo sync, so it
+    /// cannot line up with a bar. The point is **reproducibility** — rendering
+    /// the same passage twice must give the same chop, and a free-running phase
+    /// would put it somewhere different on every offline bounce.
     fn reset(&mut self) {
         self.phase = 0.0;
         self.depth_smoothed = self.depth;
