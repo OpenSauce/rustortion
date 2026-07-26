@@ -1,19 +1,28 @@
 # Builds the CLAP + VST3 plugin bundles and attaches them to an existing GitHub
 # release.
 #
-# NOTE: this deliberately triggers on `release: published`, NOT on tag push.
-# cargo-dist's own `release.yml` is what calls `gh release create`; a workflow
-# triggered by the same tag push would race it and fail every upload with a 404
-# because the release does not exist yet. Waiting for `published` guarantees the
-# release object is there before we upload to it.
+# TRIGGER: this waits for cargo-dist's `Release` workflow to finish, because the
+# release object must exist before anything can be uploaded to it.
+#
+# It does NOT trigger on `release: published`, even though that reads like the
+# obvious choice. GitHub refuses to start workflows from events created with the
+# default GITHUB_TOKEN (a deliberate guard against recursive runs), and dist's
+# `host` job creates the release with exactly that token — so a `release:
+# published` trigger never fires at all. v0.3.0 shipped with no plugin bundles
+# because of this and had to be dispatched by hand.
+#
+# Triggering on tag push instead would race dist and 404 on every upload, since
+# the release does not exist for the ~8 minutes dist spends building. workflow_run
+# avoids both problems: it fires on completion, and `head_branch` carries the tag.
 #
 # Do not fold this into `.github/workflows/release.yml` — that file is generated
 # by `dist init` and hand edits are destroyed on regeneration.
 name: Plugin Release
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -25,12 +34,20 @@ permissions:
   contents: write
 
 env:
-  # `github.event.release.tag_name` is unset for workflow_dispatch runs.
-  RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+  # For workflow_run, `head_branch` is the ref that started the upstream run —
+  # the tag name for a tag push. Unset for workflow_dispatch, which passes `tag`.
+  RELEASE_TAG: ${{ github.event.workflow_run.head_branch || inputs.tag }}
 
 jobs:
   bundle:
     name: Bundle plugin (${{ matrix.label }})
+    # `Release` also runs on pull_request, and those completions raise
+    # workflow_run too. Only act on a successful run that came from a tag push.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -122,7 +139,49 @@ jobs:
           Compress-Archive -Path Rustortion.clap, Rustortion.vst3 `
             -DestinationPath "$env:GITHUB_WORKSPACE\${{ matrix.asset }}"
         working-directory: target/bundled
+      # shell: bash is load-bearing on Windows. The default shell there is pwsh,
+      # which does not expand `$RELEASE_TAG` — it silently becomes an empty
+      # string and `gh release upload ""` fails with "release not found".
       - name: Upload to release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "$RELEASE_TAG" "${{ matrix.asset }}" --clobber
+
+  # dist writes the release body and only knows about what it built, so its
+  # download table lists the standalone alone. Without this the plugin zips are
+  # present in Assets but nothing in the notes points at them, which reads as
+  # "this release is standalone-only".
+  notes:
+    name: Add the plugin downloads to the release notes
+    needs: bundle
+    runs-on: ubuntu-latest
+    steps:
+      - name: Append plugin download table
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          body="$(gh release view "$RELEASE_TAG" --json body --jq '.body')"
+
+          # Idempotent: re-dispatching this workflow must not stack up tables.
+          if printf '%s' "$body" | grep -qF '<!-- plugin-bundles -->'; then
+            echo "Plugin download table already present; leaving the notes alone."
+            exit 0
+          fi
+
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$RELEASE_TAG"
+          {
+            printf '%s\n\n' "$body"
+            printf '<!-- plugin-bundles -->\n'
+            printf '## Download the VST3/CLAP plugin %s\n\n' "${RELEASE_TAG#v}"
+            printf '|  File  | Platform | Status |\n'
+            printf '|--------|----------|--------|\n'
+            printf '| [Rustortion-linux-x86_64.zip](%s/Rustortion-linux-x86_64.zip) | x64 Linux | Tested in a DAW |\n' "$base"
+            printf '| [Rustortion-linux-aarch64.zip](%s/Rustortion-linux-aarch64.zip) | ARM64 Linux | Built in CI, not hand-tested |\n' "$base"
+            printf '| [Rustortion-windows-x86_64.zip](%s/Rustortion-windows-x86_64.zip) | x64 Windows | Built in CI, not hand-tested |\n' "$base"
+            printf '\nEach archive contains both `Rustortion.clap` and `Rustortion.vst3`. '
+            printf 'See the [README](https://github.com/%s#vst3clap-plugin) for install paths.\n' "$GITHUB_REPOSITORY"
+          } > release-notes.md
+
+          gh release edit "$RELEASE_TAG" --notes-file release-notes.md
