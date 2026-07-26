@@ -41,6 +41,16 @@ pub struct RustortionParams {
     #[persist = "oversampling_factor"]
     pub oversampling_factor: Arc<AtomicU32>,
 
+    /// Cabinet IR the user selected, persisted with DAW project state.
+    ///
+    /// An IR is identified by name, so unlike cabinet level and bypass this
+    /// cannot be a nih-plug parameter — and it is not part of the stage chain
+    /// either, since the cabinet is not a chain stage. Without this field a
+    /// user-chosen cabinet silently reverted to the preset's own on every
+    /// reactivation and every project reload.
+    #[persist = "ir_name"]
+    pub ir_name: Arc<Mutex<Option<String>>>,
+
     /// Serialized stage chain — persisted with DAW project state so user
     /// modifications (add/remove/reorder stages) survive save/restore.
     #[persist = "chain_state"]
@@ -111,6 +121,7 @@ impl Default for RustortionParams {
                 .non_automatable(),
 
             oversampling_factor: Arc::new(AtomicU32::new(1)), // 1 = 1x (no oversampling)
+            ir_name: Arc::new(Mutex::new(None)),
             chain_state: Arc::new(Mutex::new(None)),
         }
     }

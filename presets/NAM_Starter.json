@@ -1,0 +1,25 @@
+{
+  "name": "NAM Starter",
+  "description": "Empty NAM stage. Pick a .nam model from your models folder to hear it — the stage passes the dry signal through until you do.",
+  "author": null,
+  "stages": [
+    {
+      "Nam": {
+        "model_name": null,
+        "input_gain_db": 0.0,
+        "output_gain_db": 0.0,
+        "mix": 1.0,
+        "bypassed": false
+      }
+    }
+  ],
+  "ir_name": null,
+  "ir_gain": 0.16,
+  "pitch_shift_semitones": 0,
+  "input_filters": {
+    "hp_enabled": true,
+    "hp_cutoff": 100.0,
+    "lp_enabled": true,
+    "lp_cutoff": 8000.0
+  }
+}

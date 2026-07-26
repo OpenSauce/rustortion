@@ -111,6 +111,20 @@ impl PluginBackend {
         Some(self.host_sample_rate()? * active as f32)
     }
 
+    /// Mark the DAW session dirty so `#[persist]` state is saved with the project.
+    ///
+    /// nih-plug serializes `#[persist]` fields passively: writing one does not
+    /// tell the host anything changed, so a project holding only persist-field
+    /// edits may never be offered for save. Touching a real parameter with its
+    /// own current value is the nudge — it changes no audio but does mark the
+    /// session dirty. `preset_idx` is the cheapest candidate: `non_automatable`,
+    /// and `process()` only reacts to it when the value actually differs.
+    fn mark_state_dirty(&self) {
+        let param = &self.params.preset_idx;
+        let current = param.modulated_normalized_value();
+        self.notify_host_param_changed(param.as_ptr(), current);
+    }
+
     /// Notify the host that a parameter value changed from the GUI.
     /// SAFETY: `ptr` must be a valid `ParamPtr` from one of our `RustortionParams` fields.
     fn notify_host_param_changed(&self, ptr: nih_plug::prelude::ParamPtr, normalized: f32) {
@@ -193,6 +207,18 @@ impl ParamBackend for PluginBackend {
     }
 
     fn set_ir(&self, name: &str) {
+        // Record the choice before attempting the load, so it is persisted with
+        // the project even if the load itself is dropped for want of an engine.
+        // The next activation then restores the cabinet the user actually asked
+        // for rather than the preset's.
+        if let Ok(mut persisted) = self.params.ir_name.lock() {
+            *persisted = Some(name.to_owned());
+        }
+        // Unlike cabinet level and bypass, picking an IR changes no real
+        // parameter, so without this the host is never told anything happened
+        // and may not save the project at all.
+        self.mark_state_dirty();
+
         // The IR runs after downsampling, so it is built at the host rate, not
         // the oversampled one.
         let (Some(loader), Some(engine), Some(sr)) =
@@ -288,11 +314,7 @@ impl ParamBackend for PluginBackend {
         self.params
             .oversampling_factor
             .store(factor, Ordering::Relaxed);
-        // Mark DAW session dirty so the new value is saved with the project.
-        // #[persist] fields are serialized passively and don't trigger a save.
-        let param = &self.params.preset_idx;
-        let current = param.modulated_normalized_value();
-        self.notify_host_param_changed(param.as_ptr(), current);
+        self.mark_state_dirty();
     }
 
     /// Zero until the host activates the plugin. Read live so the NAM stage's
@@ -350,11 +372,6 @@ impl ParamBackend for PluginBackend {
         if let Ok(mut cs) = self.params.chain_state.lock() {
             *cs = Some(stages.to_vec());
         }
-        // Touch preset_idx with its current value to notify the host that
-        // state changed. #[persist] fields are serialized passively and
-        // don't mark the session dirty on their own.
-        let param = &self.params.preset_idx;
-        let current = param.modulated_normalized_value();
-        self.notify_host_param_changed(param.as_ptr(), current);
+        self.mark_state_dirty();
     }
 }
