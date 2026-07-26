@@ -36,19 +36,38 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # v0.3.0 ships the plugin for x86_64 Linux only. aarch64 needs a full
-          # arm64 sysroot (X11/xcb/GL/xkbcommon) for the iced_baseview GUI, which
-          # plain `gcc-aarch64-linux-gnu` does not provide — see README.
+          # Native runners on purpose — cross-compiling the iced_baseview GUI
+          # needs a full target sysroot for X11/xcb/GL/xkbcommon. Building on
+          # each target's own runner sidesteps that entirely. This matrix
+          # mirrors the `plugin` job in ci.yaml; keep them in sync.
           - label: linux-x86_64
             runner: ubuntu-latest
             arch_dir: x86_64-linux
+            vst3_lib: Rustortion.so
             asset: Rustortion-linux-x86_64.zip
+          - label: linux-aarch64
+            # Free for public repositories. Native arm64, no sysroot needed.
+            runner: ubuntu-24.04-arm
+            arch_dir: aarch64-linux
+            vst3_lib: Rustortion.so
+            asset: Rustortion-linux-aarch64.zip
+          - label: windows-x86_64
+            runner: windows-latest
+            arch_dir: x86_64-win
+            # On Windows the VST3 payload is a DLL that keeps the .vst3
+            # extension, not a .so — see nih_plug_xtask's
+            # `vst3_bundle_library_name`.
+            vst3_lib: Rustortion.vst3
+            asset: Rustortion-windows-x86_64.zip
     steps:
       - uses: actions/checkout@v6
         with:
           # Build exactly the code the release was cut from, not branch tip.
           ref: ${{ env.RELEASE_TAG }}
+      # X11/GL headers for the plugin GUI. Windows needs no equivalent — wgpu
+      # goes through DX12 and the window backend is win32.
       - name: Install system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update && sudo apt-get install -y \
             libjack-jackd2-dev libasound2-dev pkg-config \
@@ -64,6 +83,7 @@ jobs:
       # No rust-cache here on purpose: release builds should not inherit a warm,
       # possibly polluted target/ directory.
       - name: Clean stale bundle output
+        shell: bash
         run: rm -rf target/bundled
       - name: Bundle plugin
         # `--profile dist` matches cargo-dist's release profile (lto = true,
@@ -71,10 +91,11 @@ jobs:
         # the standalone binary in the same release.
         run: cargo xtask bundle rustortion-plugin --profile dist --locked
       - name: Verify bundle structure
+        shell: bash
         run: |
           set -euo pipefail
           test -f target/bundled/Rustortion.clap
-          test -f "target/bundled/Rustortion.vst3/Contents/${{ matrix.arch_dir }}/Rustortion.so"
+          test -f "target/bundled/Rustortion.vst3/Contents/${{ matrix.arch_dir }}/${{ matrix.vst3_lib }}"
           unexpected="$(find target/bundled/Rustortion.vst3/Contents \
             -mindepth 1 -maxdepth 1 -not -name '${{ matrix.arch_dir }}' -print)"
           if [ -n "$unexpected" ]; then
@@ -83,11 +104,23 @@ jobs:
             exit 1
           fi
           find target/bundled
-      - name: Package
+      # `zip -y` keeps symlinks as symlinks. Windows has no `zip` binary, so it
+      # uses Compress-Archive instead — the Windows bundle has no symlinks to
+      # preserve, so the two produce equivalent archives.
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
         run: |
           set -euo pipefail
           zip -r -y "$GITHUB_WORKSPACE/${{ matrix.asset }}" \
             Rustortion.clap Rustortion.vst3
+        working-directory: target/bundled
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path Rustortion.clap, Rustortion.vst3 `
+            -DestinationPath "$env:GITHUB_WORKSPACE\${{ matrix.asset }}"
         working-directory: target/bundled
       - name: Upload to release
         env:
