@@ -30,9 +30,6 @@ allow-dirty = ["ci"]
 # what the standalone needs (x11-dl, dlopened at runtime) and not what baseview
 # needs, and nothing on the PR path exercises the dist build.
 precise-builds = true
-# TEMPORARY - remove before merge. Builds release artifacts on the PR so the
-# fix is proven on the real runners instead of at tag time.
-pr-run-mode = "upload"
 
 # Only the packages the *standalone* needs. It reaches X11 through x11-dl,
 # which dlopens at runtime and needs nothing at build time — see precise-builds
