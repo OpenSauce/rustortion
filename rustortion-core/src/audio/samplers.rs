@@ -80,10 +80,29 @@ impl BlockFifo {
     /// Start buffering. Allocation-free by construction: both `Vec`s were sized
     /// in `new` and are only written to here.
     fn engage(&mut self) {
-        self.input_len = 0;
-        self.output[..self.prefill].fill(0.0);
-        self.output_len = self.prefill;
         self.engaged = true;
+        self.reset();
+    }
+
+    /// Drop every queued frame, leaving the FIFO as it was the moment it
+    /// engaged (or, if it never engaged, empty).
+    ///
+    /// Deliberately does **not** change `engaged`. That flag is sticky because
+    /// every transition re-reports latency to the host, and reset runs on the
+    /// audio thread where no latency can be re-reported — so an engaged FIFO is
+    /// re-primed with its full pre-fill of silence rather than emptied, keeping
+    /// [`Samplers::latency_frames`] invariant across the reset.
+    ///
+    /// Only lengths and the pre-fill region are touched; frames past
+    /// `input_len` / `output_len` are never read. Allocation-free.
+    fn reset(&mut self) {
+        self.input_len = 0;
+        if self.engaged {
+            self.output[..self.prefill].fill(0.0);
+            self.output_len = self.prefill;
+        } else {
+            self.output_len = 0;
+        }
     }
 }
 
@@ -363,6 +382,32 @@ impl Samplers {
         output[n..].fill(0.0);
         fifo.output.copy_within(n..fifo.output_len, 0);
         fifo.output_len -= n;
+    }
+
+    /// Drop all in-flight audio: the two resamplers' overlap/scratch state, the
+    /// staging buffers, and anything queued in the variable-block FIFO.
+    ///
+    /// RT-safe. `rubato`'s `Fft::reset` only zero-fills buffers it already owns
+    /// (and `update_chunk_sizes` is a no-op for `FixedSync::Both`, which is how
+    /// both resamplers here are built), and the FIFO reset is lengths plus a
+    /// fill of memory allocated in `new`.
+    ///
+    /// The reported latency is unchanged by design — see [`BlockFifo::reset`].
+    pub fn reset(&mut self) {
+        self.upsampler.reset();
+        self.downsampler.reset();
+
+        self.input_buffer[0].fill(0.0);
+        self.upsampled_buffer[0].fill(0.0);
+        self.downsampled_buffer[0].fill(0.0);
+        // Matches `new`: until the next `upsample()` sets it, treat the whole
+        // (now silent) buffer as valid so a stray `downsample()` reads zeros
+        // rather than a stale frame count into stale audio.
+        self.upsampled_frames = self.upsampled_buffer[0].len();
+
+        if let Some(fifo) = self.fifo.as_mut() {
+            fifo.reset();
+        }
     }
 
     pub fn resize_buffers(&mut self, new_size: usize) -> Result<()> {

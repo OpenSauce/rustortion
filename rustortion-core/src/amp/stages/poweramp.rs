@@ -90,6 +90,14 @@ impl Stage for PowerAmpStage {
         self.dc_blocker.process(clipped)
     }
 
+    /// Clears the sag envelope — otherwise the rail would still be pulled down
+    /// by the chord before the seek, so the first notes after it come back
+    /// compressed — and the output DC blocker.
+    fn reset(&mut self) {
+        self.sag_envelope.reset();
+        self.dc_blocker.reset();
+    }
+
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "drive" => {

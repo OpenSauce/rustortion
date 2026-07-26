@@ -127,6 +127,43 @@ impl PitchShifter {
         }
     }
 
+    /// Discard all in-flight audio and phase history, returning the vocoder to
+    /// exactly the state [`PitchShifter::new`] leaves it in.
+    ///
+    /// Three separate things have to go, or the shifter smears pre-seek audio
+    /// over the new position for a full frame:
+    /// * the **analysis ring** (`input_ring`), which still holds up to
+    ///   `FFT_SIZE` samples of the old material, plus its write cursor and the
+    ///   partial hop in `hop_counter`;
+    /// * the **overlap-add output** (`output_accum`), which holds already
+    ///   synthesised frames waiting to be read, and its read/write cursors —
+    ///   `output_write` goes back to `HOP_SIZE` ahead of `output_read`, the
+    ///   spacing `new` establishes and `process_frame` maintains;
+    /// * the **phase state** (`last_phase` / `accum_phase`), meaningless once
+    ///   the signal is discontinuous; `first_frame` re-seeds the accumulator
+    ///   from the next frame's analysis phase instead of integrating from
+    ///   stale values, which is what avoids a startup smear.
+    ///
+    /// The scratch buffers (`frame`, `spectrum`, `shifted`, …) are not cleared:
+    /// each is fully overwritten before it is read within a single
+    /// `process_frame`.
+    ///
+    /// RT-safe: fills and index assignments only, no reallocation, and the
+    /// reported latency (one FFT frame) is unchanged.
+    pub fn reset(&mut self) {
+        self.input_ring.fill(0.0);
+        self.input_pos = 0;
+        self.hop_counter = 0;
+
+        self.output_accum.fill(0.0);
+        self.output_read = 0;
+        self.output_write = HOP_SIZE;
+
+        self.last_phase.fill(0.0);
+        self.accum_phase.fill(0.0);
+        self.first_frame = true;
+    }
+
     /// Update the pitch ratio without reallocating buffers.
     pub fn set_semitones(&mut self, semitones: f32) {
         self.ratio = (semitones as f64 / 12.0).exp2();

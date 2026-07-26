@@ -122,6 +122,15 @@ impl Stage for TremoloStage {
         input * self.next_gain()
     }
 
+    /// Rewinds the LFO to phase zero and snaps the depth smoother to its
+    /// target. Restarting the sweep at the top of the cycle is what makes a
+    /// tremolo line up with the bar after a locate; the alternative — free
+    /// running phase — puts the chop in a different place on every take.
+    fn reset(&mut self) {
+        self.phase = 0.0;
+        self.depth_smoothed = self.depth;
+    }
+
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "rate" => {
@@ -289,6 +298,40 @@ mod tests {
                 "stale shape cache at {i}: {oa} vs {ob}"
             );
         }
+    }
+
+    /// PLUG-2: the LFO free-runs, so after a locate the chop would land in a
+    /// different place on every pass. Reset rewinds it to phase zero, which is
+    /// what makes a tremolo repeatable take to take.
+    #[test]
+    fn reset_rewinds_the_lfo() {
+        let mut used = TremoloStage::new(5.0, 0.9, 0.6, SAMPLE_RATE);
+        // Advance the phase to somewhere arbitrary and let depth settle.
+        for _ in 0..7919 {
+            used.process(1.0);
+        }
+        used.reset();
+
+        let mut fresh = TremoloStage::new(5.0, 0.9, 0.6, SAMPLE_RATE);
+        for i in 0..4096 {
+            let a = used.process(1.0);
+            let b = fresh.process(1.0);
+            assert!(
+                (a - b).abs() < TOL,
+                "sample {i}: reset LFO gave {a}, fresh {b}"
+            );
+        }
+    }
+
+    #[test]
+    fn reset_preserves_parameters() {
+        let mut trem = TremoloStage::new(7.0, 0.8, 0.4, SAMPLE_RATE);
+        trem.process(1.0);
+        trem.reset();
+
+        assert!((trem.get_parameter("rate").unwrap() - 7.0).abs() < TOL);
+        assert!((trem.get_parameter("depth").unwrap() - 0.8).abs() < TOL);
+        assert!((trem.get_parameter("shape").unwrap() - 0.4).abs() < TOL);
     }
 
     #[test]

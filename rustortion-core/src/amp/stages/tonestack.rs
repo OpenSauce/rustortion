@@ -162,6 +162,16 @@ impl Stage for ToneStackStage {
         y * 0.7
     }
 
+    /// Zeroes the four one-pole states: the 20 Hz DC blocker, the bass and
+    /// treble shelves, and the presence shelf. Tone-control positions are
+    /// parameters and stay put.
+    fn reset(&mut self) {
+        self.dc_hp = 0.0;
+        self.bass_lp = 0.0;
+        self.treble_lp = 0.0;
+        self.presence_lp = 0.0;
+    }
+
     // -------------------------------------------------------------
     // Parameter management
     // -------------------------------------------------------------

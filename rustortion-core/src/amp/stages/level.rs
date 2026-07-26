@@ -17,6 +17,9 @@ impl Stage for LevelStage {
         input * self.gain
     }
 
+    /// Memoryless — a pure gain multiply carries nothing across a seek.
+    fn reset(&mut self) {}
+
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "gain" => {

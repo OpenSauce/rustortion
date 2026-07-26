@@ -85,6 +85,16 @@ impl Stage for DelayStage {
         (1.0 - self.mix).mul_add(input, self.mix * delayed)
     }
 
+    /// Empties the echo line so no repeat survives a seek, and snaps the delay
+    /// time smoother straight to its target — after a jump there is no previous
+    /// delay time worth gliding from, and a glide would pitch-bend the first
+    /// repeat.
+    fn reset(&mut self) {
+        self.buffer.fill(0.0);
+        self.write_pos = 0;
+        self.delay_samples_smoothed = self.delay_samples_target;
+    }
+
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "delay_time" => {
@@ -341,6 +351,83 @@ mod tests {
         assert!(
             max_out > 0.9,
             "Impulse should survive at high sample rate, got max {max_out}"
+        );
+    }
+
+    /// PLUG-2: the whole point of `reset` — a repeat queued before a transport
+    /// jump must not play over the audio after it.
+    #[test]
+    fn reset_clears_the_echo_line() {
+        let delay_ms = 50.0;
+        let delay_samples = (delay_ms * 0.001 * SAMPLE_RATE) as usize;
+        let mut delay = DelayStage::new(delay_ms, 0.8, 1.0, SAMPLE_RATE);
+
+        // Warm the smoother, then load the line with an impulse.
+        for _ in 0..SAMPLE_RATE as usize {
+            delay.process(0.0);
+        }
+        let _ = delay.process(1.0);
+        for _ in 0..delay_samples / 2 {
+            delay.process(0.0);
+        }
+
+        delay.reset();
+
+        // Every repeat that was in flight is gone: silence in, silence out for
+        // longer than the tail would have lasted.
+        for i in 0..delay_samples * 4 {
+            let out = delay.process(0.0);
+            assert!(out.abs() < 1e-9, "echo survived reset at sample {i}: {out}");
+        }
+    }
+
+    /// Reset clears state but must not disturb the settings.
+    #[test]
+    fn reset_preserves_parameters() {
+        let mut delay = DelayStage::new(300.0, 0.4, 0.6, SAMPLE_RATE);
+        delay.process(1.0);
+        delay.reset();
+
+        assert!((delay.get_parameter("delay_time").unwrap() - 300.0).abs() < 1e-6);
+        assert!((delay.get_parameter("feedback").unwrap() - 0.4).abs() < 1e-6);
+        assert!((delay.get_parameter("mix").unwrap() - 0.6).abs() < 1e-6);
+    }
+
+    /// Reset snaps the time smoother to its target, so the first repeat after a
+    /// seek lands at the configured delay instead of gliding in from wherever
+    /// the smoother happened to be.
+    #[test]
+    fn reset_snaps_the_time_smoother() {
+        let delay_ms = 100.0;
+        let delay_samples = (delay_ms * 0.001 * SAMPLE_RATE) as usize;
+        let mut delay = DelayStage::new(500.0, 0.0, 1.0, SAMPLE_RATE);
+
+        // Converge on 500 ms, then jump the target to 100 ms *without* letting
+        // the smoother catch up, and reset.
+        for _ in 0..SAMPLE_RATE as usize {
+            delay.process(0.0);
+        }
+        delay.set_parameter("delay_time", delay_ms).unwrap();
+        delay.reset();
+
+        // The impulse must come back at the new time, not somewhere between.
+        let _ = delay.process(1.0);
+        let mut peak_at = 0;
+        let mut peak = 0.0_f32;
+        for i in 1..=delay_samples * 2 {
+            let out = delay.process(0.0).abs();
+            if out > peak {
+                peak = out;
+                peak_at = i;
+            }
+        }
+        assert!(
+            peak > 0.9,
+            "impulse should return at full level, got {peak}"
+        );
+        assert!(
+            peak_at.abs_diff(delay_samples) <= 2,
+            "repeat landed at {peak_at}, expected ~{delay_samples} — the smoother did not snap"
         );
     }
 

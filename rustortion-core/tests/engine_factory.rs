@@ -603,3 +603,324 @@ mod variable_block_and_guards {
         );
     }
 }
+
+/// PLUG-2: `Engine::reset` — what nih-plug's `Plugin::reset` (transport
+/// locate/seek) maps onto. Everything holding audio in flight has to be
+/// flushed, and nothing that describes the *configuration* may move.
+mod reset {
+    use rustortion_core::amp::chain::AmplifierChain;
+    use rustortion_core::amp::stages::delay::DelayStage;
+    use rustortion_core::amp::stages::filter::{FilterStage, FilterType};
+    use rustortion_core::amp::stages::reverb::ReverbStage;
+    use rustortion_core::audio::engine::Engine;
+    use rustortion_core::audio::pitch_shifter::PitchShifter;
+    use rustortion_core::audio::samplers::Samplers;
+    use rustortion_core::ir::cabinet::{ConvolverType, IrCabinet};
+    use rustortion_core::ir::convolver::Convolver;
+
+    const SR: usize = 48_000;
+    const SR_F32: f32 = 48_000.0;
+    const BLOCK: usize = 64;
+
+    /// Decaying IR, long enough to have an audible tail of its own.
+    fn test_ir() -> Vec<f32> {
+        (0..1024)
+            .map(|i| (-(i as f32) / 128.0).exp() * 0.5)
+            .collect()
+    }
+
+    fn cabinet_with_ir() -> IrCabinet {
+        let mut cab = IrCabinet::new(ConvolverType::Fir, SR * 50 / 1000);
+        let mut conv = Convolver::new_fir(SR * 50 / 1000);
+        conv.set_ir(&test_ir()).unwrap();
+        cab.set_convolver(conv);
+        cab.set_gain(1.0);
+        cab
+    }
+
+    /// Largest absolute sample the engine emits over `blocks` blocks of silence.
+    fn peak_over_silence(engine: &mut Engine, blocks: usize) -> f32 {
+        let input = vec![0.0_f32; BLOCK];
+        let mut output = vec![0.0_f32; BLOCK];
+        let mut peak = 0.0_f32;
+        for _ in 0..blocks {
+            engine.process(&input, &mut output).unwrap();
+            for &s in &output {
+                peak = peak.max(s.abs());
+            }
+        }
+        peak
+    }
+
+    /// The headline bug: seek in a DAW with a reverb or delay in the chain and
+    /// you hear the tail from bar 32 over bar 1.
+    #[test]
+    fn reset_silences_delay_and_reverb_tails() {
+        let (mut engine, handle, _rx) =
+            Engine::new_for_plugin(SR, BLOCK, None, 1.0).expect("engine should construct");
+
+        let mut chain = AmplifierChain::new();
+        chain.add_stage(Box::new(DelayStage::new(120.0, 0.9, 1.0, SR_F32)));
+        chain.add_stage(Box::new(ReverbStage::new(0.9, 0.2, 1.0, SR_F32)));
+        handle.set_amp_chain(chain);
+
+        // Play something loud, then stop.
+        let loud = vec![0.8_f32; BLOCK];
+        let mut output = vec![0.0_f32; BLOCK];
+        for _ in 0..200 {
+            engine.process(&loud, &mut output).unwrap();
+        }
+
+        // Without a reset, the tail is plainly audible.
+        assert!(
+            peak_over_silence(&mut engine, 20) > 1e-3,
+            "the chain should be ringing before the reset — the test proves nothing otherwise"
+        );
+
+        engine.reset();
+
+        let peak = peak_over_silence(&mut engine, 400);
+        assert!(
+            peak < 1e-9,
+            "audio from before the seek survived the reset: peak {peak}"
+        );
+    }
+
+    /// The IR cabinet's convolution tail is part of the same problem.
+    #[test]
+    fn reset_silences_the_ir_tail() {
+        let (mut engine, _handle, _rx) =
+            Engine::new_for_plugin(SR, BLOCK, Some(cabinet_with_ir()), 1.0)
+                .expect("engine should construct");
+
+        let loud = vec![0.8_f32; BLOCK];
+        let mut output = vec![0.0_f32; BLOCK];
+        for _ in 0..40 {
+            engine.process(&loud, &mut output).unwrap();
+        }
+        assert!(
+            peak_over_silence(&mut engine, 1) > 1e-4,
+            "the cab should be ringing before the reset"
+        );
+
+        engine.reset();
+
+        let peak = peak_over_silence(&mut engine, 40);
+        assert!(peak < 1e-9, "IR tail survived the reset: peak {peak}");
+    }
+
+    /// The oversampling resamplers and the input filters hold state of their
+    /// own, upstream and downstream of the chain.
+    #[test]
+    fn reset_flushes_the_oversampling_path_and_input_filters() {
+        let (mut engine, handle, _rx) =
+            Engine::new_for_plugin(SR, BLOCK, None, 4.0).expect("engine should construct");
+
+        handle.set_input_filters(
+            Some(Box::new(FilterStage::new(
+                FilterType::Highpass,
+                80.0,
+                SR_F32,
+            ))),
+            Some(Box::new(FilterStage::new(
+                FilterType::Lowpass,
+                8_000.0,
+                SR_F32,
+            ))),
+        );
+
+        let loud = vec![0.9_f32; BLOCK];
+        let mut output = vec![0.0_f32; BLOCK];
+        for _ in 0..40 {
+            engine.process(&loud, &mut output).unwrap();
+        }
+        assert!(
+            peak_over_silence(&mut engine, 1) > 1e-4,
+            "resampler/filter state should be non-empty before the reset"
+        );
+
+        engine.reset();
+
+        let peak = peak_over_silence(&mut engine, 40);
+        assert!(
+            peak < 1e-9,
+            "oversampling/input-filter state survived the reset: peak {peak}"
+        );
+    }
+
+    /// The pitch shifter buffers a full FFT frame of audio plus an overlap-add
+    /// tail, so a seek without a reset smears the old position over the new one
+    /// for ~42 ms.
+    #[test]
+    fn reset_flushes_the_pitch_shifter() {
+        let (mut engine, handle, _rx) =
+            Engine::new_for_plugin(SR, BLOCK, None, 1.0).expect("engine should construct");
+        handle.set_pitch_shift(7);
+
+        let loud = vec![0.8_f32; BLOCK];
+        let mut output = vec![0.0_f32; BLOCK];
+        for _ in 0..200 {
+            engine.process(&loud, &mut output).unwrap();
+        }
+        assert!(
+            peak_over_silence(&mut engine, 4) > 1e-4,
+            "the shifter should have audio in flight before the reset"
+        );
+
+        engine.reset();
+
+        let peak = peak_over_silence(&mut engine, 200);
+        assert!(
+            peak < 1e-9,
+            "pitch shifter output survived the reset: peak {peak}"
+        );
+    }
+
+    /// A reset shifter must behave like a fresh one, not merely be quiet — the
+    /// ring cursor, hop counter and overlap-add pointers all have to go back to
+    /// their initial positions or the next frame comes out different.
+    #[test]
+    fn pitch_shifter_reset_matches_a_fresh_shifter() {
+        let mut used = PitchShifter::new(7.0);
+        let mut warm: Vec<f32> = (0..8192).map(|i| (i as f32 * 0.03).sin()).collect();
+        used.process_block(&mut warm);
+        used.reset();
+
+        let mut fresh = PitchShifter::new(7.0);
+
+        let probe: Vec<f32> = (0..8192).map(|i| (i as f32 * 0.017).sin() * 0.6).collect();
+        let mut a = probe.clone();
+        let mut b = probe;
+        used.process_block(&mut a);
+        fresh.process_block(&mut b);
+
+        for (i, (x, y)) in a.iter().zip(&b).enumerate() {
+            assert!(
+                (x - y).abs() < 1e-6,
+                "sample {i}: reset shifter gave {x}, fresh shifter {y}"
+            );
+        }
+    }
+
+    /// Reset runs on the audio thread, where latency cannot be re-reported. So
+    /// it must not change the figure the host was already told — in particular
+    /// it must not disengage the sticky oversampling FIFO.
+    #[test]
+    fn reset_preserves_reported_latency() {
+        for oversample in [1.0, 4.0] {
+            let (mut engine, handle, _rx) =
+                Engine::new_for_plugin(SR, 512, None, oversample).expect("engine should construct");
+            handle.set_pitch_shift(7);
+
+            let input = vec![0.5_f32; 512];
+            let mut output = vec![0.0_f32; 512];
+            engine.process(&input, &mut output).unwrap();
+
+            // A ragged block engages the FIFO permanently (4x only).
+            let ragged = vec![0.5_f32; 37];
+            let mut ragged_out = vec![0.0_f32; 37];
+            engine.process(&ragged, &mut ragged_out).unwrap();
+
+            let engaged_before = engine.fifo_engaged();
+            let latency_before = engine.latency_frames();
+
+            engine.reset();
+
+            assert_eq!(
+                engine.latency_frames(),
+                latency_before,
+                "{oversample}x: reset changed the reported latency"
+            );
+            assert_eq!(
+                engine.fifo_engaged(),
+                engaged_before,
+                "{oversample}x: reset changed FIFO engagement"
+            );
+        }
+    }
+
+    /// Reset is state-only: every setting must survive it.
+    #[test]
+    fn reset_preserves_configuration() {
+        let (mut engine, handle, _rx) =
+            Engine::new_for_plugin(SR, BLOCK, Some(cabinet_with_ir()), 1.0)
+                .expect("engine should construct");
+
+        let mut chain = AmplifierChain::new();
+        chain.add_stage(Box::new(DelayStage::new(250.0, 0.5, 0.4, SR_F32)));
+        handle.set_amp_chain(chain);
+
+        let input = vec![0.5_f32; BLOCK];
+        let mut output = vec![0.0_f32; BLOCK];
+        engine.process(&input, &mut output).unwrap();
+
+        let tail_before = engine.tail_seconds();
+        assert!(tail_before > 0.0, "the delay should report a tail");
+
+        engine.reset();
+        engine.process(&input, &mut output).unwrap();
+
+        assert_eq!(
+            engine.tail_seconds(),
+            tail_before,
+            "reset must not disturb the reported tail — the chain is unchanged"
+        );
+    }
+
+    /// Reset is idempotent and safe on an engine that has never processed a
+    /// block: hosts are free to call it right after `initialize()`, and
+    /// nih-plug in fact always does.
+    #[test]
+    fn reset_is_safe_before_any_audio_and_when_repeated() {
+        let (mut engine, _handle, _rx) =
+            Engine::new_for_plugin(SR, BLOCK, Some(cabinet_with_ir()), 4.0)
+                .expect("engine should construct");
+
+        engine.reset();
+        engine.reset();
+
+        let input = vec![0.5_f32; BLOCK];
+        let mut output = vec![0.0_f32; BLOCK];
+        engine.process(&input, &mut output).unwrap();
+        assert!(
+            output.iter().all(|s| s.is_finite()),
+            "engine produced non-finite output after an early reset"
+        );
+    }
+
+    /// `Samplers::reset` in isolation, including that it leaves the resamplers
+    /// usable (rubato's `reset` also restores chunk sizes).
+    #[test]
+    fn samplers_reset_leaves_them_usable() {
+        let mut samplers = Samplers::new(BLOCK, 4.0, SR).unwrap();
+        let latency_before = samplers.latency_frames();
+
+        samplers.copy_input(&vec![0.7_f32; BLOCK]).unwrap();
+        samplers.upsample().unwrap();
+        samplers.downsample().unwrap();
+
+        samplers.reset();
+
+        assert_eq!(
+            samplers.latency_frames(),
+            latency_before,
+            "reset changed the samplers' reported latency"
+        );
+
+        // Silence in must now give silence out: nothing of the old block is
+        // left in the overlap buffers.
+        let mut peak = 0.0_f32;
+        for _ in 0..8 {
+            samplers.copy_input(&vec![0.0_f32; BLOCK]).unwrap();
+            samplers.upsample().unwrap();
+            let out = samplers.downsample().unwrap();
+            for &s in out.iter() {
+                peak = peak.max(s.abs());
+            }
+        }
+        assert!(
+            peak < 1e-9,
+            "resampler state survived the reset: peak {peak}"
+        );
+    }
+}

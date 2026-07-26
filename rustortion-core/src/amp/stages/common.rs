@@ -37,6 +37,12 @@ impl DcBlocker {
         }
     }
 
+    /// Zero the filter memory, keeping the cutoff coefficient.
+    pub const fn reset(&mut self) {
+        self.x_prev = 0.0;
+        self.y_prev = 0.0;
+    }
+
     #[inline]
     pub fn process(&mut self, input: f32) -> f32 {
         let output = self.coeff.mul_add(self.y_prev, input - self.x_prev);
@@ -60,6 +66,11 @@ impl OnePoleLP {
     pub fn new(cutoff_hz: f32, sample_rate: f32) -> Self {
         let coeff = 1.0 - (-2.0 * PI * cutoff_hz / sample_rate).exp();
         Self { y_prev: 0.0, coeff }
+    }
+
+    /// Zero the filter memory, keeping the cutoff coefficient.
+    pub const fn reset(&mut self) {
+        self.y_prev = 0.0;
     }
 
     #[inline]

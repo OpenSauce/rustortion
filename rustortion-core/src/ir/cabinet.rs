@@ -94,6 +94,16 @@ impl IrCabinet {
         conv_out * self.output_gain
     }
 
+    /// Zero the convolver's delay line, dropping the cab's ringing tail while
+    /// keeping the loaded IR (unlike [`Self::clear_convolver`], which discards
+    /// the coefficients too).
+    ///
+    /// RT-safe: `Convolver::reset` allocates and frees nothing on either
+    /// implementation.
+    pub fn reset(&mut self) {
+        self.convolver.reset();
+    }
+
     pub fn set_bypass(&mut self, bypass: bool) {
         self.bypassed = bypass;
         if bypass {

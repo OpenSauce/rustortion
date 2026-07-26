@@ -276,6 +276,51 @@ impl Engine {
         Ok(())
     }
 
+    /// Drop every sample of audio still in flight anywhere in the signal path,
+    /// without changing a single setting.
+    ///
+    /// This is what a plugin host's transport locate/seek maps onto (nih-plug's
+    /// `Plugin::reset`, which it documents as callable "at any other time from
+    /// the audio thread"). Without it, a seek leaves the delay lines, reverb
+    /// tanks, filter memory, oversampling FIFO, pitch-shifter STFT buffers and
+    /// IR tail full of the audio from wherever the playhead used to be, and you
+    /// hear bar 32 over bar 1.
+    ///
+    /// Covers, in signal order: the input filters, the oversampling resamplers
+    /// and their FIFO, every stage in the amp chain (bypassed ones included),
+    /// the pitch shifter, and the IR cabinet.
+    ///
+    /// # Real-time contract
+    ///
+    /// Runs on the audio thread and is allocation-free, lock-free and I/O-free
+    /// throughout — everything below zeroes buffers in place. It is emphatically
+    /// **not** the engine-rebuild path (`SetAmpChain` and friends), which
+    /// allocates. `tests/no_alloc.rs::reset` enforces this.
+    ///
+    /// Deliberately left alone: the reported latency (nothing here changes it,
+    /// and the audio thread cannot re-report it anyway); the tuner, peak meter,
+    /// metronome and recorder, none of which feed the processed signal path;
+    /// and the diagnostic latches (`nonfinite_seen` and the one-shot event
+    /// fields), which describe the session rather than the audio.
+    pub fn reset(&mut self) {
+        if let Some(ref mut hp) = self.input_highpass {
+            hp.reset();
+        }
+        if let Some(ref mut lp) = self.input_lowpass {
+            lp.reset();
+        }
+
+        self.samplers.reset();
+        self.chain.reset();
+
+        if let Some(ref mut shifter) = self.pitch_shifter {
+            shifter.reset();
+        }
+        if let Some(ref mut cab) = self.ir_cabinet {
+            cab.reset();
+        }
+    }
+
     /// Master-bus safety net: replace any non-finite sample with silence.
     ///
     /// A NaN or infinity produced anywhere upstream (feedback paths in the

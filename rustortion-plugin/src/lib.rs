@@ -559,6 +559,13 @@ impl Plugin for RustortionPlugin {
         context: &mut impl InitContext<Self>,
     ) -> bool {
         self.reported.reset();
+        // REV-24: the engine built below starts with its own default IR gain,
+        // so the `process()` delta check must fire on the very first block to
+        // push the real parameter value into it. A sentinel no gain can equal
+        // guarantees that; carrying the previous activation's value over is
+        // what used to swallow the correction after a reload. (`NEG_INFINITY`,
+        // not `NAN` — a `NaN` comparison is false and would swallow it again.)
+        self.last_ir_gain = f32::NEG_INFINITY;
         self.sample_rate = buffer_config.sample_rate;
         self.shared
             .sample_rate
@@ -926,6 +933,19 @@ impl Plugin for RustortionPlugin {
         // tails on transport stop. `tail_status` reports `Normal` only when
         // there is genuinely nothing left to hear.
         self.tail_status()
+    }
+
+    /// Flush every delay line, filter, buffer and tail in the engine.
+    ///
+    /// nih-plug calls this after each `initialize()` and "at any other time
+    /// from the audio thread" — in practice, whenever the host relocates the
+    /// transport. `Engine::reset` is written to that contract: it zeroes state
+    /// in place and never allocates, locks, or does I/O, so this must not be
+    /// rerouted through the engine-rebuild path.
+    fn reset(&mut self) {
+        if let Some(engine) = self.engine.as_mut() {
+            engine.reset();
+        }
     }
 
     fn deactivate(&mut self) {

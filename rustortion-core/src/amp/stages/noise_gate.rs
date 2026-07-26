@@ -116,6 +116,15 @@ impl Stage for NoiseGateStage {
         input * reduction
     }
 
+    /// Clears the level envelope and slams the gate shut with no hold left, the
+    /// same state a freshly constructed gate starts in. Carrying an open gate
+    /// across a seek would leak the first moments of noise through.
+    fn reset(&mut self) {
+        self.envelope.reset();
+        self.gate_state = 0.0;
+        self.hold_counter = 0;
+    }
+
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str> {
         match name {
             "threshold" => {
@@ -189,6 +198,54 @@ mod tests {
     fn make_gate() -> NoiseGateStage {
         // threshold -30 dB, ratio 10:1, 1ms attack, 50ms hold, 50ms release
         NoiseGateStage::new(-30.0, 10.0, 1.0, 50.0, 50.0, SR)
+    }
+
+    /// PLUG-2: a gate left open by loud playing before a seek would let the
+    /// first moments of noise after it through at full level. Reset shuts it.
+    #[test]
+    fn reset_closes_the_gate() {
+        let mut gate = make_gate();
+
+        // Drive it wide open.
+        for _ in 0..(SR as usize / 10) {
+            gate.process(0.8);
+        }
+        assert!(
+            gate.process(0.8) > 0.7,
+            "gate should be open before the reset"
+        );
+
+        gate.reset();
+
+        // First sample after the reset is fully attenuated: envelope at zero,
+        // gate state at zero, no hold left over.
+        let out = gate.process(0.001);
+        assert!(
+            out.abs() <= 0.001 / 10.0 + 1e-9,
+            "gate leaked {out} on the first sample after reset"
+        );
+    }
+
+    /// Reset must reproduce a freshly built gate exactly — envelope, gate state
+    /// and hold counter all back to their initial values.
+    #[test]
+    fn reset_matches_a_fresh_gate() {
+        let mut used = make_gate();
+        for _ in 0..(SR as usize / 10) {
+            used.process(0.8);
+        }
+        used.reset();
+
+        let mut fresh = make_gate();
+        for i in 0..4096 {
+            let input = (i as f32 * 0.05).sin() * 0.5;
+            let a = used.process(input);
+            let b = fresh.process(input);
+            assert!(
+                (a - b).abs() < 1e-9,
+                "sample {i}: reset gate gave {a}, fresh gate {b}"
+            );
+        }
     }
 
     #[test]

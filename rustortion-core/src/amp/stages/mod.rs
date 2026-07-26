@@ -26,6 +26,27 @@ pub trait Stage: Send + Sync + 'static {
         }
     }
 
+    /// Discard every sample of accumulated state, returning the stage to the
+    /// condition it was in immediately after construction — delay lines and
+    /// filter memory zeroed, envelopes and LFO phase back at their initial
+    /// values — while leaving all *parameters* exactly as they are.
+    ///
+    /// Hosts call this on transport locate/seek (via nih-plug's
+    /// `Plugin::reset`), so without it a reverb tail or delay repeat from bar 32
+    /// keeps ringing over bar 1.
+    ///
+    /// # Real-time contract
+    ///
+    /// This runs **on the audio thread**. Implementations must zero their
+    /// buffers in place (`fill(0.0)`, resetting indices) and must never
+    /// allocate, free, lock, or perform I/O. `rustortion-core/tests/no_alloc.rs`
+    /// enforces this.
+    ///
+    /// Required rather than defaulted on purpose: adding a stage should force
+    /// the author to decide what its state is, and the compiler lists every
+    /// impl that has not.
+    fn reset(&mut self);
+
     // Set a parameter value by name
     fn set_parameter(&mut self, name: &str, value: f32) -> Result<(), &'static str>;
 
