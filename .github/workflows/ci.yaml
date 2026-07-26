@@ -134,7 +134,7 @@ jobs:
       # it. Publishing the bundles makes the untested platforms hand-testable
       # from the run's Artifacts section without cutting a release.
       - name: Upload bundles
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Rustortion-${{ matrix.label }}
           path: |
