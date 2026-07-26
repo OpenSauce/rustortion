@@ -19,9 +19,44 @@ install-updater = false
 include = ["impulse_responses", "presets", "README.md", "LICENSE"]
 # Skip checking whether the specified configuration files are up to date
 allow-dirty = ["ci"]
+# TEMPORARY - remove before merge. Builds release artifacts on the PR so the
+# apt fix below is proven on the real runners instead of at tag time.
+pr-run-mode = "upload"
 
+# dist builds the whole workspace, so the release build compiles
+# rustortion-plugin too — and that pulls iced_baseview -> baseview -> the `x11`
+# crate, whose build script hard-requires x11-xcb via pkg-config. v0.2.0
+# predates the plugin crate (#224), so the first tag after it (v0.3.0) was the
+# first time this list was ever insufficient, and it failed *after* the tag was
+# pushed.
+#
+# Keep this in sync with the apt list in .github/workflows/ci.yaml — if CI can
+# build the workspace and this cannot, the difference shows up only at tag time.
 [dist.dependencies.apt]
 libjack-jackd2-dev = '*'
 pkg-config = '*'
 libasound2-dev = '*'
 libgl-dev = '*'
+libx11-dev = '*'
+libx11-xcb-dev = '*'
+libxcb1-dev = '*'
+libxcursor-dev = '*'
+libxfixes-dev = '*'
+libxft-dev = '*'
+libxi-dev = '*'
+libxinerama-dev = '*'
+libxmu-dev = '*'
+libxrandr-dev = '*'
+libxrender-dev = '*'
+libxss-dev = '*'
+libxt-dev = '*'
+libxtst-dev = '*'
+libxxf86vm-dev = '*'
+libxkbcommon-dev = '*'
+libxkbcommon-x11-dev = '*'
+libxpresent-dev = '*'
+libxcb-render0-dev = '*'
+libxcb-shape0-dev = '*'
+libxcb-xfixes0-dev = '*'
+libxcb-icccm4-dev = '*'
+libxcb-dri2-0-dev = '*'
