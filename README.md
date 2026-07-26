@@ -47,11 +47,6 @@ cd rustortion-standalone-x86_64-unknown-linux-gnu
 ./rustortion
 ```
 
-> [!NOTE]
-> The standalone archive was named `rustortion-<target>.tar.xz` up to v0.2.0. From v0.3.0 it is
-> `rustortion-standalone-<target>.tar.xz`, following the crate rename. The binary inside is still
-> `rustortion`. Substitute `aarch64` for `x86_64` on a Raspberry Pi.
-
 ### Running/Building from Source
 
 With the rust toolchain installed, you can clone the repository and run the application:
