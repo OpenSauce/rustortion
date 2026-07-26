@@ -1,3 +1,58 @@
+## [0.3.0] - 2026-07-26
+
+### 🚀 Features
+
+- Add per-stage bypass toggle (#220)
+- Add nih-plug CLAP/VST3 plugin with GUI and preset support (#224)
+- Shared GUI via rustortion-ui with iced_baseview plugin editor (#225)
+- Assert no allocations on the RT audio path (#238)
+- Add NAM neural amp modeler stage (#243)
+- *(nam)* Bypass model on sample-rate mismatch and surface it in the UI (#244)
+- *(nam)* Folder management — editable dir, rescan, models-folder on stage card (#245)
+- *(nam)* Update to nam-rs 0.2.0 and support LSTM models (#248)
+- *(stages)* Add tremolo effect with sine→square killswitch shape (#258)
+
+### 🐛 Bug Fixes
+
+- Move IR loading off RT thread and drain engine messages (#213) (#215)
+- Forward parameter changes to live stages, eliminate rebuild clicks (#217)
+- Correct power amp sag, push-pull symmetry, and add sag_release (#218)
+- *(dsp)* Tube bug fixes (#223)
+- Shared oversampling control with race condition fixes (#227)
+- Bundle and load own font (#231)
+- *(ui)* Suffix slider step literals to satisfy float_literal_f32_fallback (#265)
+- *(tremolo)* Perceptual shape curve so the whole knob morphs (#259)
+- *(plugin)* Make the plugin honest for the v0.3.0 release (#268)
+- *(plugin)* Resolve the engine handle per call so the GUI survives a reload (#272)
+- *(preset)* Stop non-ASCII preset names from colliding on disk (#275)
+- *(standalone)* Report a missing JACK server instead of panicking (#277)
+- *(plugin)* Flush all DSP state on host transport reset (PLUG-2) (#276)
+- *(plugin)* Restore host state across a deactivate/reactivate cycle (#279)
+
+### 📚 Documentation
+
+- Trim CLAUDE.md and correct stage count and macro claims (#267)
+
+### ⚡ Performance
+
+- Per-block chain processing + batched NAM process_buffer (2.8×) (#249)
+- *(rt)* Eliminate permit_alloc sites on the RT audio path (#239) (#254)
+- *(rt)* Enable FTZ/DAZ on the audio thread and clean up denormal handling (#269)
+
+### 🧪 Testing
+
+- Add tests for preamp, compressor, tonestack, and noise gate stages (#221)
+- *(nam)* Guard model-name recall + document deferred automation (#246)
+
+### ⚙️ Miscellaneous Tasks
+
+- Edge case fixes and code cleanup (#222)
+- Fix linting issues (#235)
+- *(nam)* Update nam-rs to 0.3.0 from crates.io (#256)
+- *(ci)* Pin the Rust toolchain to 1.95.0 (#270)
+- *(plugin)* Build the plugin in CI and attach bundles to releases (#271)
+- *(plugin)* Build the plugin on aarch64 Linux and Windows (#274)
+- Delete the Korg D888 reverb IRs (#278)
 ## [0.2.0] - 2026-03-08
 
 ### 🚀 Features

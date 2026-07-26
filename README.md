@@ -14,14 +14,15 @@ A guitar and bass amp simulator built in Rust. Runs standalone with JACK, or as 
 ## Features
 
 - Low-latency audio processing with configurable oversampling (1x–16x)
-- 11 DSP stages: preamp (with 12AX7 triode clipper), compressor, tone stack, power amp, noise gate, level, multi-band saturator, delay, reverb, 16-band graphic EQ, and NAM (Neural Amp Modeler) model loading (WaveNet + LSTM `.nam` files)
+- 12 DSP stages: preamp (with 12AX7 triode clipper), compressor, tone stack, power amp, noise gate, level, multi-band saturator, delay, reverb, tremolo, 16-band graphic EQ, and NAM (Neural Amp Modeler) model loading (WaveNet + LSTM `.nam` files)
+- Per-stage bypass and stage reordering within the chain
 - Impulse response cabinet simulation for both guitar and bass
 - Saving and loading presets with keyboard hotkey switching
 - Real-time recording capability
 - Built-in tuner
 - FFT-based pitch shifting for alternate tunings without retuning your instrument
 - MIDI controller support
-- VST3 and CLAP plugin builds for DAW use (experimental — see [Plugin](#vst3clap-plugin))
+- VST3 and CLAP plugin builds for DAW use — see [Plugin](#vst3clap-plugin)
 - Tabbed GUI with minimap, collapsible stage cards, and input filter controls - built with [Iced](https://github.com/iced-rs/iced)
 - English and Simplified Chinese UI
 
@@ -67,15 +68,25 @@ Rustortion also ships as an audio plugin in two formats: **CLAP** (`Rustortion.c
 **VST3** (`Rustortion.vst3`). Both are built from the same code and expose the same GUI as the
 standalone app.
 
-> [!NOTE]
-> Plugin builds are **Linux x86_64 only** for this release. There is no aarch64 (Raspberry Pi),
-> macOS, or Windows plugin build yet — cross-compiling the plugin GUI needs a full target sysroot
-> for X11/xcb/OpenGL, which the release pipeline does not have. On other platforms, build from
-> source (below) or use the standalone app.
+Bundles are published for three targets:
 
-Download `Rustortion-linux-x86_64.zip` from the
+| Download | Platform | Status |
+|---|---|---|
+| `Rustortion-linux-x86_64.zip` | Linux x86_64 | Tested in a DAW |
+| `Rustortion-linux-aarch64.zip` | Linux aarch64 (Raspberry Pi) | Builds in CI, not hand-tested |
+| `Rustortion-windows-x86_64.zip` | Windows x86_64 | Builds in CI, not hand-tested |
+
+> [!NOTE]
+> The aarch64 and Windows bundles are built natively in CI on every release, but have not been
+> loaded in a DAW by hand. They should work; if one doesn't, please open an issue. There is no
+> macOS build — it needs an Apple Developer ID for signing and notarization, without which a DAW
+> will refuse to load the plugin.
+
+Download the archive for your platform from the
 [releases page](https://github.com/OpenSauce/rustortion/releases/) and unpack both bundles into
 your plugin folders:
+
+On Linux (substitute `aarch64` for `x86_64` on a Pi):
 
 ```bash
 sudo apt-get install libjack-jackd2-0
@@ -86,7 +97,13 @@ cp -r Rustortion.vst3 ~/.vst3/
 ```
 
 `~/.clap` and `~/.vst3` are the standard per-user plugin directories on Linux; most hosts scan
-them by default. Rescan plugins in your DAW afterwards.
+them by default.
+
+On Windows, unzip `Rustortion-windows-x86_64.zip` and copy `Rustortion.clap` into
+`%COMMONPROGRAMFILES%\CLAP` and `Rustortion.vst3` into `%COMMONPROGRAMFILES%\VST3` (typically
+`C:\Program Files\Common Files\`).
+
+Rescan plugins in your DAW afterwards.
 
 To build the plugin from source instead:
 

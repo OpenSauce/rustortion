@@ -13,14 +13,15 @@
 ## 功能特性
 
 - 低延迟音频处理，支持可配置的过采样（1x–16x）
-- 11 个 DSP 处理级：前级放大（含 12AX7 三极管削波器）、压缩器、音色堆栈、后级放大、噪声门、电平、多频段饱和器、延迟、混响、16 频段图形均衡器，以及 NAM（Neural Amp Modeler）模型加载（支持 WaveNet 与 LSTM 的 `.nam` 文件）
+- 12 个 DSP 处理级：前级放大（含 12AX7 三极管削波器）、压缩器、音色堆栈、后级放大、噪声门、电平、多频段饱和器、延迟、混响、颤音、16 频段图形均衡器，以及 NAM（Neural Amp Modeler）模型加载（支持 WaveNet 与 LSTM 的 `.nam` 文件）
+- 支持单个处理级旁通，以及在链中调整处理级顺序
 - 支持吉他和贝斯的脉冲响应箱体模拟
 - 预设的保存与加载，支持键盘快捷键切换
 - 实时录音功能
 - 内置调音器
 - 基于 FFT 的变调功能，无需重新调弦即可切换至不同调音
 - MIDI 控制器支持
-- VST3 与 CLAP 插件构建，可在 DAW 中使用（实验性 — 参见[插件](#vst3clap-插件)）
+- VST3 与 CLAP 插件构建，可在 DAW 中使用 — 参见[插件](#vst3clap-插件)
 - 标签式界面，支持缩略图、可折叠级卡片和输入滤波器控制 - 使用 [Iced](https://github.com/iced-rs/iced) 构建
 - 界面支持英文与简体中文
 
@@ -63,7 +64,44 @@ cargo run --release
 
 ### VST3/CLAP 插件
 
-插件目前为实验性功能，尚未包含在发布版本中——需从源码构建：
+Rustortion 同时以两种插件格式发布：**CLAP**（`Rustortion.clap`）与 **VST3**（`Rustortion.vst3`）。
+两者由同一份代码构建，并提供与独立版应用相同的图形界面。
+
+目前发布以下三个目标平台的插件包：
+
+| 下载文件 | 平台 | 状态 |
+|---|---|---|
+| `Rustortion-linux-x86_64.zip` | Linux x86_64 | 已在 DAW 中实机测试 |
+| `Rustortion-linux-aarch64.zip` | Linux aarch64（树莓派） | CI 构建通过，未经实机测试 |
+| `Rustortion-windows-x86_64.zip` | Windows x86_64 | CI 构建通过，未经实机测试 |
+
+> [!NOTE]
+> aarch64 与 Windows 插件包会在每次发布时由 CI 原生构建，但尚未在 DAW 中人工加载测试。
+> 它们理论上可以正常工作；若遇到问题，欢迎提交 issue。目前没有 macOS 构建——它需要 Apple
+> Developer ID 进行代码签名与公证（notarization），否则 DAW 会拒绝加载该插件。
+
+请从[发布页面](https://github.com/OpenSauce/rustortion/releases/)下载对应平台的压缩包，
+并将两个插件包解压到您的插件目录。
+
+Linux（树莓派请将 `x86_64` 替换为 `aarch64`）：
+
+```bash
+sudo apt-get install libjack-jackd2-0
+unzip Rustortion-linux-x86_64.zip
+mkdir -p ~/.clap ~/.vst3
+cp -r Rustortion.clap ~/.clap/
+cp -r Rustortion.vst3 ~/.vst3/
+```
+
+`~/.clap` 与 `~/.vst3` 是 Linux 上标准的用户级插件目录，多数宿主会默认扫描这两个位置。
+
+Windows：解压 `Rustortion-windows-x86_64.zip`，将 `Rustortion.clap` 复制到
+`%COMMONPROGRAMFILES%\CLAP`，将 `Rustortion.vst3` 复制到 `%COMMONPROGRAMFILES%\VST3`
+（通常位于 `C:\Program Files\Common Files\`）。
+
+完成后请在您的 DAW 中重新扫描插件。
+
+若希望从源码构建插件：
 
 ```bash
 make plugin           # 构建 target/bundled/Rustortion.{clap,vst3}

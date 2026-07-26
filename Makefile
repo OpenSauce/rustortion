@@ -31,5 +31,11 @@ plugin-install:
 	cp target/bundled/Rustortion.clap ~/.clap/
 	cp -r target/bundled/Rustortion.vst3 ~/.vst3/
 
+# TAG is required: without --tag, git-cliff files the commits you are about to
+# release under "[unreleased]" instead of the version being cut.
+#   make changelog TAG=v0.3.0
 changelog:
-	git-cliff -o CHANGELOG.md
+ifndef TAG
+	$(error TAG is required, e.g. `make changelog TAG=v0.3.0`)
+endif
+	git-cliff --tag $(TAG) -o CHANGELOG.md
