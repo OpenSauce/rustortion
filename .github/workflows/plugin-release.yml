@@ -160,6 +160,10 @@ jobs:
       - name: Append plugin download table
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job has no actions/checkout, so gh cannot infer the repo from a
+          # git remote — without GH_REPO it fails with "not a git repository".
+          # Setting it is cheaper than checking out the tree just to name a repo.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           body="$(gh release view "$RELEASE_TAG" --json body --jq '.body')"
