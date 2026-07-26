@@ -309,6 +309,7 @@ fn do_load_preset(
     sample_rate: f32,
     oversampling_factor: u32,
     name: &str,
+    persisted_ir_name: &Mutex<Option<String>>,
 ) {
     let Some(manager) = manager else {
         return;
@@ -316,6 +317,16 @@ fn do_load_preset(
     let Some(preset) = manager.get_preset_by_name(name) else {
         return;
     };
+
+    // Keep the persisted cabinet in step with the one this preset installs
+    // below, *including* clearing it when the preset names no IR. The restore
+    // path prefers this field over the preset's own, so letting it keep a
+    // previous preset's cabinet would resurrect that cabinet on the next
+    // activation — the GUI's preset-load path emits no `IrSelected` for a
+    // preset with no IR, so nothing else would clear it.
+    if let Ok(mut persisted) = persisted_ir_name.lock() {
+        (*persisted).clone_from(&preset.ir_name);
+    }
 
     // Stages in the amp chain run at the oversampled rate
     #[allow(clippy::cast_precision_loss)]
@@ -387,35 +398,39 @@ impl RustortionPlugin {
     /// Only parameters whose engine message is allocation-free belong here.
     /// Pitch shift and the input filters have to build stages, so they are
     /// applied on the main thread in [`Plugin::initialize`] instead.
+    ///
+    /// "Allocation-free" covers the success path. `EngineHandle::send` formats a
+    /// log line if the bounded channel is full, which would allocate here — the
+    /// channel holds 128 and an activation queues a handful, so a full channel
+    /// means something upstream is already badly wrong.
     fn apply_host_params(&mut self, block_samples: u32) {
         // Leave the smoother untouched with no engine attached, so the value is
         // not consumed against an engine that never received it.
-        if self.engine_handle.is_none() {
+        // Destructured so the `last_*` writes below borrow disjointly from the
+        // handle, without cloning it on the audio thread.
+        let Self {
+            engine_handle,
+            params,
+            last_ir_gain,
+            last_ir_bypass,
+            ..
+        } = self;
+        let Some(handle) = engine_handle.as_ref() else {
             return;
+        };
+
+        let ir_gain = params.ir_gain.smoothed.next_step(block_samples);
+        if (ir_gain - *last_ir_gain).abs() > f32::EPSILON {
+            handle.set_ir_gain(ir_gain);
+            *last_ir_gain = ir_gain;
         }
 
-        let ir_gain = self.params.ir_gain.smoothed.next_step(block_samples);
-        let ir_bypass = self.params.ir_bypass.value();
-
-        let gain_changed = (ir_gain - self.last_ir_gain).abs() > f32::EPSILON;
-        let bypass_changed = self.last_ir_bypass != Some(ir_bypass);
-
-        if let Some(handle) = &self.engine_handle {
-            if gain_changed {
-                handle.set_ir_gain(ir_gain);
-            }
-            // Safe from the RT thread: `SetIrBypass` carries a plain `bool` over
-            // the bounded engine channel, so there is nothing to allocate.
-            if bypass_changed {
-                handle.set_ir_bypass(ir_bypass);
-            }
-        }
-
-        if gain_changed {
-            self.last_ir_gain = ir_gain;
-        }
-        if bypass_changed {
-            self.last_ir_bypass = Some(ir_bypass);
+        // Safe from the RT thread: `SetIrBypass` carries a plain `bool` over the
+        // bounded engine channel, so there is nothing to allocate.
+        let ir_bypass = params.ir_bypass.value();
+        if *last_ir_bypass != Some(ir_bypass) {
+            handle.set_ir_bypass(ir_bypass);
+            *last_ir_bypass = Some(ir_bypass);
         }
     }
 
@@ -526,6 +541,7 @@ impl Plugin for RustortionPlugin {
 
     fn task_executor(&mut self) -> TaskExecutor<Self> {
         let shared = self.shared.clone();
+        let params = self.params.clone();
 
         Box::new(move |task| {
             // Logging tasks carry no engine work, so handle them before the
@@ -575,6 +591,7 @@ impl Plugin for RustortionPlugin {
                         sample_rate,
                         os_factor,
                         &name,
+                        &params.ir_name,
                     );
                 }
                 PluginTask::ChangeOversamplingAndReload {
@@ -835,7 +852,12 @@ impl Plugin for RustortionPlugin {
 
                         if let Some(preset) = &preset {
                             handle.set_ir_gain(preset.ir_gain);
-                            handle.set_pitch_shift(preset.pitch_shift_semitones);
+                            // Deliberately no `set_pitch_shift` here. This arm
+                            // only runs when `restoring` is true, so the restore
+                            // block below immediately overwrites it with the
+                            // host's own value — and each call builds a
+                            // `PitchShifter` with its own FFT plans, so doing
+                            // both allocates one purely to discard it.
                         }
                     } else {
                         // No persisted chain — fall back to loading preset from disk
@@ -855,6 +877,7 @@ impl Plugin for RustortionPlugin {
                                 self.sample_rate,
                                 os_factor,
                                 &name,
+                                &self.params.ir_name,
                             );
                         }
                     }
