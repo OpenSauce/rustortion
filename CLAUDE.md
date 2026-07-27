@@ -86,7 +86,8 @@ Nothing to add in `rustortion-plugin/src/params.rs` — stage parameters are not
 - **IR files** live in `impulse_responses/` and `~/.config/rustortion/impulse_responses/`; loading
   is async, off the RT thread. Keep convolver type configurable — FIR beat FFT on the Pi in real
   testing, and the TwoStage tail math is numerically wrong until REV-2 lands.
-- **iced_baseview** is a fork at `github.com/OpenSauce/iced_baseview` (unpinned git dep).
+- **iced_baseview** is a fork at `github.com/OpenSauce/iced_baseview`, pinned to tag `v0.1.0`.
+  Moving it means tagging a release on the fork first — don't repoint it at a bare `rev`.
 - **The plugin exposes 9 global params only** (`params.rs`, ~117 lines): output level, IR gain/bypass,
   pitch shift, HP/LP enable+cutoff, preset index. The nested per-slot param arrays were deleted in
   REV-4 — they were never read by `process()`. Stage settings travel through `chain_state` (preset
