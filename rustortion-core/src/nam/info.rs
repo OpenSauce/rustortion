@@ -1,10 +1,10 @@
 //! Display-ready summary of a `.nam` file's metadata.
 //!
-//! [`nam_rs::NamModel::metadata_typed`] clones and re-parses the raw JSON on every
-//! call — including the trainer's `training` blob, which is by far the largest thing
-//! in the file. That is fine at load time and completely wrong in a GUI `view()`,
-//! which runs every frame. So the fields the UI actually shows are extracted once,
-//! when the model is parsed, and cached in the registry.
+//! [`nam_rs::NamModel::metadata_typed`] deep-clones the `metadata` subtree and
+//! re-deserializes it on every call — including the trainer's `training` blob, the
+//! largest thing in that subtree. Fine at load time, wrong in a GUI `view()`, which
+//! runs every frame. So the fields the UI shows are extracted once, when the model
+//! is parsed, and cached in the registry.
 
 use nam_rs::NamModel;
 
@@ -22,6 +22,30 @@ fn meaningful(value: Option<String>) -> Option<String> {
     Some(trimmed.to_owned())
 }
 
+/// Words that invert a cab mention: "no cab", "cab-less", "cab sim off", "without
+/// cab". Any of them anywhere in the name suppresses the name signal entirely —
+/// the name is then not evidence *for* a cab, and we fall back to `gear_type`.
+///
+/// Suppressing broadly rather than trying to parse the negation is deliberate,
+/// because the two errors are not equally bad. Over-suppressing costs nothing: we
+/// fall back to the metadata, which is what we would have used anyway. Failing to
+/// spot a negation reports "cab included" for an amp-only capture, and the user
+/// bypasses the IR and ends up with no cab at all.
+const NAME_NEGATORS: &[&str] = &[
+    "no",
+    "not",
+    "without",
+    "wo",
+    "sans",
+    "minus",
+    "excluding",
+    "less",
+    "off",
+    "bypass",
+    "bypassed",
+    "disabled",
+];
+
 /// Whether a model's *name* claims a full signal chain. Only consulted when the
 /// metadata gives us nothing — see [`ModelInfo::cab_from_name`]. Deliberately
 /// narrow: a false "has a cab" costs the user their IR.
@@ -38,14 +62,25 @@ fn name_suggests_cab(name: &str) -> bool {
         })
         .collect();
 
+    let tokens: Vec<&str> = normalized
+        .split_whitespace()
+        .map(|word| word.trim_matches(|c: char| !c.is_ascii_alphanumeric()))
+        .collect();
+
+    // Check negation first: "Marshall cab-less" normalizes to "marshall cab less",
+    // so the separator handling above actively manufactures a bare `cab` token that
+    // would otherwise read as a positive claim.
+    if tokens.iter().any(|t| NAME_NEGATORS.contains(t)) {
+        return false;
+    }
+
     if normalized.contains("full rig") || normalized.contains("fullrig") {
         return true;
     }
 
-    normalized.split_whitespace().any(|word| {
-        let word = word.trim_matches(|c: char| !c.is_ascii_alphanumeric());
-        matches!(word, "cab" | "cabs" | "cabinet")
-    })
+    tokens
+        .iter()
+        .any(|t| matches!(*t, "cab" | "cabs" | "cabinet"))
 }
 
 /// The subset of a model's metadata worth putting on screen, extracted once.
@@ -54,10 +89,14 @@ pub struct ModelInfo {
     /// Whether the capture already contains a speaker cab. `None` when the file
     /// doesn't say, or says something we can't place — never a guess.
     pub includes_cab: Option<bool>,
-    /// True when [`Self::includes_cab`] came from the model's *name*, not its
-    /// `gear_type`, because no descriptive metadata was filled in. Such files leave
-    /// `gear_type` at its default `amp` but say `…-FullRig` in the name. Surfaced so
-    /// the UI can mark the conclusion as inferred rather than stated.
+    /// True when [`Self::includes_cab`] came from the model's *name* rather than its
+    /// `gear_type`, because `gear_make`/`gear_model`/`tone_type` were all absent or
+    /// placeholders. Such files leave `gear_type` at its default `amp` but say
+    /// `…-FullRig` in the name. Other fields (`modeled_by`, `loudness`, the
+    /// calibration levels) are deliberately *not* consulted: they are written by the
+    /// exporter rather than chosen by the uploader, so they say nothing about
+    /// whether the gear description was filled in. Surfaced so the UI can mark the
+    /// conclusion as inferred rather than stated.
     pub cab_from_name: bool,
     /// The modelled gear, e.g. `"Marshall JMP-50"`. Make and model are joined, but
     /// deduplicated when they're identical (files commonly repeat the full name in
@@ -98,9 +137,10 @@ impl ModelInfo {
         let tone_type = meaningful(md.tone_type);
         let name = meaningful(md.name);
 
-        // `gear_type` is authoritative when anything was filled in. With every
-        // field a placeholder, the `amp` left over is a form default, not a
-        // statement, so the name is better evidence. Only upgrades, never down.
+        // `gear_type` is authoritative when the uploader described the gear at all.
+        // With gear *and* tone both placeholders, the `amp` left over is a form
+        // default rather than a statement, so the name is better evidence. Only ever
+        // upgrades to "has a cab", never down.
         let descriptive_unfilled = gear.is_none() && tone_type.is_none();
         let (includes_cab, cab_from_name) = match metadata_cab {
             Some(true) => (Some(true), false),
@@ -237,12 +277,14 @@ mod tests {
         assert_eq!(info.includes_cab, None);
     }
 
-    /// Real case: TONE3000 uploads where the user filled in nothing leave
+    /// Real case: a TONE3000 upload that left the gear fields as `T3K-Null` keeps
     /// `gear_type` at its default `amp` while the name records the truth. Trusting
     /// `amp` there would tell the user to add an IR to a capture that already has a
-    /// cab — the exact double-cab this feature exists to prevent.
+    /// cab — the exact double-cab this feature exists to prevent. Note `modeled_by`
+    /// is populated: only the gear and tone fields gate this, since the exporter
+    /// fills the rest in regardless of what the uploader typed.
     #[test]
-    fn name_overrides_gear_type_when_no_metadata_was_filled_in() {
+    fn name_overrides_gear_type_when_gear_and_tone_are_placeholders() {
         let info = ModelInfo::from_model(
             &model_with_metadata(
                 r#"{"name": "Boosted-6505+-A2-Chugs-FullRig", "gear_type": "amp",
@@ -283,10 +325,36 @@ mod tests {
     /// their IR, so it must not read cabs into names that merely contain the letters.
     #[test]
     fn name_matching_is_narrow() {
+        // Substring traps: "cab" inside a longer word is not a cab.
         for name in ["Cabernet Overdrive", "Scab Fuzz", "Caballero Clean"] {
             let info = ModelInfo::from_model(&model_with_metadata("{}"), name);
             assert_eq!(info.includes_cab, None, "{name} must not read as a cab");
         }
+        // The dangerous class: names that mention a cab in order to say there
+        // isn't one. Reading these as "cab included" makes the card advise
+        // bypassing the IR, leaving the signal with no cab at all. Note that the
+        // `-`/`_` normalization is what turns "cab-less" into a bare `cab` token,
+        // so this is a trap the normalization itself creates.
+        for name in [
+            "JCM800 no cab",
+            "5150 (no cab)",
+            "Recto_no_cab",
+            "Amp only - without cab",
+            "Marshall cab-less",
+            "Bogner - cab sim off",
+            "Friedman DI (no cab, no IR)",
+        ] {
+            let info = ModelInfo::from_model(&model_with_metadata("{}"), name);
+            assert_eq!(info.includes_cab, None, "{name} claims NO cab");
+        }
+        // ...and a negated name must not override an explicit `gear_type` either:
+        // it falls through to the metadata, which here says amp.
+        let info = ModelInfo::from_model(
+            &model_with_metadata(r#"{"gear_type": "amp"}"#),
+            "5150 no cab",
+        );
+        assert_eq!(info.includes_cab, Some(false));
+        assert!(!info.cab_from_name);
         for name in [
             "Marshall FAT CAB",
             "6505 full_rig",

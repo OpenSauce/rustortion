@@ -252,8 +252,9 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
                     }),
                 })
                 .width(Length::Fill),
-            // Goes out as a manual toggle, which is what it is — that clears the
-            // auto-bypass flag, so we stop moving the control once the user has.
+            // The IR bypass is never changed automatically; this button is the only
+            // thing on this card that touches it, so the write is always a real user
+            // gesture — which is what a plugin host records as automation.
             button(text(if ir_bypassed {
                 tr!(nam_enable_ir)
             } else {
@@ -265,16 +266,25 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         .align_y(Alignment::Center);
 
         // Rescan picks up newly dropped `.nam` files without restarting the host.
-        let dir_text = models_dir.map_or_else(
+        let dir_text = models_dir.as_deref().map_or_else(
             || format!("{}: —", tr!(nam_models_dir)),
             |dir| format!("{}: {dir}", tr!(nam_models_dir)),
         );
+        // With no directory the row shows "—", so the button has nothing to open:
+        // leave `on_press` unset and iced renders it disabled, rather than offering
+        // a click whose only effect is a log line.
+        let open_folder = button(text(tr!(nam_open_folder)));
+        let open_folder = if models_dir.is_some() {
+            open_folder.on_press(Message::Stage(
+                idx,
+                StageMessage::Nam(NamMessage::OpenFolder),
+            ))
+        } else {
+            open_folder
+        };
         let folder_row = row![
             text(dir_text).width(Length::Fill),
-            button(text(tr!(nam_open_folder))).on_press(Message::Stage(
-                idx,
-                StageMessage::Nam(NamMessage::OpenFolder)
-            )),
+            open_folder,
             button(text(tr!(nam_rescan_models)))
                 .on_press(Message::Stage(idx, StageMessage::Nam(NamMessage::Rescan))),
         ]
