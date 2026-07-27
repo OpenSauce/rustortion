@@ -5,7 +5,7 @@ use rustortion_core::amp::stages::nam::NamConfig;
 use rustortion_core::nam::registry;
 
 use crate::components::widgets::common::{
-    COLOR_SUBTLE, SPACING_NORMAL, SPACING_TIGHT, SPACING_WIDE, StageViewState, TEXT_SIZE_SMALL,
+    COLOR_SUBTLE, COLOR_WARNING, SPACING_NORMAL, SPACING_TIGHT, SPACING_WIDE, StageViewState, TEXT_SIZE_SMALL,
     labeled_slider, stage_card,
 };
 use crate::messages::Message;
@@ -203,30 +203,68 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
             .into()
         };
 
-        // `gear_type` is never displayed — only the conclusion drawn from it and
-        // what we did about it. `None` shows nothing rather than guessing.
-        let cab_line: Element<'_, Message> = match model_info
+        // `gear_type` is never displayed — only the conclusion drawn from it, the
+        // live IR state, and a toggle. Always shown: the pairing is what matters, so
+        // hiding it when the model says nothing just leaves the IR state a mystery.
+        // Warning colour marks the two mismatched combinations; the rest stay quiet.
+        let (cab_text, needs_attention) = match model_info
             .as_deref()
             .map(|info| (info.includes_cab, info.cab_from_name))
         {
             Some((Some(true), from_name)) => {
-                // Say when it's bypassed, or the automatic bypass looks like a bug.
-                let detail = if ir_bypassed {
-                    tr!(nam_cab_ir_bypassed)
-                } else {
-                    tr!(nam_cab_ir_conflict)
-                };
                 // A name-derived conclusion is a guess; don't present it as fact.
                 let source = if from_name {
                     format!(" ({})", tr!(nam_cab_from_name))
                 } else {
                     String::new()
                 };
-                text(format!("{}{source} · {detail}", tr!(nam_cab_included))).into()
+                let cab = format!("{}{source}", tr!(nam_cab_included));
+                if ir_bypassed {
+                    (format!("{cab} · {}", tr!(nam_cab_ir_bypassed)), false)
+                } else {
+                    (format!("{cab} · {}", tr!(nam_cab_ir_conflict)), true)
+                }
             }
-            Some((Some(false), _)) => text(tr!(nam_cab_not_included)).into(),
-            Some((None, _)) | None => text(String::new()).into(),
+            Some((Some(false), _)) => {
+                let cab = tr!(nam_cab_not_included);
+                if ir_bypassed {
+                    (format!("{cab} · {}", tr!(nam_ir_recommended)), true)
+                } else {
+                    (format!("{cab} · {}", tr!(nam_ir_active)), false)
+                }
+            }
+            // Nothing known about the model: report the IR state without judging it.
+            Some((None, _)) | None => (
+                if ir_bypassed {
+                    tr!(nam_cab_ir_bypassed).to_owned()
+                } else {
+                    tr!(nam_ir_active).to_owned()
+                },
+                false,
+            ),
         };
+
+        let cab_line = row![
+            text(cab_text)
+                .style(move |_| iced::widget::text::Style {
+                    color: Some(if needs_attention {
+                        COLOR_WARNING
+                    } else {
+                        COLOR_SUBTLE
+                    }),
+                })
+                .width(Length::Fill),
+            // Goes out as a manual toggle, which is what it is — that clears the
+            // auto-bypass flag, so we stop moving the control once the user has.
+            button(text(if ir_bypassed {
+                tr!(nam_enable_ir)
+            } else {
+                tr!(nam_bypass_ir)
+            }))
+            .on_press(Message::IrBypassed(!ir_bypassed)),
+        ]
+        .spacing(SPACING_NORMAL)
+        .align_y(Alignment::Center);
 
         // Rescan picks up newly dropped `.nam` files without restarting the host.
         let dir_text = models_dir.map_or_else(
