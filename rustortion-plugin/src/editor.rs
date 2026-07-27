@@ -84,7 +84,18 @@ impl Editor for PluginEditor {
                 scale: iced_baseview::baseview::WindowScalePolicy::SystemScaleFactor,
             },
             graphics_settings: iced_baseview::graphics::Settings::default(),
-            iced_baseview: iced_baseview::settings::IcedBaseviewSettings::default(),
+            iced_baseview: iced_baseview::settings::IcedBaseviewSettings {
+                ignore_non_modifier_keys: false,
+                // Not a performance knob — a correctness one. iced redraws only
+                // when it has a reason to, and baseview cannot ask for one when
+                // the window changes visibility, so the window is left
+                // presenting a swapchain buffer nothing ever drew into. On
+                // Windows that reads as the editor flickering; it is also why a
+                // reopened editor can come up blank. `nih_plug_iced` sets this
+                // for the same reason, and the default of `false` is what the
+                // upstream doc comment calls a workaround target.
+                always_redraw: true,
+            },
             ..Default::default()
         };
 
