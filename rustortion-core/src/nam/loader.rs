@@ -74,7 +74,7 @@ impl NamLoader {
                     );
                     // Summarize now: `metadata_typed` re-parses the whole JSON, so
                     // the GUI must never do it per frame.
-                    info.insert(name.clone(), Arc::new(ModelInfo::from_model(&model)));
+                    info.insert(name.clone(), Arc::new(ModelInfo::from_model(&model, &name)));
                     models.insert(name, Arc::new(model));
                 }
                 Err(e) => warn!("Skipping NAM file '{}': {e}", path.display()),

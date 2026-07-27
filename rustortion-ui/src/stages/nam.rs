@@ -148,45 +148,43 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
 
         // What the model actually is, when its metadata says. Filenames in the wild
         // are often cryptic ("S-[PRE] Divine Sheep #02") while the metadata names
-        // the real amp, so this is frequently the only place to see it.
+        // the real amp, so this is frequently the only place to see it. One labelled
+        // row per field, and a field the file doesn't carry gets no row at all.
         let details: Vec<Element<'_, Message>> = model_info
             .as_deref()
-            .filter(|info| !info.is_empty())
             .map(|info| {
-                let mut lines: Vec<Element<'_, Message>> = Vec::new();
-
-                // Gear and tone belong together: "Marshall JMP-50 · overdrive".
-                let gear_parts: Vec<&str> = [info.gear.as_deref(), info.tone_type.as_deref()]
-                    .into_iter()
-                    .flatten()
-                    .collect();
-                if !gear_parts.is_empty() {
-                    lines.push(text(gear_parts.join(" · ")).into());
+                let mut rows: Vec<(&str, String)> = Vec::new();
+                if let Some(gear) = info.gear.as_deref() {
+                    rows.push((tr!(nam_gear), gear.to_owned()));
                 }
-
-                // Attribution and level. Loudness is worth the space: it spans more
-                // than 20 dB across models in circulation, which is exactly the
-                // volume jump you hear when switching between them.
-                let mut credit = Vec::new();
+                if let Some(tone) = info.tone_type.as_deref() {
+                    rows.push((tr!(nam_tone_type), tone.to_owned()));
+                }
                 if let Some(by) = info.modeled_by.as_deref() {
-                    credit.push(format!("{}: {by}", tr!(nam_modeled_by)));
+                    rows.push((tr!(nam_modeled_by), by.to_owned()));
                 }
+                // Loudness earns its own row: it spans more than 20 dB across models
+                // in circulation, which is exactly the volume jump you hear when
+                // switching between them.
                 if let Some(lufs) = info.loudness_lufs {
-                    credit.push(format!("{lufs:.1} LUFS"));
-                }
-                if !credit.is_empty() {
-                    lines.push(text(credit.join(" · ")).into());
+                    rows.push((tr!(nam_loudness), format!("{lufs:.1} LUFS")));
                 }
 
-                lines
+                rows.into_iter()
+                    .map(|(label, value)| text(format!("{label}: {value}")).into())
+                    .collect()
             })
             .unwrap_or_default();
 
-        // Whether the selected model already contains a speaker cab, per its own
-        // metadata. `None` means the file doesn't say (or says something we don't
-        // recognise) — in that case we show nothing rather than guess.
-        let cab_line: Element<'_, Message> = match model_info.and_then(|info| info.includes_cab) {
-            Some(true) => {
+        // Whether the selected model already contains a speaker cab. `None` means
+        // the file doesn't say (or says something we don't recognise) — in that case
+        // we show nothing rather than guess. `gear_type` itself is never displayed;
+        // only the conclusion drawn from it, and what we did about it.
+        let cab_line: Element<'_, Message> = match model_info
+            .as_deref()
+            .map(|info| (info.includes_cab, info.cab_from_name))
+        {
+            Some((Some(true), from_name)) => {
                 // The IR is a second cab unless it's bypassed. When it is bypassed,
                 // say so — otherwise the automatic bypass looks like a bug.
                 let detail = if ir_bypassed {
@@ -194,10 +192,17 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
                 } else {
                     tr!(nam_cab_ir_conflict)
                 };
-                text(format!("{} · {detail}", tr!(nam_cab_included))).into()
+                // A conclusion read off the model's name is a guess, and must not be
+                // presented as though the file had stated it.
+                let source = if from_name {
+                    format!(" ({})", tr!(nam_cab_from_name))
+                } else {
+                    String::new()
+                };
+                text(format!("{}{source} · {detail}", tr!(nam_cab_included))).into()
             }
-            Some(false) => text(tr!(nam_cab_not_included)).into(),
-            None => text(String::new()).into(),
+            Some((Some(false), _)) => text(tr!(nam_cab_not_included)).into(),
+            Some((None, _)) | None => text(String::new()).into(),
         };
 
         // Folder location, a button to open it in the file manager, and a Rescan so
