@@ -1934,7 +1934,7 @@ dependencies = [
 [[package]]
 name = "iced_baseview"
 version = "0.1.0"
-source = "git+https://github.com/OpenSauce/iced_baseview.git?rev=2377031b#2377031b0fbea47356d673996aabc2c0146b3dd2"
+source = "git+https://github.com/OpenSauce/iced_baseview.git?rev=f76ba2f1#f76ba2f1ec3affc643528a79aa7a178b33a7cd13"
 dependencies = [
  "baseview",
  "cfg-if",
@@ -1949,6 +1949,7 @@ dependencies = [
  "raw-window-handle 0.6.2",
  "thiserror 1.0.69",
  "window_clipboard 0.4.1",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

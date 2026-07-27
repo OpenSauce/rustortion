@@ -10,7 +10,7 @@ crate-type = ["cdylib"]
 rustortion-core = { path = "../rustortion-core" }
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", rev = "28b149ec" }
 rustortion-ui = { path = "../rustortion-ui" }
-iced_baseview = { git = "https://github.com/OpenSauce/iced_baseview.git", rev = "2377031b" }
+iced_baseview = { git = "https://github.com/OpenSauce/iced_baseview.git", rev = "f76ba2f1" }
 crossbeam = "0.8"
 log = "0.4"
 dirs = "6"
