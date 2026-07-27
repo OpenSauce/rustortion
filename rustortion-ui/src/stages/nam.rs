@@ -22,6 +22,8 @@ pub enum NamMessage {
     MixChanged(f32),
     /// Re-scan the NAM models directory and refresh the model pick-list.
     Rescan,
+    /// Reveal the NAM models directory in the file manager.
+    OpenFolder,
 }
 
 /// A pick-list entry: either a named model or an explicit "no model" choice that
@@ -56,8 +58,10 @@ pub fn apply(cfg: &mut NamConfig, msg: NamMessage) -> Option<ParamUpdate> {
     match msg {
         NamMessage::ModelSelected(name) => {
             cfg.model_name = name;
-            // Selecting a model is a non-float change: rebuild the stage.
-            Some(ParamUpdate::NeedsStageRebuild)
+            // Selecting a model is a non-float change: rebuild the stage. The
+            // NAM-specific variant also lets the app reconcile the IR cabinet, since
+            // the new model may already contain a cab.
+            Some(ParamUpdate::NamModelSelected)
         }
         NamMessage::InputGainChanged(v) => {
             cfg.input_gain_db = v;
@@ -72,6 +76,7 @@ pub fn apply(cfg: &mut NamConfig, msg: NamMessage) -> Option<ParamUpdate> {
             Some(ParamUpdate::Changed("mix", v))
         }
         NamMessage::Rescan => Some(ParamUpdate::RescanNamModels),
+        NamMessage::OpenFolder => Some(ParamUpdate::OpenNamModelsDir),
     }
 }
 
@@ -89,6 +94,9 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         .map(|p| p.display().to_string());
     // Effective engine rate, read out before `state` is moved into the card closure.
     let engine_rate = state.engine_sample_rate;
+    // Whether the IR cabinet is currently bypassed, so a cab-inclusive model can say
+    // whether the IR after it is a second cab or already out of the way.
+    let ir_bypassed = state.ir_bypassed;
 
     stage_card(tr!(stage_nam), idx, state, move || {
         // "(None)" first so a selected model can be cleared back to passthrough.
@@ -134,24 +142,92 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
             None => text(String::new()).into(),
         };
 
-        // Folder location + a Rescan button so users can drop new `.nam` files
-        // and pick them up without restarting the host.
+        // Cached summary of the selected model's metadata. Cheap by construction:
+        // extracted once at load, so this runs per frame without re-parsing JSON.
+        let model_info = model_name.as_deref().and_then(registry::info);
+
+        // What the model actually is, when its metadata says. Filenames in the wild
+        // are often cryptic ("S-[PRE] Divine Sheep #02") while the metadata names
+        // the real amp, so this is frequently the only place to see it.
+        let details: Vec<Element<'_, Message>> = model_info
+            .as_deref()
+            .filter(|info| !info.is_empty())
+            .map(|info| {
+                let mut lines: Vec<Element<'_, Message>> = Vec::new();
+
+                // Gear and tone belong together: "Marshall JMP-50 · overdrive".
+                let gear_parts: Vec<&str> = [info.gear.as_deref(), info.tone_type.as_deref()]
+                    .into_iter()
+                    .flatten()
+                    .collect();
+                if !gear_parts.is_empty() {
+                    lines.push(text(gear_parts.join(" · ")).into());
+                }
+
+                // Attribution and level. Loudness is worth the space: it spans more
+                // than 20 dB across models in circulation, which is exactly the
+                // volume jump you hear when switching between them.
+                let mut credit = Vec::new();
+                if let Some(by) = info.modeled_by.as_deref() {
+                    credit.push(format!("{}: {by}", tr!(nam_modeled_by)));
+                }
+                if let Some(lufs) = info.loudness_lufs {
+                    credit.push(format!("{lufs:.1} LUFS"));
+                }
+                if !credit.is_empty() {
+                    lines.push(text(credit.join(" · ")).into());
+                }
+
+                lines
+            })
+            .unwrap_or_default();
+
+        // Whether the selected model already contains a speaker cab, per its own
+        // metadata. `None` means the file doesn't say (or says something we don't
+        // recognise) — in that case we show nothing rather than guess.
+        let cab_line: Element<'_, Message> = match model_info.and_then(|info| info.includes_cab) {
+            Some(true) => {
+                // The IR is a second cab unless it's bypassed. When it is bypassed,
+                // say so — otherwise the automatic bypass looks like a bug.
+                let detail = if ir_bypassed {
+                    tr!(nam_cab_ir_bypassed)
+                } else {
+                    tr!(nam_cab_ir_conflict)
+                };
+                text(format!("{} · {detail}", tr!(nam_cab_included))).into()
+            }
+            Some(false) => text(tr!(nam_cab_not_included)).into(),
+            None => text(String::new()).into(),
+        };
+
+        // Folder location, a button to open it in the file manager, and a Rescan so
+        // users can drop new `.nam` files and pick them up without restarting the host.
         let dir_text = models_dir.map_or_else(
             || format!("{}: —", tr!(nam_models_dir)),
             |dir| format!("{}: {dir}", tr!(nam_models_dir)),
         );
         let folder_row = row![
             text(dir_text).width(Length::Fill),
+            button(text(tr!(nam_open_folder))).on_press(Message::Stage(
+                idx,
+                StageMessage::Nam(NamMessage::OpenFolder)
+            )),
             button(text(tr!(nam_rescan_models)))
                 .on_press(Message::Stage(idx, StageMessage::Nam(NamMessage::Rescan))),
         ]
         .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
 
+        // `details` is variable-length (a model may carry all, some, or none of the
+        // descriptive fields), so the card is assembled rather than written as one
+        // literal: fixed rows, then the details, then the rest.
+        let header = column![model_selector, folder_row, info_line]
+            .spacing(SPACING_TIGHT)
+            .extend(details);
+
         column![
-            model_selector,
-            folder_row,
-            info_line,
+            header,
+            cab_line,
             labeled_slider(
                 tr!(nam_input_gain),
                 -24.0..=24.0,

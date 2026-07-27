@@ -37,5 +37,6 @@ pub mod handlers;
 pub mod hotkey;
 pub mod i18n;
 pub mod messages;
+pub mod platform;
 pub mod stages;
 pub mod tabs;

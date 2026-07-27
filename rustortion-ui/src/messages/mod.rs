@@ -56,6 +56,14 @@ pub enum Message {
     // IR Cabinet messages
     IrSelected(String),
     IrBypassed(bool),
+    /// IR bypass changed by the app rather than by the user, because the selected
+    /// NAM model's own metadata says whether it already contains a cab.
+    ///
+    /// Separate from [`Self::IrBypassed`] so the two can be told apart: a manual
+    /// toggle means the user has taken over and the app must stop moving the
+    /// control, which is indistinguishable from an automatic one if they share a
+    /// variant. Persisted identically by the standalone.
+    IrAutoBypassed(bool),
     IrGainChanged(f32),
 
     // Pitch shift messages

@@ -6,7 +6,9 @@
 //! startup; the [`registry`] makes those parsed models reachable from
 //! `StageConfig::to_runtime`, which has no other handle to the loader.
 
+pub mod info;
 pub mod loader;
 pub mod registry;
 
+pub use info::ModelInfo;
 pub use loader::NamLoader;

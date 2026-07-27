@@ -23,6 +23,7 @@ use crate::stages::{
 use crate::tabs::Tab;
 use crate::tr;
 use rustortion_core::amp::chain::DEFAULT_CHAIN_CAPACITY;
+use rustortion_core::nam::registry as nam_registry;
 use rustortion_core::preset::InputFilterConfig;
 
 const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
@@ -53,6 +54,15 @@ pub struct SharedApp<B: ParamBackend> {
     pub oversampling_factor: u32,
     /// Whether recording is active — set by standalone, displayed in header.
     pub is_recording: bool,
+    /// Set when *this session* bypassed the IR on the user's behalf, because a NAM
+    /// model with a cab baked in was selected. Only a bypass we applied is ever
+    /// undone: without this flag, switching back to a cab-less model would switch on
+    /// an IR the user had deliberately turned off. Cleared as soon as the user
+    /// touches the bypass control themselves — from then on it's theirs.
+    ///
+    /// Deliberately not persisted: on a fresh start we have no evidence that a
+    /// bypass we find was ours, so we leave it alone — construct with `false`.
+    pub ir_auto_bypassed: bool,
 }
 
 impl<B: ParamBackend> SharedApp<B> {
@@ -185,6 +195,16 @@ impl<B: ParamBackend> SharedApp<B> {
                 self.backend.set_ir(&ir_name);
             }
             Message::IrBypassed(bypassed) => {
+                // A manual toggle hands control back to the user: whatever we set
+                // automatically is no longer ours to undo.
+                self.ir_auto_bypassed = false;
+                self.ir_cabinet_control.set_bypassed(bypassed);
+                self.backend.set_ir_bypass(bypassed);
+            }
+            Message::IrAutoBypassed(bypassed) => {
+                // Remember a bypass we applied, so selecting a cab-less model later
+                // can undo exactly that and nothing else.
+                self.ir_auto_bypassed = bypassed;
                 self.ir_cabinet_control.set_bypassed(bypassed);
                 self.backend.set_ir_bypass(bypassed);
             }
@@ -231,6 +251,21 @@ impl<B: ParamBackend> SharedApp<B> {
                                     }
                                 }
                                 Err(e) => log::error!("Failed to rescan NAM models: {e}"),
+                            }
+                        }
+                        Some(ParamUpdate::OpenNamModelsDir) => {
+                            if let Some(dir) = self.backend.nam_models_dir() {
+                                crate::platform::open_directory(&dir);
+                            } else {
+                                log::warn!("No NAM models directory to open");
+                            }
+                        }
+                        Some(ParamUpdate::NamModelSelected) => {
+                            self.flush_dirty_params();
+                            self.backend.rebuild_stage(idx, &self.stages[idx]);
+                            self.backend.persist_chain_state(&self.stages);
+                            if let Some(task) = self.reconcile_ir_for_nam_cab(idx) {
+                                return UpdateResult::Handled(task);
                             }
                         }
                         None => {}
@@ -469,6 +504,9 @@ impl<B: ParamBackend> SharedApp<B> {
                         * self.backend.oversampling_factor(),
                     // NAM-specific: where the NAM stage card shows users to drop models.
                     nam_models_dir: self.backend.nam_models_dir(),
+                    // NAM-specific: lets a cab-inclusive model report whether the IR
+                    // after it is a second cab or already bypassed.
+                    ir_bypassed: self.ir_cabinet_control.is_bypassed(),
                 },
             ));
         }
@@ -709,6 +747,71 @@ impl<B: ParamBackend> SharedApp<B> {
     fn update_processor_chain(&self) {
         self.backend.set_amp_chain(&self.stages);
     }
+
+    /// Move the IR cabinet to match the cab the NAM stage at `idx` just took on.
+    ///
+    /// A model whose capture already includes a speaker (`gear_type` says `amp_cab`,
+    /// `full-rig`, …) followed by an impulse response is two cabs in series, which
+    /// sounds wrong, so the IR is bypassed. Switching back to a cab-less model undoes
+    /// that — but *only* a bypass this session applied, tracked by
+    /// [`Self::ir_auto_bypassed`]. A bypass the user set is theirs, and switching
+    /// models must not switch their IR back on.
+    ///
+    /// Models whose metadata doesn't say (`includes_cab() == None`) change nothing:
+    /// with no evidence either way, the safe move is to leave the chain alone.
+    ///
+    /// Returns the message to apply, rather than mutating directly, so the change
+    /// travels the same path as a user toggle and gets persisted with it.
+    fn reconcile_ir_for_nam_cab(&self, idx: usize) -> Option<Task<Message>> {
+        let StageConfig::Nam(cfg) = self.stages.get(idx)? else {
+            return None;
+        };
+        let includes_cab = cfg
+            .model_name
+            .as_deref()
+            .and_then(nam_registry::info)
+            .and_then(|info| info.includes_cab);
+
+        let bypass = ir_bypass_decision(
+            includes_cab,
+            self.ir_cabinet_control.is_bypassed(),
+            self.ir_auto_bypassed,
+        )?;
+
+        if bypass {
+            log::info!("NAM model includes a cab — bypassing the IR cabinet");
+        } else {
+            log::info!("NAM model no longer includes a cab — restoring the IR cabinet");
+        }
+        Some(Task::done(Message::IrAutoBypassed(bypass)))
+    }
+}
+
+/// Should the IR bypass change, and to what? `None` means leave it alone.
+///
+/// Split out as a pure function because the rule carries all the subtlety —
+/// particularly that an automatic bypass is only ever undone by us, never a bypass
+/// the user set — while the caller around it needs a live backend to exercise.
+///
+/// * `includes_cab` — what the newly selected model's metadata says, `None` if it
+///   doesn't say. Unknown never triggers a *new* bypass: no evidence, no action.
+/// * `ir_bypassed` — whether the IR cabinet is bypassed right now.
+/// * `auto_bypassed` — whether the current bypass is one we applied.
+const fn ir_bypass_decision(
+    includes_cab: Option<bool>,
+    ir_bypassed: bool,
+    auto_bypassed: bool,
+) -> Option<bool> {
+    match includes_cab {
+        // Cab in the model, IR still live: two cabs in series. Bypass it.
+        Some(true) if !ir_bypassed => Some(true),
+        // Already bypassed — by us or by the user, either way nothing to do.
+        Some(true) => None,
+        // No cab in the model (or the file doesn't say). Give the IR back only if we
+        // were the ones who took it away; a bypass the user set stays set.
+        Some(false) | None if auto_bypassed => Some(false),
+        _ => None,
+    }
 }
 
 // -- Shared view helpers -----------------------------------------------------
@@ -764,5 +867,56 @@ pub fn tab_button_inactive(
             radius: 0.0.into(),
         },
         ..iced::widget::button::Style::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ir_bypass_decision;
+
+    #[test]
+    fn cab_model_bypasses_a_live_ir() {
+        assert_eq!(ir_bypass_decision(Some(true), false, false), Some(true));
+    }
+
+    #[test]
+    fn cab_model_leaves_an_already_bypassed_ir_alone() {
+        // Nothing to do whether the existing bypass was ours or the user's.
+        assert_eq!(ir_bypass_decision(Some(true), true, true), None);
+        assert_eq!(ir_bypass_decision(Some(true), true, false), None);
+    }
+
+    /// The core safety property: switching to a cab-less model must not switch on an
+    /// IR the *user* turned off. Only a bypass we applied is ours to undo.
+    #[test]
+    fn a_user_set_bypass_is_never_undone() {
+        assert_eq!(ir_bypass_decision(Some(false), true, false), None);
+        assert_eq!(ir_bypass_decision(None, true, false), None);
+    }
+
+    #[test]
+    fn our_own_bypass_is_undone_when_the_cab_goes_away() {
+        assert_eq!(ir_bypass_decision(Some(false), true, true), Some(false));
+        // Unknown counts too: we can't justify holding a bypass applied for a model
+        // that is no longer selected.
+        assert_eq!(ir_bypass_decision(None, true, true), Some(false));
+    }
+
+    /// An unknown `gear_type` must never *start* a bypass — no evidence, no action.
+    #[test]
+    fn unknown_cab_status_never_bypasses() {
+        assert_eq!(ir_bypass_decision(None, false, false), None);
+        assert_eq!(ir_bypass_decision(Some(false), false, false), None);
+    }
+
+    /// Selecting the same kind of model twice must not thrash the control.
+    #[test]
+    fn decisions_are_idempotent() {
+        // Cab model: bypass once, then nothing further.
+        assert_eq!(ir_bypass_decision(Some(true), false, false), Some(true));
+        assert_eq!(ir_bypass_decision(Some(true), true, true), None);
+        // Cab-less model: restore once, then nothing further.
+        assert_eq!(ir_bypass_decision(Some(false), true, true), Some(false));
+        assert_eq!(ir_bypass_decision(Some(false), false, false), None);
     }
 }
