@@ -33,14 +33,7 @@ const fn opener() -> &'static str {
 pub fn open_directory(path: &Path) {
     let path: PathBuf = path.to_path_buf();
     std::thread::spawn(move || {
-        let result = Command::new(opener())
-            .arg(&path)
-            // Detach the child's stdio: inheriting the host's handles can wedge a
-            // plugin host, and nothing reads the output anyway.
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
+        let result = open_command(&path).spawn();
 
         match result {
             Ok(mut child) => {
@@ -55,6 +48,24 @@ pub fn open_directory(path: &Path) {
             ),
         }
     });
+}
+
+/// Build (but do not run) the command that reveals `path`.
+///
+/// Separate from [`open_directory`] purely so it can be asserted on without
+/// launching anything: a test that actually spawned the opener would pop a file
+/// manager — and an error dialog, for a path that doesn't exist — on the machine
+/// running `cargo test`.
+fn open_command(path: &Path) -> Command {
+    let mut command = Command::new(opener());
+    command
+        .arg(path)
+        // Detach the child's stdio: inheriting the host's handles can wedge a
+        // plugin host, and nothing reads the output anyway.
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    command
 }
 
 #[cfg(test)]
@@ -72,10 +83,28 @@ mod tests {
         assert_eq!(opener(), "xdg-open");
     }
 
-    /// Opening a path that cannot exist must log and move on, never panic or block —
-    /// the whole point of doing the work on a detached thread.
+    /// Asserts what would be run, without running it. Nothing in this module's
+    /// tests may actually spawn the opener: doing so pops a file manager window
+    /// (and an error dialog, for a path that doesn't exist) on whatever machine is
+    /// running the suite, and would be flaky on a headless CI box besides.
     #[test]
-    fn missing_path_does_not_panic() {
-        open_directory(Path::new("/nonexistent-rustortion-nam-dir-for-tests"));
+    fn command_is_the_opener_with_the_path_as_its_only_argument() {
+        let command = open_command(Path::new("/tmp/some nam dir"));
+
+        assert_eq!(command.get_program(), opener());
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(args, ["/tmp/some nam dir"]);
+    }
+
+    /// A path with spaces or shell metacharacters is passed as one argument, never
+    /// through a shell — so it needs no quoting and cannot be word-split.
+    #[test]
+    fn path_is_passed_as_a_single_unquoted_argument() {
+        let nasty = Path::new("/tmp/nam models; rm -rf $HOME/'quoted'");
+        let command = open_command(nasty);
+
+        let args: Vec<_> = command.get_args().collect();
+        assert_eq!(args.len(), 1, "must be exactly one argument");
+        assert_eq!(args[0], nasty.as_os_str());
     }
 }
