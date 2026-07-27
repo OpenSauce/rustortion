@@ -135,6 +135,13 @@ impl iced_baseview::Application for PluginApp {
     type Flags = PluginAppFlags;
 
     fn new(flags: Self::Flags) -> (Self, iced_baseview::Task<Self::Message>) {
+        // Read the live IR parameters before `flags.params` moves into the backend.
+        // These are what `process()` actually runs on — the host restores them with
+        // the project and may have automated them — so they, not a default, are what
+        // the freshly-opened editor has to agree with.
+        let ir_bypassed = flags.params.ir_bypass.value();
+        let ir_gain = flags.params.ir_gain.value();
+
         let backend = PluginBackend::new(flags.params, flags.context, flags.shared_state.clone());
 
         let available_irs = backend.get_available_irs();
@@ -142,7 +149,12 @@ impl iced_baseview::Application for PluginApp {
         let factory_presets = crate::factory::load_factory_presets();
         let mut preset_handler = PresetHandler::new_from_presets(factory_presets);
 
-        let mut ir_cabinet = IrCabinetControl::default();
+        // Seeded from the params rather than `default()`: the NAM card renders the IR
+        // state as a coloured verdict about the signal chain, so a stale `false` here
+        // means reopening a project with the IR bypassed shows a warning that the
+        // audio contradicts — and the button offered to fix it would write the value
+        // the parameter already held.
+        let mut ir_cabinet = IrCabinetControl::new(ir_bypassed, ir_gain);
         ir_cabinet.set_available_irs(available_irs);
 
         // Check if we have previously stored stages (from a prior editor session

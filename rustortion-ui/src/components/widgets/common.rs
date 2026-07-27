@@ -112,6 +112,10 @@ pub struct StageViewState {
     /// the NAM stage card so users know where to drop model files. `None` if the
     /// backend has no NAM directory. Ignored by all other stage views.
     pub nam_models_dir: Option<std::path::PathBuf>,
+    /// Whether the IR cabinet is bypassed. NAM reads it to tell a cab-inclusive
+    /// model apart from a double-cab: the same model is fine with the IR bypassed
+    /// and wrong without. Ignored by all other stage views.
+    pub ir_bypassed: bool,
 }
 
 fn stage_header<'a>(

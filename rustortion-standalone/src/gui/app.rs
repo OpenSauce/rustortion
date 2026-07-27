@@ -217,12 +217,11 @@ impl AmplifierApp {
                 | Message::ToggleAllStagesCollapse
         );
 
-        let needs_ir_bypass_persist = matches!(message, Message::IrBypassed(_));
-        let ir_bypassed_value = if let Message::IrBypassed(b) = &message {
-            Some(*b)
-        } else {
-            None
+        let ir_bypassed_value = match &message {
+            Message::IrBypassed(b) => Some(*b),
+            _ => None,
         };
+        let needs_ir_bypass_persist = ir_bypassed_value.is_some();
 
         let needs_hotkey_save = matches!(
             message,

@@ -233,6 +233,13 @@ impl<B: ParamBackend> SharedApp<B> {
                                 Err(e) => log::error!("Failed to rescan NAM models: {e}"),
                             }
                         }
+                        Some(ParamUpdate::OpenNamModelsDir) => {
+                            if let Some(dir) = self.backend.nam_models_dir() {
+                                crate::platform::open_directory(&dir);
+                            } else {
+                                log::warn!("No NAM models directory to open");
+                            }
+                        }
                         None => {}
                     }
                 }
@@ -469,6 +476,9 @@ impl<B: ParamBackend> SharedApp<B> {
                         * self.backend.oversampling_factor(),
                     // NAM-specific: where the NAM stage card shows users to drop models.
                     nam_models_dir: self.backend.nam_models_dir(),
+                    // NAM-specific: lets a cab-inclusive model report whether the IR
+                    // after it is a second cab or already bypassed.
+                    ir_bypassed: self.ir_cabinet_control.is_bypassed(),
                 },
             ));
         }

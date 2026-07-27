@@ -11,14 +11,21 @@ use std::sync::{Arc, OnceLock, RwLock};
 
 use nam_rs::NamModel;
 
+use super::info::ModelInfo;
 use super::loader::NamLoader;
 
 type Store = RwLock<HashMap<String, Arc<NamModel>>>;
+type InfoStore = RwLock<HashMap<String, Arc<ModelInfo>>>;
 
 static NAM_REGISTRY: OnceLock<Store> = OnceLock::new();
+static NAM_INFO: OnceLock<InfoStore> = OnceLock::new();
 
 fn store() -> &'static Store {
     NAM_REGISTRY.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+fn info_store() -> &'static InfoStore {
+    NAM_INFO.get_or_init(|| RwLock::new(HashMap::new()))
 }
 
 /// Populate (or replace) the global registry from a loader's parsed models.
@@ -30,6 +37,26 @@ pub fn init_from_loader(loader: &NamLoader) {
     for (name, model) in loader.models() {
         map.insert(name.clone(), Arc::clone(model));
     }
+    drop(map);
+
+    let mut infos = info_store()
+        .write()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    infos.clear();
+    for (name, info) in loader.infos() {
+        infos.insert(name.clone(), Arc::clone(info));
+    }
+}
+
+/// Cached display summary for a model, by display name.
+///
+/// Cheap enough to call from a GUI `view()`: the metadata was parsed once, at load.
+#[must_use]
+pub fn info(name: &str) -> Option<Arc<ModelInfo>> {
+    let map = info_store()
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    map.get(name).cloned()
 }
 
 /// Look up a parsed model by display name.

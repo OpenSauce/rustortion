@@ -12,6 +12,8 @@ pub enum ParamUpdate {
     NeedsStageRebuild,
     /// Re-scan the NAM models directory and re-register the global registry.
     RescanNamModels,
+    /// Open the NAM models directory in the user's file manager.
+    OpenNamModelsDir,
 }
 
 macro_rules! gui_stage_registry {
