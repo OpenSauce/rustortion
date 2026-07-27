@@ -14,11 +14,6 @@ pub enum ParamUpdate {
     RescanNamModels,
     /// Open the NAM models directory in the user's file manager.
     OpenNamModelsDir,
-    /// A NAM model was picked: rebuild the stage as for [`Self::NeedsStageRebuild`],
-    /// then reconcile the IR cabinet against whether the new model already has a cab
-    /// baked in. Distinct from a plain rebuild because only an explicit pick should
-    /// move the IR — a preset load carries its own IR state and must be left alone.
-    NamModelSelected,
 }
 
 macro_rules! gui_stage_registry {

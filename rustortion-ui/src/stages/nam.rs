@@ -59,10 +59,8 @@ pub fn apply(cfg: &mut NamConfig, msg: NamMessage) -> Option<ParamUpdate> {
     match msg {
         NamMessage::ModelSelected(name) => {
             cfg.model_name = name;
-            // Selecting a model is a non-float change: rebuild the stage. The
-            // NAM-specific variant also lets the app reconcile the IR cabinet, since
-            // the new model may already contain a cab.
-            Some(ParamUpdate::NamModelSelected)
+            // Selecting a model is a non-float change: rebuild the stage.
+            Some(ParamUpdate::NeedsStageRebuild)
         }
         NamMessage::InputGainChanged(v) => {
             cfg.input_gain_db = v;

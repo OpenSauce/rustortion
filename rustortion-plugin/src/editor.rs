@@ -187,7 +187,6 @@ impl iced_baseview::Application for PluginApp {
             input_filter_config: rustortion_core::preset::InputFilterConfig::default(),
             oversampling_factor,
             is_recording: false,
-            ir_auto_bypassed: false,
         };
 
         // If we have stored stages, restore them directly.

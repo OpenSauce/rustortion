@@ -149,7 +149,6 @@ impl AmplifierApp {
             input_filter_config,
             oversampling_factor,
             is_recording: false,
-            ir_auto_bypassed: false,
         };
 
         Ok(Self {
@@ -218,11 +217,8 @@ impl AmplifierApp {
                 | Message::ToggleAllStagesCollapse
         );
 
-        // Both the manual toggle and the automatic one (driven by a NAM model that
-        // already contains a cab) change the same setting, so both must persist —
-        // otherwise the IR silently comes back on the next launch.
         let ir_bypassed_value = match &message {
-            Message::IrBypassed(b) | Message::IrAutoBypassed(b) => Some(*b),
+            Message::IrBypassed(b) => Some(*b),
             _ => None,
         };
         let needs_ir_bypass_persist = ir_bypassed_value.is_some();
