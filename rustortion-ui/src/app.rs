@@ -890,6 +890,56 @@ mod tests {
         assert_eq!(ir_bypass_decision(Some(false), false, false), None);
     }
 
+    /// A manual toggle is not a permanent opt-out. It clears `auto_bypassed`, which
+    /// only disarms the *restore*; auto-bypass still fires on the next cab model and
+    /// re-arms the flag. Walks the whole cycle to pin that down.
+    #[test]
+    fn a_manual_toggle_does_not_disable_auto_bypass_for_good() {
+        // Start: IR live, nothing automatic has happened.
+        let (mut ir_bypassed, mut auto) = (false, false);
+
+        // Pick a cab model — we bypass, and remember that we did (-> true, true).
+        assert_eq!(
+            ir_bypass_decision(Some(true), ir_bypassed, auto),
+            Some(true)
+        );
+
+        // The user overrides: they want the IR on despite the cab. That hands
+        // control back, so the restore is disarmed.
+        (ir_bypassed, auto) = (false, false);
+
+        // Cab-less model now: correctly leaves their IR alone.
+        assert_eq!(ir_bypass_decision(Some(false), ir_bypassed, auto), None);
+
+        // ...but picking another cab model still bypasses, exactly as before the
+        // manual click. This is the step the "never auto again" worry is about.
+        let decision = ir_bypass_decision(Some(true), ir_bypassed, auto);
+        assert_eq!(decision, Some(true), "auto-bypass must still fire");
+        (ir_bypassed, auto) = (true, true);
+
+        // And having bypassed, the restore is armed again.
+        assert_eq!(
+            ir_bypass_decision(Some(false), ir_bypassed, auto),
+            Some(false),
+            "restore must be re-armed by the new auto-bypass"
+        );
+    }
+
+    /// The one genuinely sticky case, kept deliberately: a bypass the user set is
+    /// never lifted for them, however many models they cycle through. The card's
+    /// warning line and IR toggle are the way out.
+    #[test]
+    fn a_user_set_bypass_survives_cycling_through_models() {
+        let (ir_bypassed, auto) = (true, false);
+        for cab in [Some(false), None, Some(true), Some(false)] {
+            assert_eq!(
+                ir_bypass_decision(cab, ir_bypassed, auto),
+                None,
+                "{cab:?} must not touch a user-set bypass"
+            );
+        }
+    }
+
     /// Selecting the same kind of model twice must not thrash the control.
     #[test]
     fn decisions_are_idempotent() {
