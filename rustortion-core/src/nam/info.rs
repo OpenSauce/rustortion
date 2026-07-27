@@ -67,9 +67,11 @@ pub struct ModelInfo {
     pub tone_type: Option<String>,
     /// Who captured the model, for attribution.
     pub modeled_by: Option<String>,
-    /// Output loudness in LUFS. Varies by >20 dB across models in circulation —
-    /// the volume jump users hear when switching.
-    pub loudness_lufs: Option<f32>,
+    /// Output loudness in dBFS RMS, as NAM's trainer measures it against a
+    /// standardized input. **Not LUFS** — no K-weighting, no gating — so it must not
+    /// be shown as such or fed to a BS.1770 loudness target. Varies by >20 dB across
+    /// models in circulation, which is the volume jump users hear when switching.
+    pub loudness_dbfs: Option<f32>,
 }
 
 impl ModelInfo {
@@ -117,7 +119,7 @@ impl ModelInfo {
             gear,
             tone_type,
             modeled_by: meaningful(md.modeled_by),
-            loudness_lufs: md.loudness,
+            loudness_dbfs: md.loudness,
         }
     }
 
@@ -127,7 +129,7 @@ impl ModelInfo {
         self.gear.is_none()
             && self.tone_type.is_none()
             && self.modeled_by.is_none()
-            && self.loudness_lufs.is_none()
+            && self.loudness_dbfs.is_none()
     }
 }
 
@@ -170,7 +172,7 @@ mod tests {
         assert_eq!(info.tone_type.as_deref(), Some("overdrive"));
         assert_eq!(info.modeled_by.as_deref(), Some("somebody"));
         assert_eq!(info.includes_cab, Some(false));
-        assert!((info.loudness_lufs.expect("loudness") - -19.4).abs() < 1e-4);
+        assert!((info.loudness_dbfs.expect("loudness") - -19.4).abs() < 1e-4);
         assert!(!info.is_empty());
     }
 
@@ -188,7 +190,7 @@ mod tests {
         assert_eq!(info.gear, None);
         assert_eq!(info.tone_type, None);
         // ...but the real data alongside them still comes through.
-        assert!(info.loudness_lufs.is_some());
+        assert!(info.loudness_dbfs.is_some());
         assert!(!info.is_empty());
     }
 

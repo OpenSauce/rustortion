@@ -159,8 +159,8 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
                     rows.push((tr!(nam_modeled_by), by.to_owned()));
                 }
                 // Spans >20 dB across models — the volume jump when switching.
-                if let Some(lufs) = info.loudness_lufs {
-                    rows.push((tr!(nam_loudness), format!("{lufs:.1} LUFS")));
+                if let Some(dbfs) = info.loudness_dbfs {
+                    rows.push((tr!(nam_loudness), format!("{dbfs:.1} dBFS")));
                 }
                 rows
             },
