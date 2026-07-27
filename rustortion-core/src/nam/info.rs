@@ -8,12 +8,8 @@
 
 use nam_rs::NamModel;
 
-/// Sentinels exporters write into a descriptive field the uploader left blank.
-/// `T3K-Null` is TONE3000's literal "nothing entered" marker (T3K is their own
-/// abbreviation, as in the `t3k` licence value); `tz-make`/`tz-model` are the same
-/// idea from an older exporter. They are strings that look like data, and they
-/// account for about half the models in circulation — displaying them verbatim
-/// would be worse than showing nothing.
+/// "Nothing entered" sentinels written by TONE3000 (`T3K-Null`) and an older
+/// exporter. Strings that look like data, on about half the models in circulation.
 const PLACEHOLDERS: &[&str] = &["tz-make", "tz-model", "t3k-null"];
 
 /// Treat blank strings and known placeholder sentinels as absent.
@@ -26,13 +22,9 @@ fn meaningful(value: Option<String>) -> Option<String> {
     Some(trimmed.to_owned())
 }
 
-/// Whether a model's *name* claims a full signal chain.
-///
-/// Only consulted when the metadata gives us nothing to go on — see
-/// [`ModelInfo::cab_from_name`]. Deliberately narrow: it matches "full rig" (however
-/// it's punctuated) and a standalone "cab"/"cabs"/"cabinet" token, and nothing else.
-/// A looser match would start reading cabs into names that merely happen to contain
-/// the letters, and a false "this has a cab" costs the user their IR.
+/// Whether a model's *name* claims a full signal chain. Only consulted when the
+/// metadata gives us nothing — see [`ModelInfo::cab_from_name`]. Deliberately
+/// narrow: a false "has a cab" costs the user their IR.
 fn name_suggests_cab(name: &str) -> bool {
     let normalized: String = name
         .to_ascii_lowercase()
@@ -62,12 +54,10 @@ pub struct ModelInfo {
     /// Whether the capture already contains a speaker cab. `None` when the file
     /// doesn't say, or says something we can't place — never a guess.
     pub includes_cab: Option<bool>,
-    /// True when [`Self::includes_cab`] was read off the model's *name* rather than
-    /// its `gear_type`, because the uploader filled in no descriptive metadata at
-    /// all. Such files habitually leave `gear_type` at its default `amp` while
-    /// recording the truth in the name (`…-FullRig` with every other field a
-    /// placeholder). Surfaced so the UI can mark the conclusion as inferred — a
-    /// guess must never be displayed as though it were a fact.
+    /// True when [`Self::includes_cab`] came from the model's *name*, not its
+    /// `gear_type`, because no descriptive metadata was filled in. Such files leave
+    /// `gear_type` at its default `amp` but say `…-FullRig` in the name. Surfaced so
+    /// the UI can mark the conclusion as inferred rather than stated.
     pub cab_from_name: bool,
     /// The modelled gear, e.g. `"Marshall JMP-50"`. Make and model are joined, but
     /// deduplicated when they're identical (files commonly repeat the full name in
@@ -77,9 +67,8 @@ pub struct ModelInfo {
     pub tone_type: Option<String>,
     /// Who captured the model, for attribution.
     pub modeled_by: Option<String>,
-    /// Output loudness in LUFS. Worth surfacing because it varies by more than
-    /// 20 dB across models in circulation, which is exactly the volume jump users
-    /// hear when switching between them.
+    /// Output loudness in LUFS. Varies by >20 dB across models in circulation —
+    /// the volume jump users hear when switching.
     pub loudness_lufs: Option<f32>,
 }
 
@@ -107,11 +96,9 @@ impl ModelInfo {
         let tone_type = meaningful(md.tone_type);
         let name = meaningful(md.name);
 
-        // `gear_type` is authoritative when the uploader filled anything in. When
-        // they filled in *nothing* — every descriptive field a placeholder — the
-        // `amp` we're left with is a form default rather than a statement, so the
-        // name is better evidence. Only ever upgrades to "has a cab": a name that
-        // doesn't mention one tells us nothing either way.
+        // `gear_type` is authoritative when anything was filled in. With every
+        // field a placeholder, the `amp` left over is a form default, not a
+        // statement, so the name is better evidence. Only upgrades, never down.
         let descriptive_unfilled = gear.is_none() && tone_type.is_none();
         let (includes_cab, cab_from_name) = match metadata_cab {
             Some(true) => (Some(true), false),

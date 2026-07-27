@@ -54,14 +54,10 @@ pub struct SharedApp<B: ParamBackend> {
     pub oversampling_factor: u32,
     /// Whether recording is active — set by standalone, displayed in header.
     pub is_recording: bool,
-    /// Set when *this session* bypassed the IR on the user's behalf, because a NAM
-    /// model with a cab baked in was selected. Only a bypass we applied is ever
-    /// undone: without this flag, switching back to a cab-less model would switch on
-    /// an IR the user had deliberately turned off. Cleared as soon as the user
-    /// touches the bypass control themselves — from then on it's theirs.
-    ///
-    /// Deliberately not persisted: on a fresh start we have no evidence that a
-    /// bypass we find was ours, so we leave it alone — construct with `false`.
+    /// Set when *this session* bypassed the IR because a NAM model with a cab was
+    /// selected. Only a bypass we applied is ever undone, so switching models can't
+    /// re-enable an IR the user turned off. Cleared when the user touches the
+    /// control. Not persisted — construct with `false`.
     pub ir_auto_bypassed: bool,
 }
 
@@ -748,20 +744,11 @@ impl<B: ParamBackend> SharedApp<B> {
         self.backend.set_amp_chain(&self.stages);
     }
 
-    /// Move the IR cabinet to match the cab the NAM stage at `idx` just took on.
+    /// Move the IR cabinet to match the cab the NAM stage at `idx` just took on: a
+    /// cab-inclusive model plus an IR is two cabs in series.
     ///
-    /// A model whose capture already includes a speaker (`gear_type` says `amp_cab`,
-    /// `full-rig`, …) followed by an impulse response is two cabs in series, which
-    /// sounds wrong, so the IR is bypassed. Switching back to a cab-less model undoes
-    /// that — but *only* a bypass this session applied, tracked by
-    /// [`Self::ir_auto_bypassed`]. A bypass the user set is theirs, and switching
-    /// models must not switch their IR back on.
-    ///
-    /// Models whose metadata doesn't say (`includes_cab() == None`) change nothing:
-    /// with no evidence either way, the safe move is to leave the chain alone.
-    ///
-    /// Returns the message to apply, rather than mutating directly, so the change
-    /// travels the same path as a user toggle and gets persisted with it.
+    /// Returns the message rather than mutating, so the change travels the same path
+    /// as a user toggle and is persisted with it. See [`ir_bypass_decision`].
     fn reconcile_ir_for_nam_cab(&self, idx: usize) -> Option<Task<Message>> {
         let StageConfig::Nam(cfg) = self.stages.get(idx)? else {
             return None;
@@ -789,14 +776,8 @@ impl<B: ParamBackend> SharedApp<B> {
 
 /// Should the IR bypass change, and to what? `None` means leave it alone.
 ///
-/// Split out as a pure function because the rule carries all the subtlety —
-/// particularly that an automatic bypass is only ever undone by us, never a bypass
-/// the user set — while the caller around it needs a live backend to exercise.
-///
-/// * `includes_cab` — what the newly selected model's metadata says, `None` if it
-///   doesn't say. Unknown never triggers a *new* bypass: no evidence, no action.
-/// * `ir_bypassed` — whether the IR cabinet is bypassed right now.
-/// * `auto_bypassed` — whether the current bypass is one we applied.
+/// Pure so the rule can be tested without a backend. The subtlety: an automatic
+/// bypass is only ever undone by us, never one the user set.
 const fn ir_bypass_decision(
     includes_cab: Option<bool>,
     ir_bypassed: bool,

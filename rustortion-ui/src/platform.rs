@@ -5,11 +5,8 @@ use std::process::{Command, Stdio};
 
 use log::warn;
 
-/// The platform's "open this in the file manager" command.
-///
-/// Deliberately a plain process spawn rather than a file-dialog crate: `rfd` pulls
-/// in gtk3, which breaks CI (the same reason the NAM model picker is a pick-list and
-/// not a file browser). Every target here ships its opener as part of the base OS.
+/// The platform's "open this in the file manager" command. A plain process spawn
+/// rather than a file-dialog crate: `rfd` pulls in gtk3, which breaks CI.
 const fn opener() -> &'static str {
     if cfg!(target_os = "windows") {
         "explorer"
@@ -23,13 +20,10 @@ const fn opener() -> &'static str {
 
 /// Reveal `path` in the user's file manager.
 ///
-/// Returns immediately: the spawn and the subsequent reap both happen on a detached
-/// thread, so a slow-starting file manager can never stall the GUI. The child is
-/// waited on rather than dropped, because a dropped [`std::process::Child`] leaves a
-/// zombie on Unix for the lifetime of the process — one per click, otherwise.
-///
-/// Failures are logged, not surfaced: the button is a convenience, and the path it
-/// would have opened is already displayed next to it.
+/// Returns immediately; spawn and reap happen on a detached thread so a slow file
+/// manager can't stall the GUI. The child is waited on rather than dropped — a
+/// dropped `Child` leaves a zombie per click. Failures are logged: the path is
+/// already displayed next to the button.
 pub fn open_directory(path: &Path) {
     let path: PathBuf = path.to_path_buf();
     std::thread::spawn(move || {
@@ -50,12 +44,8 @@ pub fn open_directory(path: &Path) {
     });
 }
 
-/// Build (but do not run) the command that reveals `path`.
-///
-/// Separate from [`open_directory`] purely so it can be asserted on without
-/// launching anything: a test that actually spawned the opener would pop a file
-/// manager — and an error dialog, for a path that doesn't exist — on the machine
-/// running `cargo test`.
+/// Build (but do not run) the command that reveals `path`. Separate so tests can
+/// assert on it without spawning a real file manager on the developer's desktop.
 fn open_command(path: &Path) -> Command {
     let mut command = Command::new(opener());
     command

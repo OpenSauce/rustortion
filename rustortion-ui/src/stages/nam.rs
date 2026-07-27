@@ -1,11 +1,12 @@
-use iced::widget::{button, column, pick_list, row, text};
-use iced::{Alignment, Element, Length};
+use iced::widget::{button, column, container, pick_list, row, rule, text};
+use iced::{Alignment, Element, Length, Padding};
 
 use rustortion_core::amp::stages::nam::NamConfig;
 use rustortion_core::nam::registry;
 
 use crate::components::widgets::common::{
-    labeled_slider, stage_card, StageViewState, SPACING_NORMAL, SPACING_TIGHT,
+    COLOR_SUBTLE, SPACING_NORMAL, SPACING_TIGHT, SPACING_WIDE, StageViewState, TEXT_SIZE_SMALL,
+    labeled_slider, stage_card,
 };
 use crate::messages::Message;
 use crate::tr;
@@ -94,8 +95,7 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         .map(|p| p.display().to_string());
     // Effective engine rate, read out before `state` is moved into the card closure.
     let engine_rate = state.engine_sample_rate;
-    // Whether the IR cabinet is currently bypassed, so a cab-inclusive model can say
-    // whether the IR after it is a second cab or already out of the way.
+    // Lets a cab-inclusive model say whether the IR is a second cab or already out.
     let ir_bypassed = state.ir_bypassed;
 
     stage_card(tr!(stage_nam), idx, state, move || {
@@ -142,17 +142,14 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
             None => text(String::new()).into(),
         };
 
-        // Cached summary of the selected model's metadata. Cheap by construction:
-        // extracted once at load, so this runs per frame without re-parsing JSON.
+        // Extracted once at load, so this is cheap per frame.
         let model_info = model_name.as_deref().and_then(registry::info);
 
-        // What the model actually is, when its metadata says. Filenames in the wild
-        // are often cryptic ("S-[PRE] Divine Sheep #02") while the metadata names
-        // the real amp, so this is frequently the only place to see it. One labelled
-        // row per field, and a field the file doesn't carry gets no row at all.
-        let details: Vec<Element<'_, Message>> = model_info
-            .as_deref()
-            .map(|info| {
+        // Filenames in the wild are often cryptic while the metadata names the real
+        // amp. A field the file doesn't carry gets no row.
+        let metadata_rows: Vec<(&str, String)> = model_info.as_deref().map_or_else(
+            Vec::new,
+            |info| {
                 let mut rows: Vec<(&str, String)> = Vec::new();
                 if let Some(gear) = info.gear.as_deref() {
                     rows.push((tr!(nam_gear), gear.to_owned()));
@@ -163,37 +160,63 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
                 if let Some(by) = info.modeled_by.as_deref() {
                     rows.push((tr!(nam_modeled_by), by.to_owned()));
                 }
-                // Loudness earns its own row: it spans more than 20 dB across models
-                // in circulation, which is exactly the volume jump you hear when
-                // switching between them.
+                // Spans >20 dB across models — the volume jump when switching.
                 if let Some(lufs) = info.loudness_lufs {
                     rows.push((tr!(nam_loudness), format!("{lufs:.1} LUFS")));
                 }
+                rows
+            },
+        );
 
-                rows.into_iter()
-                    .map(|(label, value)| text(format!("{label}: {value}")).into())
-                    .collect()
-            })
-            .unwrap_or_default();
+        // Smaller and dimmer than the controls: it describes the file rather than
+        // doing anything. Omitted when the file says nothing.
+        let metadata_section: Element<'_, Message> = if metadata_rows.is_empty() {
+            column![].into()
+        } else {
+            let rows = metadata_rows.into_iter().map(|(label, value)| {
+                row![
+                    text(format!("{label}:"))
+                        .size(TEXT_SIZE_SMALL)
+                        .style(|_| iced::widget::text::Style {
+                            color: Some(COLOR_SUBTLE),
+                        })
+                        .width(Length::FillPortion(4)),
+                    text(value)
+                        .size(TEXT_SIZE_SMALL)
+                        .width(Length::FillPortion(6)),
+                ]
+                .spacing(SPACING_TIGHT)
+                .into()
+            });
 
-        // Whether the selected model already contains a speaker cab. `None` means
-        // the file doesn't say (or says something we don't recognise) — in that case
-        // we show nothing rather than guess. `gear_type` itself is never displayed;
-        // only the conclusion drawn from it, and what we did about it.
+            column![
+                rule::horizontal(1),
+                text(format!("{}:", tr!(nam_metadata)))
+                    .size(TEXT_SIZE_SMALL)
+                    .style(|_| iced::widget::text::Style {
+                        color: Some(COLOR_SUBTLE),
+                    }),
+                container(column(rows).spacing(2))
+                    .padding(Padding::ZERO.left(SPACING_WIDE)),
+            ]
+            .spacing(SPACING_TIGHT)
+            .into()
+        };
+
+        // `gear_type` is never displayed — only the conclusion drawn from it and
+        // what we did about it. `None` shows nothing rather than guessing.
         let cab_line: Element<'_, Message> = match model_info
             .as_deref()
             .map(|info| (info.includes_cab, info.cab_from_name))
         {
             Some((Some(true), from_name)) => {
-                // The IR is a second cab unless it's bypassed. When it is bypassed,
-                // say so — otherwise the automatic bypass looks like a bug.
+                // Say when it's bypassed, or the automatic bypass looks like a bug.
                 let detail = if ir_bypassed {
                     tr!(nam_cab_ir_bypassed)
                 } else {
                     tr!(nam_cab_ir_conflict)
                 };
-                // A conclusion read off the model's name is a guess, and must not be
-                // presented as though the file had stated it.
+                // A name-derived conclusion is a guess; don't present it as fact.
                 let source = if from_name {
                     format!(" ({})", tr!(nam_cab_from_name))
                 } else {
@@ -205,8 +228,7 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
             Some((None, _)) | None => text(String::new()).into(),
         };
 
-        // Folder location, a button to open it in the file manager, and a Rescan so
-        // users can drop new `.nam` files and pick them up without restarting the host.
+        // Rescan picks up newly dropped `.nam` files without restarting the host.
         let dir_text = models_dir.map_or_else(
             || format!("{}: —", tr!(nam_models_dir)),
             |dir| format!("{}: {dir}", tr!(nam_models_dir)),
@@ -223,15 +245,12 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
 
-        // `details` is variable-length (a model may carry all, some, or none of the
-        // descriptive fields), so the card is assembled rather than written as one
-        // literal: fixed rows, then the details, then the rest.
-        let header = column![model_selector, folder_row, info_line]
-            .spacing(SPACING_TIGHT)
-            .extend(details);
-
+        // The cab/IR line stays with the controls: it reports a change to the live
+        // signal chain, not a description of the file.
         column![
-            header,
+            model_selector,
+            folder_row,
+            info_line,
             cab_line,
             labeled_slider(
                 tr!(nam_input_gain),
@@ -257,6 +276,7 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
                 |v| format!("{:.0}%", v * 100.0),
                 0.01,
             ),
+            metadata_section,
         ]
         .spacing(SPACING_TIGHT)
         .into()
