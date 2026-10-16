@@ -180,7 +180,10 @@ fn menu_items<'a>(
             ModelNode::Folder { label, children } => Item::with_menu(
                 menu_folder(label.clone()),
                 model_menu(menu_items(children, idx, selected)),
-            ),
+            )
+            // The bar closes on any item click by default, and people do click a
+            // folder to open it. Only picking a model, or clicking away, closes.
+            .close_on_click(false),
             ModelNode::Model { label, key } => Item::new(menu_entry(
                 label.clone(),
                 selected == Some(key.as_str()),
@@ -280,6 +283,10 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
             // Behave like a pick list: stay open until something is clicked.
             .close_on_item_click_global(true)
             .close_on_background_click_global(true)
+            // Leaving the menu must not close it either. The bar pads its bounds
+            // by this margin and tests containment, and `width + 2 * MAX`
+            // overflows to infinity, so the cursor is never outside. A large
+            // finite value would depend on the monitor size.
             .safe_bounds_margin(f32::MAX)
             // Highlights the folder whose child menu is open.
             .draw_path(menu::DrawPath::Backdrop)
@@ -529,22 +536,26 @@ mod tests {
     /// and loose files together by name, ignoring case, at every level.
     #[test]
     fn model_tree_groups_keys_by_folder() {
+        // `Pack` is both a folder and a loose file: both must survive, side by side.
         let names = [
             "Pack/Deep/leaf",
             "Pack/inner",
             "alpha",
             "Zeta/one",
             "beta",
+            "Pack",
         ]
         .map(str::to_owned);
 
         let tree = model_tree(&names);
 
         let labels: Vec<&str> = tree.iter().map(ModelNode::label).collect();
-        assert_eq!(labels, ["alpha", "beta", "Pack", "Zeta"]);
+        assert_eq!(labels, ["alpha", "beta", "Pack", "Pack", "Zeta"]);
         assert_eq!(model(&tree[0]), ("alpha", "alpha"));
+        assert_eq!(model(&tree[3]), ("Pack", "Pack"));
 
         let (_, pack) = folder(&tree[2]);
+        assert_eq!(pack.len(), 2);
         let (deep_label, deep) = folder(&pack[0]);
         assert_eq!(deep_label, "Deep");
         assert_eq!(model(&deep[0]), ("leaf", "Pack/Deep/leaf"));

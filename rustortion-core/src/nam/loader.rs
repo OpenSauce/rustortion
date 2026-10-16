@@ -68,7 +68,21 @@ impl NamLoader {
                 }
             };
             let path = entry.path();
-            if path.is_dir() {
+            // `file_type` does not follow symlinks, so a link to a directory is
+            // neither a directory nor a file here and is skipped: a link pointing
+            // back up the tree would otherwise be walked until the OS refuses,
+            // parsing every model dozens of times.
+            let is_dir = entry.file_type().is_ok_and(|t| t.is_dir());
+            if is_dir {
+                // Sync tools and desktop trash keep state in dot-folders
+                // (`.stfolder`, `.Trash-1000`); nothing in them is the collection.
+                let hidden = entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|n| n.starts_with('.'));
+                if hidden {
+                    continue;
+                }
                 if let Err(e) = self.scan_dir(&path, base) {
                     warn!("Skipping NAM subfolder '{}': {e}", path.display());
                 }
@@ -79,10 +93,14 @@ impl NamLoader {
             }
             // The cab-from-name guess reads the file's own name: a folder called
             // "Full Rig" says nothing about the files inside it.
-            let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-                continue;
-            };
-            let Some(name) = Self::model_key(&path, base) else {
+            let (Some(stem), Some(name)) = (
+                path.file_stem().and_then(|s| s.to_str()),
+                Self::model_key(&path, base),
+            ) else {
+                warn!(
+                    "Skipping NAM file '{}': path is not valid UTF-8",
+                    path.display()
+                );
                 continue;
             };
 
@@ -260,5 +278,44 @@ mod tests {
         let rig = loader.info("Pack/Amp-FullRig").expect("loaded");
         assert_eq!(rig.includes_cab, Some(true), "file name is evidence");
         assert!(rig.cab_from_name);
+    }
+    /// Sync tools and desktop trash leave dot-folders (`.stfolder`, `.Trash-1000`)
+    /// inside the nam folder. Models in them are not the user's collection: a
+    /// trashed file must not come back as a picker entry.
+    #[test]
+    fn hidden_directories_are_skipped() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dir = tmp.path();
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/reference_standard.nam");
+
+        std::fs::create_dir_all(dir.join(".Trash-1000")).expect("mkdir");
+        std::fs::copy(&fixture, dir.join(".Trash-1000/deleted.nam")).expect("copy");
+        std::fs::copy(&fixture, dir.join("kept.nam")).expect("copy");
+
+        let loader = NamLoader::new(dir).expect("scan");
+
+        assert_eq!(loader.available_names(), vec!["kept"]);
+    }
+
+    /// A symlink pointing back up the tree would otherwise be followed until the
+    /// kernel refuses, parsing every model dozens of times into memory. Symlinked
+    /// directories are skipped outright: the models they point at are reachable
+    /// through their real path when they live inside the nam folder.
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_directories_are_not_followed() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dir = tmp.path();
+        let fixture =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/reference_standard.nam");
+
+        std::fs::create_dir_all(dir.join("Pack")).expect("mkdir");
+        std::fs::copy(&fixture, dir.join("Pack/inner.nam")).expect("copy");
+        std::os::unix::fs::symlink(dir, dir.join("Pack/loop")).expect("symlink");
+
+        let loader = NamLoader::new(dir).expect("scan");
+
+        assert_eq!(loader.available_names(), vec!["Pack/inner"]);
     }
 }
