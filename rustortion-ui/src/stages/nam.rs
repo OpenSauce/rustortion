@@ -1,12 +1,13 @@
-use iced::widget::{button, column, container, pick_list, row, rule, text};
-use iced::{Alignment, Element, Length, Padding};
+use iced::widget::{button, column, container, responsive, row, rule, text};
+use iced::{Alignment, Border, Color, Element, Length, Padding};
+use iced_aw::menu::{self, Item, Menu, MenuBar};
 
 use rustortion_core::amp::stages::nam::NamConfig;
 use rustortion_core::nam::registry;
 
 use crate::components::widgets::common::{
-    COLOR_SUBTLE, COLOR_WARNING, SPACING_NORMAL, SPACING_TIGHT, SPACING_WIDE, StageViewState, TEXT_SIZE_SMALL,
-    labeled_slider, stage_card,
+    BORDER_RADIUS_CARD, COLOR_SUBTLE, COLOR_WARNING, PADDING_NORMAL, PADDING_SMALL, SPACING_NORMAL,
+    SPACING_TIGHT, SPACING_WIDE, StageViewState, TEXT_SIZE_SMALL, labeled_slider, stage_card,
 };
 use crate::messages::Message;
 use crate::tr;
@@ -25,32 +26,171 @@ pub enum NamMessage {
     Rescan,
     /// Reveal the NAM models directory in the file manager.
     OpenFolder,
+    /// The picker's root button was pressed. The menu bar opens itself on the
+    /// release; this exists only so the button has a press handler.
+    MenuOpened,
 }
 
-/// A pick-list entry: either a named model or an explicit "no model" choice that
-/// clears the selection back to passthrough.
+// --- Model tree ---
+
+/// One entry of the model picker menu: a folder that fans out into its contents, or
+/// a model that can be selected. Built from the registry's flat `Folder/Model` keys.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum NamModelChoice {
-    None,
-    Model(String),
+enum ModelNode {
+    Folder {
+        label: String,
+        children: Vec<Self>,
+    },
+    Model {
+        /// Shown in the menu: the file's own name.
+        label: String,
+        /// Stored in the preset and looked up in the registry: the full key.
+        key: String,
+    },
 }
 
-impl NamModelChoice {
-    fn into_option(self) -> Option<String> {
+impl ModelNode {
+    fn label(&self) -> &str {
         match self {
-            Self::None => None,
-            Self::Model(name) => Some(name),
+            Self::Folder { label, .. } | Self::Model { label, .. } => label,
         }
     }
 }
 
-impl std::fmt::Display for NamModelChoice {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::None => f.write_str(tr!(nam_no_model)),
-            Self::Model(name) => f.write_str(name),
+/// The last path segment of a registry key: what the closed picker shows, since
+/// the folder is visible in the menu and the full key would not fit the card.
+fn leaf_label(key: &str) -> &str {
+    key.rsplit('/').next().unwrap_or(key)
+}
+
+/// Group registry keys into a folder tree. Folders and loose files sort together
+/// by name, ignoring case, at every level.
+fn model_tree(keys: &[String]) -> Vec<ModelNode> {
+    let mut root = Vec::new();
+    for key in keys {
+        let mut segments = key.split('/').peekable();
+        let mut level = &mut root;
+        while let Some(segment) = segments.next() {
+            if segments.peek().is_none() {
+                level.push(ModelNode::Model {
+                    label: segment.to_owned(),
+                    key: key.clone(),
+                });
+                break;
+            }
+            let position = level
+                .iter()
+                .position(|node| matches!(node, ModelNode::Folder { label, .. } if label == segment))
+                .unwrap_or_else(|| {
+                    level.push(ModelNode::Folder {
+                        label: segment.to_owned(),
+                        children: Vec::new(),
+                    });
+                    level.len() - 1
+                });
+            let ModelNode::Folder { children, .. } = &mut level[position] else {
+                unreachable!("position was found by matching a Folder");
+            };
+            level = children;
         }
     }
+    sort_tree(&mut root);
+    root
+}
+
+fn sort_tree(nodes: &mut [ModelNode]) {
+    nodes.sort_by_cached_key(|node| node.label().to_lowercase());
+    for node in nodes {
+        if let ModelNode::Folder { children, .. } = node {
+            sort_tree(children);
+        }
+    }
+}
+
+/// Pointing right: this entry fans out into a child menu.
+const MENU_CARET_RIGHT: &str = "\u{25B8}";
+/// Pointing down: the closed picker, as a pick list draws it.
+const MENU_CARET_DOWN: &str = "\u{25BE}";
+/// Wide enough for the long capture names packs use without wrapping every row.
+const MENU_WIDTH: f32 = 380.0;
+
+type MenuItem<'a> = Item<'a, Message, iced::Theme, iced::Renderer>;
+type ModelMenu<'a> = Menu<'a, Message, iced::Theme, iced::Renderer>;
+
+/// A child menu, sized and spaced the same at every depth.
+fn model_menu(items: Vec<MenuItem<'_>>) -> ModelMenu<'_> {
+    Menu::new(items)
+        .width(MENU_WIDTH)
+        .offset(PADDING_SMALL)
+        .spacing(2.0)
+}
+
+/// One selectable row. The selected model is marked in the warning colour rather
+/// than a check mark, which would shift every other label over by a column.
+fn menu_entry<'a>(label: String, selected: bool, on_press: Message) -> Element<'a, Message> {
+    button(text(label).style(move |theme: &iced::Theme| iced::widget::text::Style {
+        color: Some(if selected { COLOR_WARNING } else { theme.palette().text }),
+    }))
+    .width(Length::Fill)
+    .padding([PADDING_SMALL, PADDING_NORMAL])
+    .style(menu_row_style)
+    .on_press(on_press)
+    .into()
+}
+
+/// A folder row. It has no press action: hovering opens the child menu, and the
+/// menu bar draws the highlight for the open path itself.
+fn menu_folder<'a>(label: String) -> Element<'a, Message> {
+    button(
+        row![text(label).width(Length::Fill), text(MENU_CARET_RIGHT)].spacing(SPACING_TIGHT),
+    )
+    .width(Length::Fill)
+    .padding([PADDING_SMALL, PADDING_NORMAL])
+    .style(menu_row_style)
+    .into()
+}
+
+/// Flat and transparent at rest, so a column of rows reads as one list rather than
+/// a stack of buttons. Disabled is the folder rows' resting state, not an error.
+fn menu_row_style(theme: &iced::Theme, status: button::Status) -> button::Style {
+    let palette = theme.extended_palette();
+    let base = button::Style {
+        text_color: palette.background.base.text,
+        border: Border::default().rounded(BORDER_RADIUS_CARD),
+        ..button::Style::default()
+    };
+    match status {
+        button::Status::Active | button::Status::Disabled => {
+            base.with_background(Color::TRANSPARENT)
+        }
+        button::Status::Hovered => base.with_background(palette.background.strong.color),
+        button::Status::Pressed => base.with_background(palette.primary.weak.color),
+    }
+}
+
+/// Menu items for one level of the tree, recursing into folders.
+fn menu_items<'a>(
+    nodes: &[ModelNode],
+    idx: usize,
+    selected: Option<&str>,
+) -> Vec<MenuItem<'a>> {
+    nodes
+        .iter()
+        .map(|node| match node {
+            ModelNode::Folder { label, children } => Item::with_menu(
+                menu_folder(label.clone()),
+                model_menu(menu_items(children, idx, selected)),
+            ),
+            ModelNode::Model { label, key } => Item::new(menu_entry(
+                label.clone(),
+                selected == Some(key.as_str()),
+                Message::Stage(
+                    idx,
+                    StageMessage::Nam(NamMessage::ModelSelected(Some(key.clone()))),
+                ),
+            )),
+        })
+        .collect()
 }
 
 // --- Apply ---
@@ -76,6 +216,7 @@ pub fn apply(cfg: &mut NamConfig, msg: NamMessage) -> Option<ParamUpdate> {
         }
         NamMessage::Rescan => Some(ParamUpdate::RescanNamModels),
         NamMessage::OpenFolder => Some(ParamUpdate::OpenNamModelsDir),
+        NamMessage::MenuOpened => None,
     }
 }
 
@@ -97,23 +238,59 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
     let ir_bypassed = state.ir_bypassed;
 
     stage_card(tr!(stage_nam), idx, state, move || {
-        // "(None)" first so a selected model can be cleared back to passthrough.
-        let mut choices = vec![NamModelChoice::None];
-        choices.extend(registry::available_names().into_iter().map(NamModelChoice::Model));
-        let selected = model_name
-            .clone()
-            .map_or(NamModelChoice::None, NamModelChoice::Model);
+        // The picker is a one-root menu bar rather than a pick list: a pick list is a
+        // flat list, and packs ship as folders of dozens of files. Each folder fans
+        // out sideways; loose files sit alongside the folders at the same level.
+        //
+        // The bar lays its root out against an unbounded width, so a `Fill` button
+        // inside it never gets a size. `responsive` hands over the width the row
+        // actually allotted, and the button takes exactly that.
+        let tree = model_tree(&registry::available_names());
+        let picker_model = model_name.clone();
+        let closed_label = model_name
+            .as_deref()
+            .map_or_else(|| tr!(nam_no_model).to_owned(), |key| leaf_label(key).to_owned());
+        let model_picker = responsive(move |size| {
+            // "(None)" first so a selected model can be cleared back to passthrough.
+            let mut items = vec![Item::new(menu_entry(
+                tr!(nam_no_model).to_owned(),
+                picker_model.is_none(),
+                Message::Stage(idx, StageMessage::Nam(NamMessage::ModelSelected(None))),
+            ))];
+            items.extend(menu_items(&tree, idx, picker_model.as_deref()));
+
+            MenuBar::new(vec![Item::with_menu(
+                button(
+                    row![
+                        text(closed_label.clone()).width(Length::Fill),
+                        text(MENU_CARET_DOWN),
+                    ]
+                    .spacing(SPACING_TIGHT),
+                )
+                .width(size.width)
+                .style(button::secondary)
+                // Opening is handled by the menu bar; the press itself does nothing,
+                // but a button without `on_press` renders as disabled.
+                .on_press(Message::Stage(idx, StageMessage::Nam(NamMessage::MenuOpened))),
+                // As wide as the button, so it hangs straight below it like a pick
+                // list. Left free, the bar would right-align it whenever the button
+                // sits in the right half of the window.
+                model_menu(items).width(size.width),
+            )])
+            // Behave like a pick list: stay open until something is clicked.
+            .close_on_item_click_global(true)
+            .close_on_background_click_global(true)
+            .safe_bounds_margin(f32::MAX)
+            // Highlights the folder whose child menu is open.
+            .draw_path(menu::DrawPath::Backdrop)
+            .into()
+        })
+        .width(Length::FillPortion(7))
+        .height(Length::Shrink);
 
         let model_selector = row![
             text(tr!(nam_model)).width(Length::FillPortion(3)),
-            pick_list(choices, Some(selected), move |choice| {
-                Message::Stage(
-                    idx,
-                    StageMessage::Nam(NamMessage::ModelSelected(choice.into_option())),
-                )
-            })
-            .placeholder(tr!(nam_no_model))
-            .width(Length::FillPortion(7)),
+            model_picker,
         ]
         .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
@@ -327,4 +504,58 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         .spacing(SPACING_TIGHT)
         .into()
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn folder(node: &ModelNode) -> (&str, &[ModelNode]) {
+        match node {
+            ModelNode::Folder { label, children } => (label.as_str(), children.as_slice()),
+            ModelNode::Model { .. } => panic!("expected a folder, got {node:?}"),
+        }
+    }
+
+    fn model(node: &ModelNode) -> (&str, &str) {
+        match node {
+            ModelNode::Model { label, key } => (label.as_str(), key.as_str()),
+            ModelNode::Folder { .. } => panic!("expected a model, got {node:?}"),
+        }
+    }
+
+    /// Registry keys are `Folder/Sub/Model`. The menu groups them by folder, keeps
+    /// the full key on each leaf (that is what gets selected), and sorts folders
+    /// and loose files together by name, ignoring case, at every level.
+    #[test]
+    fn model_tree_groups_keys_by_folder() {
+        let names = [
+            "Pack/Deep/leaf",
+            "Pack/inner",
+            "alpha",
+            "Zeta/one",
+            "beta",
+        ]
+        .map(str::to_owned);
+
+        let tree = model_tree(&names);
+
+        let labels: Vec<&str> = tree.iter().map(ModelNode::label).collect();
+        assert_eq!(labels, ["alpha", "beta", "Pack", "Zeta"]);
+        assert_eq!(model(&tree[0]), ("alpha", "alpha"));
+
+        let (_, pack) = folder(&tree[2]);
+        let (deep_label, deep) = folder(&pack[0]);
+        assert_eq!(deep_label, "Deep");
+        assert_eq!(model(&deep[0]), ("leaf", "Pack/Deep/leaf"));
+        assert_eq!(model(&pack[1]), ("inner", "Pack/inner"));
+    }
+
+    /// What the closed picker shows: only the file's own name, since the folder is
+    /// visible in the menu and the full key would not fit the card.
+    #[test]
+    fn leaf_label_drops_the_folder_prefix() {
+        assert_eq!(leaf_label("Pack/Deep/leaf"), "leaf");
+        assert_eq!(leaf_label("alpha"), "alpha");
+    }
 }
