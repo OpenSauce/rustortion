@@ -141,6 +141,7 @@ impl iced_baseview::Application for PluginApp {
         // the freshly-opened editor has to agree with.
         let ir_bypassed = flags.params.ir_bypass.value();
         let ir_gain = flags.params.ir_gain.value();
+        let params = flags.params.clone();
 
         let backend = PluginBackend::new(flags.params, flags.context, flags.shared_state.clone());
 
@@ -175,6 +176,16 @@ impl iced_baseview::Application for PluginApp {
             preset_handler.get_available_presets().first().cloned()
         };
 
+        // Restoring: show the IR the engine is running. `set_available_irs` picked
+        // the first one, and no preset load is coming to correct it.
+        if stored_stages.is_some() {
+            let preset_ir = initial_preset_name
+                .as_ref()
+                .and_then(|name| preset_handler.get_preset_by_name(name))
+                .and_then(|preset| preset.ir_name.clone());
+            ir_cabinet.set_selected_ir(params.saved_ir_or(preset_ir));
+        }
+
         // If we have stored stages, pre-select the preset in the handler
         // (for display) without reloading its stages from disk.
         if stored_stages.is_some()
@@ -192,11 +203,11 @@ impl iced_baseview::Application for PluginApp {
             active_tab: Tab::Amp,
             selected_stage_type: StageType::ALL.first().copied().unwrap_or(StageType::Preamp),
             ir_cabinet_control: ir_cabinet,
-            pitch_shift_control: PitchShiftControl::new(0),
+            pitch_shift_control: PitchShiftControl::new(params.pitch_shift.value()),
             preset_handler,
             peak_meter_display: PeakMeterDisplay::default(),
             hotkey_handler: HotkeyHandler::new(HotkeySettings::default()),
-            input_filter_config: rustortion_core::preset::InputFilterConfig::default(),
+            input_filter_config: params.input_filters(),
             oversampling_factor,
             is_recording: false,
         };
