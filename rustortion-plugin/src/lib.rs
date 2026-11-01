@@ -837,11 +837,7 @@ impl Plugin for RustortionPlugin {
                         // preset's on every reactivation and project reload.
                         let ir_to_load = self
                             .params
-                            .ir_name
-                            .lock()
-                            .ok()
-                            .and_then(|g| g.clone())
-                            .or_else(|| preset.as_ref().and_then(|p| p.ir_name.clone()));
+                            .saved_ir_or(preset.as_ref().and_then(|p| p.ir_name.clone()));
 
                         if let Some(ir_name) = &ir_to_load
                             && let Some(loader) =

@@ -1,4 +1,5 @@
 use nih_plug::prelude::*;
+use rustortion_core::preset::InputFilterConfig;
 use rustortion_core::preset::stage_config::StageConfig;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -55,6 +56,27 @@ pub struct RustortionParams {
     /// modifications (add/remove/reorder stages) survive save/restore.
     #[persist = "chain_state"]
     pub chain_state: Arc<Mutex<Option<Vec<StageConfig>>>>,
+}
+
+impl RustortionParams {
+    /// The input filter settings the host currently holds.
+    pub fn input_filters(&self) -> InputFilterConfig {
+        InputFilterConfig {
+            hp_enabled: self.hp_enabled.value(),
+            hp_cutoff: self.hp_cutoff.value(),
+            lp_enabled: self.lp_enabled.value(),
+            lp_cutoff: self.lp_cutoff.value(),
+        }
+    }
+
+    /// The IR a restored plugin runs: the user's pick, else the preset's.
+    pub fn saved_ir_or(&self, preset_ir: Option<String>) -> Option<String> {
+        self.ir_name
+            .lock()
+            .ok()
+            .and_then(|g| g.clone())
+            .or(preset_ir)
+    }
 }
 
 impl Default for RustortionParams {
@@ -124,5 +146,32 @@ impl Default for RustortionParams {
             ir_name: Arc::new(Mutex::new(None)),
             chain_state: Arc::new(Mutex::new(None)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn input_filters_map_each_param_to_its_field() {
+        // HP and LP defaults all differ, so a swapped field fails this.
+        let config = RustortionParams::default().input_filters();
+        let expected = InputFilterConfig::default();
+        assert_eq!(config.hp_enabled, expected.hp_enabled);
+        assert!((config.hp_cutoff - expected.hp_cutoff).abs() < f32::EPSILON);
+        assert_eq!(config.lp_enabled, expected.lp_enabled);
+        assert!((config.lp_cutoff - expected.lp_cutoff).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn saved_ir_takes_precedence_over_the_preset() {
+        let params = RustortionParams::default();
+        let preset_ir = || Some("preset".to_owned());
+        assert_eq!(params.saved_ir_or(preset_ir()), preset_ir());
+        assert_eq!(params.saved_ir_or(None), None);
+
+        *params.ir_name.lock().unwrap() = Some("picked".to_owned());
+        assert_eq!(params.saved_ir_or(preset_ir()).as_deref(), Some("picked"));
     }
 }
