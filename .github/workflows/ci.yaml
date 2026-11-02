@@ -11,7 +11,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install system dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y \
@@ -33,7 +33,7 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Install system dependencies
         run: |
           sudo apt-get update && sudo apt-get install -y \
@@ -85,7 +85,7 @@ jobs:
             # `vst3_bundle_library_name`.
             vst3_lib: Rustortion.vst3
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       # X11/GL headers for the plugin GUI. Windows needs no equivalent — wgpu
       # goes through DX12 and the window backend is win32.
       - name: Install system dependencies
