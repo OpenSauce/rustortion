@@ -55,8 +55,24 @@ impl NamBrowser {
         let catalog = registry::catalog();
         let dir = ctx.models_dir.as_ref().map(|p| p.display().to_string());
 
-        let filter = text_input(tr!(nam_filter_placeholder), &self.filter)
-            .on_input(|f| Message::Nam(NamTabMessage::FilterChanged(f)));
+        let input = text_input(tr!(nam_filter_placeholder), &self.filter)
+            .on_input(|f| Message::Nam(NamTabMessage::FilterChanged(f)))
+            // A no-op resend: without `on_submit` the field lets Enter through to the hotkeys.
+            .on_submit(Message::Nam(NamTabMessage::FilterChanged(
+                self.filter.clone(),
+            )));
+        // Clearing must not need the keyboard, which some plugin hosts swallow.
+        let clear = (!self.filter.is_empty()).then(|| {
+            icon_button(
+                "×",
+                Some(Message::Nam(NamTabMessage::FilterChanged(String::new()))),
+                button::secondary,
+            )
+        });
+        // Always a row, so the input keeps its focus when the button appears.
+        let filter = row![input, clear]
+            .spacing(SPACING_TIGHT)
+            .align_y(Alignment::Center);
 
         let list = if catalog.is_empty() {
             empty_folder_hint(dir.as_deref())
@@ -133,19 +149,22 @@ fn list_footer<'a>(dir: Option<&str>, count: usize) -> Element<'a, Message> {
             dir.is_some()
                 .then_some(Message::Nam(NamTabMessage::OpenFolder)),
         );
-    row![
+    // The summary gets its own line: beside the buttons a long path wraps glyph by glyph.
+    column![
         text(summary)
             .size(TEXT_SIZE_SMALL)
             .style(text_color(COLOR_SUBTLE))
             .wrapping(Wrapping::WordOrGlyph)
             .width(Length::Fill),
-        open_folder,
-        button(text(tr!(nam_rescan_models)))
-            .style(button::secondary)
-            .on_press(Message::Nam(NamTabMessage::Rescan)),
+        row![
+            open_folder,
+            button(text(tr!(nam_rescan_models)))
+                .style(button::secondary)
+                .on_press(Message::Nam(NamTabMessage::Rescan)),
+        ]
+        .spacing(SPACING_TIGHT),
     ]
     .spacing(SPACING_TIGHT)
-    .align_y(Alignment::Center)
     .into()
 }
 
