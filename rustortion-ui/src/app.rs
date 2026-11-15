@@ -8,8 +8,8 @@ use iced::{Alignment, Element, Length, Subscription, Task, keyboard, time, time:
 use crate::backend::{ExternalEvent, ParamBackend};
 use crate::components::ir_cabinet_control::IrCabinetControl;
 use crate::components::minimap;
-use crate::components::nam_browser::NamBrowser;
 use crate::components::nam_browser::selection::ChainEdit;
+use crate::components::nam_browser::{NamBrowser, NamViewContext};
 use crate::components::peak_meter::PeakMeterDisplay;
 use crate::components::pitch_shift_control::PitchShiftControl;
 use crate::components::widgets::common::{
@@ -264,8 +264,8 @@ impl<B: ParamBackend> SharedApp<B> {
             }
             NamTabMessage::ModelClicked(key) => self.load_model(key),
             NamTabMessage::Rescan => {
-                // The browser reads `registry::available_names()` live, so only
-                // the already-built stages need refreshing.
+                // The browser reads the registry live each frame, so only the
+                // already-built stages need refreshing.
                 match self.backend.rescan_nam_models() {
                     Ok(count) => {
                         log::info!("Rescanned NAM models: {count} found");
@@ -374,7 +374,7 @@ impl<B: ParamBackend> SharedApp<B> {
             Tab::Effects => self.view_effects_tab(),
             Tab::Cabinet => self.view_cabinet_tab(),
             Tab::Io => self.view_io_tab(),
-            Tab::Nam => view_tab_panel(column![].into()),
+            Tab::Nam => self.view_nam_tab(),
         };
         let signal_minimap =
             minimap::view(&self.stages, &self.input_filter_config, self.active_tab);
@@ -461,6 +461,7 @@ impl<B: ParamBackend> SharedApp<B> {
         let tabs = [
             (Tab::Io, tr!(tab_io)),
             (Tab::Amp, tr!(tab_amp)),
+            (Tab::Nam, tr!(tab_nam)),
             (Tab::Effects, tr!(tab_effects)),
             (Tab::Cabinet, tr!(tab_cabinet)),
         ];
@@ -587,6 +588,17 @@ impl<B: ParamBackend> SharedApp<B> {
         .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center)
         .into()
+    }
+
+    fn view_nam_tab(&self) -> Element<'_, Message> {
+        let ctx = NamViewContext {
+            stages: &self.stages,
+            engine_sample_rate: self.backend.sample_rate() * self.backend.oversampling_factor(),
+            models_dir: self.backend.nam_models_dir(),
+            ir_bypassed: self.ir_cabinet_control.is_bypassed(),
+            chain_full: self.stages.len() >= DEFAULT_CHAIN_CAPACITY,
+        };
+        view_tab_panel(self.nam_browser.view(&ctx))
     }
 
     fn view_cabinet_tab(&self) -> Element<'_, Message> {

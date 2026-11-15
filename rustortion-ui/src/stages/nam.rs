@@ -1,13 +1,14 @@
 use iced::widget::{button, column, container, responsive, row, rule, text};
-use iced::{Alignment, Border, Color, Element, Length, Padding};
+use iced::{Alignment, Element, Length, Padding};
 use iced_aw::menu::{self, Item, Menu, MenuBar};
 
 use rustortion_core::amp::stages::nam::NamConfig;
 use rustortion_core::nam::registry;
 
+use crate::components::nam_browser::{cab_line, menu_row_style};
 use crate::components::widgets::common::{
-    BORDER_RADIUS_CARD, COLOR_SUBTLE, COLOR_WARNING, PADDING_NORMAL, PADDING_SMALL, SPACING_NORMAL,
-    SPACING_TIGHT, SPACING_WIDE, StageViewState, TEXT_SIZE_SMALL, labeled_slider, stage_card,
+    COLOR_SUBTLE, COLOR_WARNING, PADDING_NORMAL, PADDING_SMALL, SPACING_NORMAL, SPACING_TIGHT,
+    SPACING_WIDE, StageViewState, TEXT_SIZE_SMALL, labeled_slider, stage_card,
 };
 use crate::messages::{Message, NamTabMessage};
 use crate::tr;
@@ -144,24 +145,6 @@ fn menu_folder<'a>(label: String) -> Element<'a, Message> {
     .padding([PADDING_SMALL, PADDING_NORMAL])
     .style(menu_row_style)
     .into()
-}
-
-/// Flat and transparent at rest, so a column of rows reads as one list rather than
-/// a stack of buttons. Disabled is the folder rows' resting state, not an error.
-fn menu_row_style(theme: &iced::Theme, status: button::Status) -> button::Style {
-    let palette = theme.extended_palette();
-    let base = button::Style {
-        text_color: palette.background.base.text,
-        border: Border::default().rounded(BORDER_RADIUS_CARD),
-        ..button::Style::default()
-    };
-    match status {
-        button::Status::Active | button::Status::Disabled => {
-            base.with_background(Color::TRANSPARENT)
-        }
-        button::Status::Hovered => base.with_background(palette.background.strong.color),
-        button::Status::Pressed => base.with_background(palette.primary.weak.color),
-    }
 }
 
 /// Menu items for one level of the tree, recursing into folders.
@@ -379,70 +362,6 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
             .into()
         };
 
-        // `gear_type` is never displayed — only the conclusion drawn from it, the
-        // live IR state, and a toggle. Always shown: the pairing is what matters, so
-        // hiding it when the model says nothing just leaves the IR state a mystery.
-        // Warning colour marks the two mismatched combinations; the rest stay quiet.
-        let (cab_text, needs_attention) = match model_info
-            .as_deref()
-            .map(|info| (info.includes_cab, info.cab_from_name))
-        {
-            Some((Some(true), from_name)) => {
-                // A name-derived conclusion is a guess; don't present it as fact.
-                let source = if from_name {
-                    format!(" ({})", tr!(nam_cab_from_name))
-                } else {
-                    String::new()
-                };
-                let cab = format!("{}{source}", tr!(nam_cab_included));
-                if ir_bypassed {
-                    (format!("{cab} · {}", tr!(nam_cab_ir_bypassed)), false)
-                } else {
-                    (format!("{cab} · {}", tr!(nam_cab_ir_conflict)), true)
-                }
-            }
-            Some((Some(false), _)) => {
-                let cab = tr!(nam_cab_not_included);
-                if ir_bypassed {
-                    (format!("{cab} · {}", tr!(nam_ir_recommended)), true)
-                } else {
-                    (format!("{cab} · {}", tr!(nam_ir_active)), false)
-                }
-            }
-            // Nothing known about the model: report the IR state without judging it.
-            Some((None, _)) | None => (
-                if ir_bypassed {
-                    tr!(nam_cab_ir_bypassed).to_owned()
-                } else {
-                    tr!(nam_ir_active).to_owned()
-                },
-                false,
-            ),
-        };
-
-        let cab_line = row![
-            text(cab_text)
-                .style(move |_| iced::widget::text::Style {
-                    color: Some(if needs_attention {
-                        COLOR_WARNING
-                    } else {
-                        COLOR_SUBTLE
-                    }),
-                })
-                .width(Length::Fill),
-            // The IR bypass is never changed automatically; this button is the only
-            // thing on this card that touches it, so the write is always a real user
-            // gesture — which is what a plugin host records as automation.
-            button(text(if ir_bypassed {
-                tr!(nam_enable_ir)
-            } else {
-                tr!(nam_bypass_ir)
-            }))
-            .on_press(Message::IrBypassed(!ir_bypassed)),
-        ]
-        .spacing(SPACING_NORMAL)
-        .align_y(Alignment::Center);
-
         // Rescan picks up newly dropped `.nam` files without restarting the host.
         let dir_text = models_dir.as_deref().map_or_else(
             || format!("{}: —", tr!(nam_models_dir)),
@@ -471,7 +390,7 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
             model_selector,
             folder_row,
             info_line,
-            cab_line,
+            cab_line(model_info.as_deref(), ir_bypassed),
             labeled_slider(
                 tr!(nam_input_gain),
                 -24.0..=24.0,

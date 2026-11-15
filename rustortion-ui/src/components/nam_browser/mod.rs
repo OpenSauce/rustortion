@@ -5,6 +5,10 @@ use selection::ChainEdit;
 
 pub mod selection;
 pub mod tree;
+mod view;
+
+pub use view::NamViewContext;
+pub(crate) use view::{cab_line, menu_row_style};
 
 #[derive(Debug, Default)]
 pub struct NamBrowser {

@@ -190,6 +190,13 @@ pub struct Translations {
     pub nam_input_gain: &'static str,
     pub nam_output_gain: &'static str,
     pub nam_mix: &'static str,
+    pub nam_filter_placeholder: &'static str,
+    pub nam_no_model_loaded: &'static str,
+    pub nam_click_to_load: &'static str,
+    pub nam_chain_full: &'static str,
+    pub nam_empty_folder_hint: &'static str,
+    pub nam_models_count: &'static str,
+    pub nam_open: &'static str,
     pub stage_bypass: &'static str,
     pub stage_bypass_tooltip: &'static str,
 
@@ -271,6 +278,7 @@ pub struct Translations {
 
     // Tabs
     pub tab_amp: &'static str,
+    pub tab_nam: &'static str,
     pub tab_effects: &'static str,
     pub tab_cabinet: &'static str,
     pub tab_io: &'static str,
@@ -414,6 +422,13 @@ pub static EN: Translations = Translations {
     nam_input_gain: "Input",
     nam_output_gain: "Output",
     nam_mix: "Mix",
+    nam_filter_placeholder: "Filter models…",
+    nam_no_model_loaded: "No model loaded",
+    nam_click_to_load: "Click a model on the left to load it.",
+    nam_chain_full: "The chain is full. Remove a stage to add NAM.",
+    nam_empty_folder_hint: "No models found. Put .nam files in this folder, then press Rescan Models:",
+    nam_models_count: "models",
+    nam_open: "Open",
     stage_bypass: "Bypass",
     stage_bypass_tooltip: "Toggle stage bypass",
 
@@ -495,6 +510,7 @@ pub static EN: Translations = Translations {
 
     // Tabs
     tab_amp: "AMP",
+    tab_nam: "NAM",
     tab_effects: "EFFECTS",
     tab_cabinet: "CABINET",
     tab_io: "INPUT",
@@ -629,6 +645,13 @@ pub static ZH_CN: Translations = Translations {
     nam_input_gain: "输入",
     nam_output_gain: "输出",
     nam_mix: "混合",
+    nam_filter_placeholder: "筛选模型…",
+    nam_no_model_loaded: "未加载模型",
+    nam_click_to_load: "点击左侧的模型即可加载。",
+    nam_chain_full: "信号链已满。请先移除一个级，再添加 NAM。",
+    nam_empty_folder_hint: "未找到模型。请将 .nam 文件放入此文件夹，然后点击“重新扫描模型”：",
+    nam_models_count: "个模型",
+    nam_open: "打开",
     stage_bypass: "旁路",
     stage_bypass_tooltip: "切换旁路",
 
@@ -710,6 +733,7 @@ pub static ZH_CN: Translations = Translations {
 
     // Tabs
     tab_amp: "音箱",
+    tab_nam: "NAM",
     tab_effects: "效果",
     tab_cabinet: "箱体",
     tab_io: "输入",
