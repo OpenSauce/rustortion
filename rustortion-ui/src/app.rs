@@ -67,6 +67,12 @@ impl<B: ParamBackend> SharedApp<B> {
             Message::TabSelected(tab) => {
                 self.active_tab = tab;
                 self.sync_stage_type_with_tab(tab);
+                // Pin the implicit "first NAM stage" so a later reorder can't change what is shown.
+                if tab == Tab::Nam
+                    && let Some(idx) = self.nam_browser.focused_stage(&self.stages)
+                {
+                    self.nam_browser.focus_stage(idx);
+                }
             }
             Message::SetStages(stages) => {
                 self.collapsed_stages.resize(stages.len(), false);
@@ -968,11 +974,12 @@ mod tests {
             stage(StageType::Level),
             stage(StageType::Delay),
         ]);
+        app.collapsed_stages = vec![true, false, true];
         click(&mut app, "Pack/model");
         assert_eq!(app.stages.len(), 4);
         assert_eq!(model_at(&app, 2), Some("Pack/model"));
         assert_eq!(app.stages[3].stage_type(), StageType::Delay);
-        assert_eq!(app.collapsed_stages.len(), 4);
+        assert_eq!(app.collapsed_stages, [true, false, false, true]);
         assert_eq!(calls(&app), [Call::AddStage(2)]);
         assert_eq!(app.nam_browser.focused_stage(&app.stages), Some(2));
     }
@@ -1024,6 +1031,8 @@ mod tests {
                 .all(|s| s.stage_type() == StageType::Level)
         );
         assert!(calls(&app).is_empty());
+        assert_eq!(app.collapsed_stages.len(), DEFAULT_CHAIN_CAPACITY);
+        assert_eq!(app.nam_browser.focused_stage(&app.stages), None);
     }
 
     #[test]
@@ -1070,6 +1079,28 @@ mod tests {
         app.update(Message::MoveStageUp(1));
         assert_eq!(app.nam_browser.focused_stage(&app.stages), Some(0));
         assert_eq!(model_at(&app, 0), Some("b"));
+    }
+
+    #[test]
+    fn the_stage_shown_when_the_nam_tab_opens_stays_shown_after_a_reorder() {
+        let mut app = app(vec![nam(Some("a")), nam(Some("b"))]);
+        app.update(Message::TabSelected(Tab::Nam));
+        app.update(Message::TabSelected(Tab::Amp));
+        app.update(Message::MoveStageUp(1));
+        let shown = app
+            .nam_browser
+            .focused_stage(&app.stages)
+            .expect("a NAM stage is selected");
+        assert_eq!(model_at(&app, shown), Some("a"));
+    }
+
+    #[test]
+    fn moving_the_selected_nam_stage_down_keeps_it_selected() {
+        let mut app = app(vec![nam(Some("a")), nam(Some("b"))]);
+        app.update(Message::Nam(NamTabMessage::StageFocused(0)));
+        app.update(Message::MoveStageDown(0));
+        assert_eq!(app.nam_browser.focused_stage(&app.stages), Some(1));
+        assert_eq!(model_at(&app, 1), Some("a"));
     }
 
     #[test]
