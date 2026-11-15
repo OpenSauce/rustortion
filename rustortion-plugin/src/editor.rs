@@ -10,6 +10,7 @@ use crate::params::RustortionParams;
 use rustortion_ui::app::{SharedApp, UpdateResult};
 use rustortion_ui::backend::ParamBackend;
 use rustortion_ui::components::ir_cabinet_control::IrCabinetControl;
+use rustortion_ui::components::nam_browser::NamBrowser;
 use rustortion_ui::components::peak_meter::PeakMeterDisplay;
 use rustortion_ui::components::pitch_shift_control::PitchShiftControl;
 use rustortion_ui::handlers::hotkey::HotkeyHandler;
@@ -210,6 +211,7 @@ impl iced_baseview::Application for PluginApp {
             input_filter_config: params.input_filters(),
             oversampling_factor,
             is_recording: false,
+            nam_browser: NamBrowser::default(),
         };
 
         // If we have stored stages, restore them directly.

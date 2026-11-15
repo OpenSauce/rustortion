@@ -9,7 +9,7 @@ use crate::components::widgets::common::{
     BORDER_RADIUS_CARD, COLOR_SUBTLE, COLOR_WARNING, PADDING_NORMAL, PADDING_SMALL, SPACING_NORMAL,
     SPACING_TIGHT, SPACING_WIDE, StageViewState, TEXT_SIZE_SMALL, labeled_slider, stage_card,
 };
-use crate::messages::Message;
+use crate::messages::{Message, NamTabMessage};
 use crate::tr;
 
 use super::{ParamUpdate, StageMessage};
@@ -22,10 +22,6 @@ pub enum NamMessage {
     InputGainChanged(f32),
     OutputGainChanged(f32),
     MixChanged(f32),
-    /// Re-scan the NAM models directory and refresh the model pick-list.
-    Rescan,
-    /// Reveal the NAM models directory in the file manager.
-    OpenFolder,
     /// The picker's root button was pressed. The menu bar opens itself on the
     /// release; this exists only so the button has a press handler.
     MenuOpened,
@@ -217,8 +213,6 @@ pub fn apply(cfg: &mut NamConfig, msg: NamMessage) -> Option<ParamUpdate> {
             cfg.mix = v;
             Some(ParamUpdate::Changed("mix", v))
         }
-        NamMessage::Rescan => Some(ParamUpdate::RescanNamModels),
-        NamMessage::OpenFolder => Some(ParamUpdate::OpenNamModelsDir),
         NamMessage::MenuOpened => None,
     }
 }
@@ -459,18 +453,14 @@ pub fn view(idx: usize, cfg: &NamConfig, state: StageViewState) -> Element<'_, M
         // a click whose only effect is a log line.
         let open_folder = button(text(tr!(nam_open_folder)));
         let open_folder = if models_dir.is_some() {
-            open_folder.on_press(Message::Stage(
-                idx,
-                StageMessage::Nam(NamMessage::OpenFolder),
-            ))
+            open_folder.on_press(Message::Nam(NamTabMessage::OpenFolder))
         } else {
             open_folder
         };
         let folder_row = row![
             text(dir_text).width(Length::Fill),
             open_folder,
-            button(text(tr!(nam_rescan_models)))
-                .on_press(Message::Stage(idx, StageMessage::Nam(NamMessage::Rescan))),
+            button(text(tr!(nam_rescan_models))).on_press(Message::Nam(NamTabMessage::Rescan)),
         ]
         .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);

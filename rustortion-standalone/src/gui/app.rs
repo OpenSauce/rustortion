@@ -15,6 +15,7 @@ use crate::settings::Settings;
 use rustortion_ui::app::{SharedApp, UpdateResult};
 use rustortion_ui::backend::ParamBackend;
 use rustortion_ui::components::ir_cabinet_control::IrCabinetControl;
+use rustortion_ui::components::nam_browser::NamBrowser;
 use rustortion_ui::components::peak_meter::PeakMeterDisplay;
 use rustortion_ui::components::pitch_shift_control::PitchShiftControl;
 use rustortion_ui::handlers::hotkey::HotkeyHandler;
@@ -149,6 +150,7 @@ impl AmplifierApp {
             input_filter_config,
             oversampling_factor,
             is_recording: false,
+            nam_browser: NamBrowser::default(),
         };
 
         Ok(Self {
