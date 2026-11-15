@@ -78,3 +78,44 @@ pub fn available_names() -> Vec<String> {
     names.sort();
     names
 }
+
+/// Every registered model's key and native sample rate in Hz, sorted by key.
+///
+/// One lock acquisition, so a GUI list needn't call [`get`] per row.
+#[must_use]
+pub fn catalog() -> Vec<(String, u32)> {
+    let map = store()
+        .read()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut entries: Vec<(String, u32)> = map
+        .iter()
+        .map(|(name, model)| (name.clone(), model.expected_sample_rate() as u32))
+        .collect();
+    drop(map);
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    entries
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Uses the same fixture dir as the NAM stage parity test, so the two tests
+    /// leave the process-global registry in the same state whichever runs first.
+    #[test]
+    fn catalog_lists_every_model_with_its_native_rate_sorted_by_key() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let loader = NamLoader::new(&dir).expect("fixture dir loads");
+        init_from_loader(&loader);
+
+        let entries = catalog();
+
+        let names: Vec<&str> = entries.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(names, available_names());
+        assert!(!entries.is_empty(), "fixture model must be listed");
+        for (key, rate) in &entries {
+            let model = get(key).expect("listed model is registered");
+            assert_eq!(*rate, model.expected_sample_rate() as u32);
+        }
+    }
+}
