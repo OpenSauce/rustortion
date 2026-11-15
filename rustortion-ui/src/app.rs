@@ -152,7 +152,7 @@ impl<B: ParamBackend> SharedApp<B> {
                         .stages
                         .iter()
                         .enumerate()
-                        .filter(|(_, s)| s.category() == cat)
+                        .filter(|(_, s)| s.category() == cat && !matches!(s, StageConfig::Nam(_)))
                         .map(|(i, _)| i)
                         .collect();
 
@@ -300,7 +300,7 @@ impl<B: ParamBackend> SharedApp<B> {
             if !already_loaded {
                 self.update(Message::Stage(
                     idx,
-                    StageMessage::Nam(NamMessage::ModelSelected(Some(key))),
+                    StageMessage::Nam(NamMessage::ModelSelected(key)),
                 ));
             }
         } else if let Some(idx) = self.insert_stage(StageConfig::Nam(NamConfig {
@@ -522,15 +522,6 @@ impl<B: ParamBackend> SharedApp<B> {
                     can_move_up,
                     can_move_down,
                     bypassed,
-                    // Effective rate (device × oversampling) — the rate stages are
-                    // built at, so NAM's mismatch check compares against the right value.
-                    engine_sample_rate: self.backend.sample_rate()
-                        * self.backend.oversampling_factor(),
-                    // NAM-specific: where the NAM stage card shows users to drop models.
-                    nam_models_dir: self.backend.nam_models_dir(),
-                    // NAM-specific: lets a cab-inclusive model report whether the IR
-                    // after it is a second cab or already bypassed.
-                    ir_bypassed: self.ir_cabinet_control.is_bypassed(),
                 },
             ));
         }
@@ -548,13 +539,16 @@ impl<B: ParamBackend> SharedApp<B> {
     }
 
     fn view_collapse_toggle(&self, category: StageCategory) -> Element<'_, Message> {
-        let category_has_stages = self.stages.iter().any(|s| s.category() == category);
+        let category_has_stages = self
+            .stages
+            .iter()
+            .any(|s| s.category() == category && !matches!(s, StageConfig::Nam(_)));
         let all_collapsed = category_has_stages
             && self
                 .stages
                 .iter()
                 .enumerate()
-                .filter(|(_, s)| s.category() == category)
+                .filter(|(_, s)| s.category() == category && !matches!(s, StageConfig::Nam(_)))
                 .all(|(i, _)| self.collapsed_stages.get(i).copied().unwrap_or(false));
 
         let label = if all_collapsed {
@@ -990,6 +984,17 @@ mod tests {
         assert_eq!(app.stages.len(), 1);
         assert_eq!(model_at(&app, 0), Some("a"));
         assert_eq!(calls(&app), [Call::RebuildStage(0)]);
+    }
+
+    #[test]
+    fn collapse_all_ignores_nam_rows() {
+        let mut app = app(vec![stage(StageType::Level), nam(Some("a"))]);
+        app.collapsed_stages = vec![true, false];
+        app.update(Message::ToggleAllStagesCollapse);
+        assert!(
+            !app.collapsed_stages[0],
+            "the only real card was collapsed, so the toggle expands it"
+        );
     }
 
     #[test]

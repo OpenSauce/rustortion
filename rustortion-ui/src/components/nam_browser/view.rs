@@ -267,8 +267,8 @@ fn list_button<'a>(
 }
 
 /// Flat and transparent at rest, so a column of rows reads as one list rather than
-/// a stack of buttons. Disabled is the folder rows' resting state, not an error.
-pub(crate) fn menu_row_style(theme: &iced::Theme, status: button::Status) -> button::Style {
+/// a stack of buttons. Disabled is a model row that cannot load because the chain is full.
+fn menu_row_style(theme: &iced::Theme, status: button::Status) -> button::Style {
     let palette = theme.extended_palette();
     let base = button::Style {
         text_color: palette.background.base.text,
@@ -437,7 +437,7 @@ fn stage_header<'a>(idx: usize, title: String, bypassed: bool) -> Element<'a, Me
 }
 
 /// The model's cab set against the live IR state, with the one button that toggles the IR.
-pub(crate) fn cab_line<'a>(info: Option<&ModelInfo>, ir_bypassed: bool) -> Element<'a, Message> {
+fn cab_line<'a>(info: Option<&ModelInfo>, ir_bypassed: bool) -> Element<'a, Message> {
     // `gear_type` is never displayed — only the conclusion drawn from it, the
     // live IR state, and a toggle. Always shown: the pairing is what matters, so
     // hiding it when the model says nothing just leaves the IR state a mystery.
