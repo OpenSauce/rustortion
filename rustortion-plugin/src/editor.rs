@@ -151,7 +151,7 @@ impl iced_baseview::Application for PluginApp {
         let factory_presets = crate::factory::load_factory_presets();
         let mut preset_handler = PresetHandler::new_from_presets(factory_presets);
 
-        // Seeded from the params rather than `default()`: the NAM card renders the IR
+        // Seeded from the params rather than `default()`: the NAM tab renders the IR
         // state as a coloured verdict about the signal chain, so a stale `false` here
         // means reopening a project with the IR bypassed shows a warning that the
         // audio contradicts — and the button offered to fix it would write the value
