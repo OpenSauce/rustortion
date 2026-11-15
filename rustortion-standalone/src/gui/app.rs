@@ -21,7 +21,9 @@ use rustortion_ui::components::pitch_shift_control::PitchShiftControl;
 use rustortion_ui::handlers::hotkey::HotkeyHandler;
 use rustortion_ui::handlers::preset::PresetHandler;
 use rustortion_ui::i18n;
-use rustortion_ui::messages::{HotkeyMessage, Message, MidiMessage, PresetMessage, TunerMessage};
+use rustortion_ui::messages::{
+    HotkeyMessage, Message, MidiMessage, NamTabMessage, PresetMessage, TunerMessage,
+};
 use rustortion_ui::stages::StageType;
 use rustortion_ui::tabs::Tab;
 
@@ -209,15 +211,7 @@ impl AmplifierApp {
     pub fn update(&mut self, message: Message) -> Task<Message> {
         // Detect messages that need standalone-side persistence *before*
         // shared handles them (because shared may consume the variant).
-        let needs_collapse_persist = matches!(
-            message,
-            Message::AddStage
-                | Message::RemoveStage(_)
-                | Message::MoveStageUp(_)
-                | Message::MoveStageDown(_)
-                | Message::ToggleStageCollapse(_)
-                | Message::ToggleAllStagesCollapse
-        );
+        let needs_collapse_persist = needs_collapse_persist(&message);
 
         let ir_bypassed_value = match &message {
             Message::IrBypassed(b) => Some(*b),
@@ -431,6 +425,53 @@ impl AmplifierApp {
     fn save_settings(&self) {
         if let Err(e) = self.settings.save() {
             error!("Failed to save settings: {e}");
+        }
+    }
+}
+
+const fn needs_collapse_persist(message: &Message) -> bool {
+    matches!(
+        message,
+        Message::AddStage
+            | Message::RemoveStage(_)
+            | Message::MoveStageUp(_)
+            | Message::MoveStageDown(_)
+            | Message::ToggleStageCollapse(_)
+            | Message::ToggleAllStagesCollapse
+            | Message::Nam(NamTabMessage::ModelClicked(_))
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn chain_layout_changes_persist_the_collapsed_state() {
+        use rustortion_ui::messages::NamTabMessage;
+        for message in [
+            Message::AddStage,
+            Message::RemoveStage(0),
+            Message::MoveStageUp(0),
+            Message::MoveStageDown(0),
+            Message::ToggleStageCollapse(0),
+            Message::ToggleAllStagesCollapse,
+            Message::Nam(NamTabMessage::ModelClicked("a".to_owned())),
+        ] {
+            assert!(
+                needs_collapse_persist(&message),
+                "{message:?} changes the chain layout"
+            );
+        }
+        for message in [
+            Message::Nam(NamTabMessage::FilterChanged("x".to_owned())),
+            Message::Nam(NamTabMessage::Rescan),
+            Message::RebuildTick,
+        ] {
+            assert!(
+                !needs_collapse_persist(&message),
+                "{message:?} does not change the chain layout"
+            );
         }
     }
 }
