@@ -30,9 +30,9 @@ pub struct Manager {
     xrun_count: Arc<AtomicU64>,
     available_irs: Vec<String>,
     ir_load_handle: Option<IrLoadHandle>,
-    /// Live NAM models directory — the single source of truth the NAM stage
-    /// card displays and rescans. Updated whenever a rescan succeeds (from the
-    /// settings dialog or the stage card) so the displayed path never drifts.
+    /// Live NAM models directory — the single source of truth the NAM tab
+    /// displays and rescans. Updated whenever a rescan succeeds (from the
+    /// settings dialog or the NAM tab) so the displayed path never drifts.
     nam_dir: Mutex<String>,
 }
 
@@ -257,7 +257,7 @@ impl Manager {
         match load_nam_models(dir) {
             Ok(count) => {
                 // Keep the live directory in sync so `nam_dir()` (the source of
-                // truth the NAM stage card displays/rescans) reflects the path
+                // truth the NAM tab displays/rescans) reflects the path
                 // that was just scanned.
                 if let Ok(mut d) = self.nam_dir.lock() {
                     *d = dir.to_string();

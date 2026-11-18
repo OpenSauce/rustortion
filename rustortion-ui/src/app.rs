@@ -8,6 +8,8 @@ use iced::{Alignment, Element, Length, Subscription, Task, keyboard, time, time:
 use crate::backend::{ExternalEvent, ParamBackend};
 use crate::components::ir_cabinet_control::IrCabinetControl;
 use crate::components::minimap;
+use crate::components::nam_browser::selection::ChainEdit;
+use crate::components::nam_browser::{NamBrowser, NamViewContext};
 use crate::components::peak_meter::PeakMeterDisplay;
 use crate::components::pitch_shift_control::PitchShiftControl;
 use crate::components::widgets::common::{
@@ -16,13 +18,16 @@ use crate::components::widgets::common::{
 };
 use crate::handlers::hotkey::HotkeyHandler;
 use crate::handlers::preset::PresetHandler;
-use crate::messages::{HotkeyMessage, Message, PresetMessage};
+use crate::messages::{HotkeyMessage, Message, NamTabMessage, PresetMessage};
+use crate::stages::NamMessage;
 use crate::stages::{
-    ParamUpdate, StageCategory, StageConfig, StageType, apply_stage_config, view_stage_config,
+    ParamUpdate, StageCategory, StageConfig, StageMessage, StageType, apply_stage_config,
+    view_stage_config,
 };
 use crate::tabs::Tab;
 use crate::tr;
 use rustortion_core::amp::chain::DEFAULT_CHAIN_CAPACITY;
+use rustortion_core::amp::stages::nam::NamConfig;
 use rustortion_core::preset::InputFilterConfig;
 
 const REBUILD_INTERVAL: Duration = Duration::from_millis(100);
@@ -53,6 +58,7 @@ pub struct SharedApp<B: ParamBackend> {
     pub oversampling_factor: u32,
     /// Whether recording is active — set by standalone, displayed in header.
     pub is_recording: bool,
+    pub nam_browser: NamBrowser,
 }
 
 impl<B: ParamBackend> SharedApp<B> {
@@ -61,11 +67,18 @@ impl<B: ParamBackend> SharedApp<B> {
             Message::TabSelected(tab) => {
                 self.active_tab = tab;
                 self.sync_stage_type_with_tab(tab);
+                // Pin the implicit "first NAM stage" so a later reorder can't change what is shown.
+                if tab == Tab::Nam
+                    && let Some(idx) = self.nam_browser.focused_stage(&self.stages)
+                {
+                    self.nam_browser.focus_stage(idx);
+                }
             }
             Message::SetStages(stages) => {
                 self.collapsed_stages.resize(stages.len(), false);
                 self.stages = stages;
                 self.dirty_params.clear();
+                self.nam_browser.chain_edited(ChainEdit::Replaced);
                 self.update_processor_chain();
                 self.backend.persist_chain_state(&self.stages);
             }
@@ -91,24 +104,14 @@ impl<B: ParamBackend> SharedApp<B> {
             }
             Message::RebuildTick => self.flush_dirty_params(),
             Message::AddStage => {
-                // Cap the chain so the engine's stage list never has to grow on
-                // the RT thread. See `DEFAULT_CHAIN_CAPACITY`.
-                if self.stages.len() < DEFAULT_CHAIN_CAPACITY {
-                    self.flush_dirty_params();
-                    let new_stage = StageConfig::from(self.selected_stage_type);
-                    let category = new_stage.category();
-                    let insert_idx = self.category_end_index(category);
-                    self.stages.insert(insert_idx, new_stage);
-                    self.collapsed_stages.insert(insert_idx, false);
-                    self.backend.add_stage(insert_idx, &self.stages[insert_idx]);
-                    self.backend.persist_chain_state(&self.stages);
-                }
+                self.insert_stage(StageConfig::from(self.selected_stage_type));
             }
             Message::RemoveStage(idx) => {
                 if idx < self.stages.len() {
                     self.flush_dirty_params();
                     self.stages.remove(idx);
                     self.collapsed_stages.remove(idx);
+                    self.nam_browser.chain_edited(ChainEdit::Removed(idx));
                     self.backend.remove_stage(idx);
                     self.backend.persist_chain_state(&self.stages);
                 }
@@ -123,6 +126,7 @@ impl<B: ParamBackend> SharedApp<B> {
                         self.flush_dirty_params();
                         self.stages.swap(prev, idx);
                         self.collapsed_stages.swap(prev, idx);
+                        self.nam_browser.chain_edited(ChainEdit::Swapped(prev, idx));
                         self.backend.swap_stages(prev, idx);
                         self.backend.persist_chain_state(&self.stages);
                     }
@@ -137,6 +141,7 @@ impl<B: ParamBackend> SharedApp<B> {
                         self.flush_dirty_params();
                         self.stages.swap(idx, next);
                         self.collapsed_stages.swap(idx, next);
+                        self.nam_browser.chain_edited(ChainEdit::Swapped(idx, next));
                         self.backend.swap_stages(idx, next);
                         self.backend.persist_chain_state(&self.stages);
                     }
@@ -153,7 +158,7 @@ impl<B: ParamBackend> SharedApp<B> {
                         .stages
                         .iter()
                         .enumerate()
-                        .filter(|(_, s)| s.category() == cat)
+                        .filter(|(_, s)| s.category() == cat && !matches!(s, StageConfig::Nam(_)))
                         .map(|(i, _)| i)
                         .collect();
 
@@ -214,36 +219,11 @@ impl<B: ParamBackend> SharedApp<B> {
                             self.backend.rebuild_stage(idx, &self.stages[idx]);
                             self.backend.persist_chain_state(&self.stages);
                         }
-                        Some(ParamUpdate::RescanNamModels) => {
-                            // The pick-list refreshes automatically because the NAM
-                            // view reads `registry::available_names()` live.
-                            match self.backend.rescan_nam_models() {
-                                Ok(count) => {
-                                    log::info!("Rescanned NAM models: {count} found");
-                                    // Rescan replaces the global registry, but already-built
-                                    // NamStage instances own their loaded model — rebuild the
-                                    // live NAM stages so an in-place `.nam` edit takes effect
-                                    // immediately (and re-selecting the same name still works).
-                                    for idx in 0..self.stages.len() {
-                                        if self.stages[idx].stage_type() == StageType::Nam {
-                                            self.backend.rebuild_stage(idx, &self.stages[idx]);
-                                        }
-                                    }
-                                }
-                                Err(e) => log::error!("Failed to rescan NAM models: {e}"),
-                            }
-                        }
-                        Some(ParamUpdate::OpenNamModelsDir) => {
-                            if let Some(dir) = self.backend.nam_models_dir() {
-                                crate::platform::open_directory(&dir);
-                            } else {
-                                log::warn!("No NAM models directory to open");
-                            }
-                        }
                         None => {}
                     }
                 }
             }
+            Message::Nam(msg) => self.handle_nam(msg),
             Message::Hotkey(msg) => return self.handle_hotkey(msg),
             Message::KeyPressed(key, modifiers) => {
                 return self.handle_key_pressed(&key, modifiers);
@@ -277,6 +257,82 @@ impl<B: ParamBackend> SharedApp<B> {
         }
 
         UpdateResult::Handled(Task::none())
+    }
+
+    fn handle_nam(&mut self, msg: NamTabMessage) {
+        match msg {
+            NamTabMessage::FilterChanged(filter) => self.nam_browser.set_filter(filter),
+            NamTabMessage::FolderToggled(path) => self.nam_browser.toggle_folder(path),
+            NamTabMessage::StageFocused(idx) => self.nam_browser.focus_stage(idx),
+            NamTabMessage::OpenStage(idx) => {
+                self.nam_browser.focus_stage(idx);
+                self.active_tab = Tab::Nam;
+            }
+            NamTabMessage::ModelClicked(key) => self.load_model(key),
+            NamTabMessage::Rescan => {
+                // The browser reads the registry live each frame, so only the
+                // already-built stages need refreshing.
+                match self.backend.rescan_nam_models() {
+                    Ok(count) => {
+                        log::info!("Rescanned NAM models: {count} found");
+                        // Built NamStages own their model: rebuild them so an
+                        // in-place `.nam` edit takes effect.
+                        for idx in 0..self.stages.len() {
+                            if self.stages[idx].stage_type() == StageType::Nam {
+                                self.backend.rebuild_stage(idx, &self.stages[idx]);
+                            }
+                        }
+                    }
+                    Err(e) => log::error!("Failed to rescan NAM models: {e}"),
+                }
+            }
+            NamTabMessage::OpenFolder => {
+                if let Some(dir) = self.backend.nam_models_dir() {
+                    crate::platform::open_directory(&dir);
+                } else {
+                    log::warn!("No NAM models directory to open");
+                }
+            }
+        }
+    }
+
+    /// Load `key` into the selected NAM stage, or add a NAM stage holding it.
+    fn load_model(&mut self, key: String) {
+        if let Some(idx) = self.nam_browser.focused_stage(&self.stages) {
+            let already_loaded = matches!(
+                &self.stages[idx],
+                StageConfig::Nam(cfg) if cfg.model_name.as_deref() == Some(key.as_str())
+            );
+            if !already_loaded {
+                self.update(Message::Stage(
+                    idx,
+                    StageMessage::Nam(NamMessage::ModelSelected(key)),
+                ));
+            }
+        } else if let Some(idx) = self.insert_stage(StageConfig::Nam(NamConfig {
+            model_name: Some(key),
+            ..NamConfig::default()
+        })) {
+            self.nam_browser.focus_stage(idx);
+        }
+    }
+
+    /// Insert `stage` at the end of its category and tell the backend. Returns its
+    /// index, or `None` when the chain is full.
+    fn insert_stage(&mut self, stage: StageConfig) -> Option<usize> {
+        // Cap the chain so the engine's stage list never has to grow on the RT
+        // thread. See `DEFAULT_CHAIN_CAPACITY`.
+        if self.stages.len() >= DEFAULT_CHAIN_CAPACITY {
+            return None;
+        }
+        self.flush_dirty_params();
+        let idx = self.category_end_index(stage.category());
+        self.stages.insert(idx, stage);
+        self.collapsed_stages.insert(idx, false);
+        self.nam_browser.chain_edited(ChainEdit::Inserted(idx));
+        self.backend.add_stage(idx, &self.stages[idx]);
+        self.backend.persist_chain_state(&self.stages);
+        Some(idx)
     }
 
     fn handle_hotkey(&mut self, msg: HotkeyMessage) -> UpdateResult {
@@ -324,6 +380,7 @@ impl<B: ParamBackend> SharedApp<B> {
             Tab::Effects => self.view_effects_tab(),
             Tab::Cabinet => self.view_cabinet_tab(),
             Tab::Io => self.view_io_tab(),
+            Tab::Nam => self.view_nam_tab(),
         };
         let signal_minimap =
             minimap::view(&self.stages, &self.input_filter_config, self.active_tab);
@@ -410,6 +467,7 @@ impl<B: ParamBackend> SharedApp<B> {
         let tabs = [
             (Tab::Io, tr!(tab_io)),
             (Tab::Amp, tr!(tab_amp)),
+            (Tab::Nam, tr!(tab_nam)),
             (Tab::Effects, tr!(tab_effects)),
             (Tab::Cabinet, tr!(tab_cabinet)),
         ];
@@ -470,15 +528,6 @@ impl<B: ParamBackend> SharedApp<B> {
                     can_move_up,
                     can_move_down,
                     bypassed,
-                    // Effective rate (device × oversampling) — the rate stages are
-                    // built at, so NAM's mismatch check compares against the right value.
-                    engine_sample_rate: self.backend.sample_rate()
-                        * self.backend.oversampling_factor(),
-                    // NAM-specific: where the NAM stage card shows users to drop models.
-                    nam_models_dir: self.backend.nam_models_dir(),
-                    // NAM-specific: lets a cab-inclusive model report whether the IR
-                    // after it is a second cab or already bypassed.
-                    ir_bypassed: self.ir_cabinet_control.is_bypassed(),
                 },
             ));
         }
@@ -496,13 +545,16 @@ impl<B: ParamBackend> SharedApp<B> {
     }
 
     fn view_collapse_toggle(&self, category: StageCategory) -> Element<'_, Message> {
-        let category_has_stages = self.stages.iter().any(|s| s.category() == category);
+        let category_has_stages = self
+            .stages
+            .iter()
+            .any(|s| s.category() == category && !matches!(s, StageConfig::Nam(_)));
         let all_collapsed = category_has_stages
             && self
                 .stages
                 .iter()
                 .enumerate()
-                .filter(|(_, s)| s.category() == category)
+                .filter(|(_, s)| s.category() == category && !matches!(s, StageConfig::Nam(_)))
                 .all(|(i, _)| self.collapsed_stages.get(i).copied().unwrap_or(false));
 
         let label = if all_collapsed {
@@ -536,6 +588,17 @@ impl<B: ParamBackend> SharedApp<B> {
         .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center)
         .into()
+    }
+
+    fn view_nam_tab(&self) -> Element<'_, Message> {
+        let ctx = NamViewContext {
+            stages: &self.stages,
+            engine_sample_rate: self.backend.sample_rate() * self.backend.oversampling_factor(),
+            models_dir: self.backend.nam_models_dir(),
+            ir_bypassed: self.ir_cabinet_control.is_bypassed(),
+            chain_full: self.stages.len() >= DEFAULT_CHAIN_CAPACITY,
+        };
+        view_tab_panel(self.nam_browser.view(&ctx))
     }
 
     fn view_cabinet_tab(&self) -> Element<'_, Message> {
@@ -774,5 +837,316 @@ pub fn tab_button_inactive(
             radius: 0.0.into(),
         },
         ..iced::widget::button::Style::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use rustortion_core::amp::stages::nam::NamConfig;
+
+    use super::*;
+    use crate::backend::Capabilities;
+    use crate::components::nam_browser::NamBrowser;
+    use crate::hotkey::HotkeySettings;
+    use crate::messages::NamTabMessage;
+
+    #[derive(Debug, Clone, PartialEq)]
+    enum Call {
+        AddStage(usize),
+        RemoveStage(usize),
+        RebuildStage(usize),
+        SetParameter(usize, &'static str),
+        Rescan,
+    }
+
+    struct MockBackend {
+        calls: Mutex<Vec<Call>>,
+        capabilities: Capabilities,
+    }
+
+    impl MockBackend {
+        fn record(&self, call: Call) {
+            self.calls.lock().unwrap().push(call);
+        }
+    }
+
+    impl ParamBackend for MockBackend {
+        fn set_parameter(&self, stage_idx: usize, name: &'static str, _value: f32) {
+            self.record(Call::SetParameter(stage_idx, name));
+        }
+        fn rebuild_stage(&self, stage_idx: usize, _config: &StageConfig) {
+            self.record(Call::RebuildStage(stage_idx));
+        }
+        fn set_amp_chain(&self, _stages: &[StageConfig]) {}
+        fn set_bypass(&self, _stage_idx: usize, _bypassed: bool) {}
+        fn add_stage(&self, idx: usize, _config: &StageConfig) {
+            self.record(Call::AddStage(idx));
+        }
+        fn remove_stage(&self, idx: usize) {
+            self.record(Call::RemoveStage(idx));
+        }
+        fn swap_stages(&self, _a: usize, _b: usize) {}
+        fn set_ir(&self, _path: &str) {}
+        fn set_ir_bypass(&self, _bypassed: bool) {}
+        fn set_ir_gain(&self, _gain: f32) {}
+        fn set_input_filter(&self, _filter: &InputFilterConfig) {}
+        fn set_pitch_shift(&self, _semitones: i32) {}
+        fn set_oversampling(&self, _factor: u32) {}
+        fn sample_rate(&self) -> u32 {
+            48_000
+        }
+        fn oversampling_factor(&self) -> u32 {
+            1
+        }
+        fn capabilities(&self) -> &Capabilities {
+            &self.capabilities
+        }
+        fn get_available_irs(&self) -> Vec<String> {
+            Vec::new()
+        }
+        fn get_peak_meter_info(&self) -> Option<ExternalEvent> {
+            None
+        }
+        fn nam_models_dir(&self) -> Option<std::path::PathBuf> {
+            None
+        }
+        fn rescan_nam_models(&self) -> Result<usize, String> {
+            self.record(Call::Rescan);
+            Ok(0)
+        }
+    }
+
+    fn app(stages: Vec<StageConfig>) -> SharedApp<MockBackend> {
+        SharedApp {
+            backend: MockBackend {
+                calls: Mutex::new(Vec::new()),
+                capabilities: Capabilities::plugin(),
+            },
+            collapsed_stages: vec![false; stages.len()],
+            stages,
+            dirty_params: HashMap::new(),
+            active_tab: Tab::default(),
+            selected_stage_type: StageType::default(),
+            ir_cabinet_control: IrCabinetControl::default(),
+            pitch_shift_control: PitchShiftControl::new(0),
+            preset_handler: PresetHandler::new_from_presets(Vec::new()),
+            peak_meter_display: PeakMeterDisplay::default(),
+            hotkey_handler: HotkeyHandler::new(HotkeySettings::default()),
+            input_filter_config: InputFilterConfig::default(),
+            oversampling_factor: 1,
+            is_recording: false,
+            nam_browser: NamBrowser::default(),
+        }
+    }
+
+    fn calls(app: &SharedApp<MockBackend>) -> Vec<Call> {
+        app.backend.calls.lock().unwrap().clone()
+    }
+
+    fn nam(model: Option<&str>) -> StageConfig {
+        StageConfig::Nam(NamConfig {
+            model_name: model.map(str::to_owned),
+            ..NamConfig::default()
+        })
+    }
+
+    fn stage(kind: StageType) -> StageConfig {
+        StageConfig::from(kind)
+    }
+
+    fn click(app: &mut SharedApp<MockBackend>, key: &str) {
+        app.update(Message::Nam(NamTabMessage::ModelClicked(key.to_owned())));
+    }
+
+    fn model_at(app: &SharedApp<MockBackend>, idx: usize) -> Option<&str> {
+        match &app.stages[idx] {
+            StageConfig::Nam(cfg) => cfg.model_name.as_deref(),
+            other => panic!("stage {idx} is {:?}, not NAM", other.stage_type()),
+        }
+    }
+
+    #[test]
+    fn clicking_a_model_with_no_nam_stage_inserts_one_after_the_amp_stages() {
+        let mut app = app(vec![
+            stage(StageType::NoiseGate),
+            stage(StageType::Level),
+            stage(StageType::Delay),
+        ]);
+        app.collapsed_stages = vec![true, false, true];
+        click(&mut app, "Pack/model");
+        assert_eq!(app.stages.len(), 4);
+        assert_eq!(model_at(&app, 2), Some("Pack/model"));
+        assert_eq!(app.stages[3].stage_type(), StageType::Delay);
+        assert_eq!(app.collapsed_stages, [true, false, false, true]);
+        assert_eq!(calls(&app), [Call::AddStage(2)]);
+        assert_eq!(app.nam_browser.focused_stage(&app.stages), Some(2));
+    }
+
+    #[test]
+    fn clicking_a_model_swaps_the_selected_stages_model() {
+        let mut app = app(vec![nam(None)]);
+        click(&mut app, "a");
+        assert_eq!(app.stages.len(), 1);
+        assert_eq!(model_at(&app, 0), Some("a"));
+        assert_eq!(calls(&app), [Call::RebuildStage(0)]);
+    }
+
+    #[test]
+    fn collapse_all_ignores_nam_rows() {
+        let mut app = app(vec![stage(StageType::Level), nam(Some("a"))]);
+        app.collapsed_stages = vec![true, false];
+        app.update(Message::ToggleAllStagesCollapse);
+        assert!(
+            !app.collapsed_stages[0],
+            "the only real card was collapsed, so the toggle expands it"
+        );
+    }
+
+    #[test]
+    fn clicking_the_loaded_model_does_nothing() {
+        let mut app = app(vec![nam(Some("a"))]);
+        click(&mut app, "a");
+        assert!(calls(&app).is_empty());
+    }
+
+    #[test]
+    fn clicking_a_model_loads_into_the_selected_stage_when_there_are_two() {
+        let mut app = app(vec![nam(Some("a")), nam(Some("b"))]);
+        app.update(Message::Nam(NamTabMessage::StageFocused(1)));
+        click(&mut app, "c");
+        assert_eq!(model_at(&app, 0), Some("a"));
+        assert_eq!(model_at(&app, 1), Some("c"));
+    }
+
+    #[test]
+    fn clicking_a_model_on_a_full_chain_with_no_nam_stage_does_nothing() {
+        let mut app = app(vec![stage(StageType::Level); DEFAULT_CHAIN_CAPACITY]);
+        click(&mut app, "a");
+        assert_eq!(app.stages.len(), DEFAULT_CHAIN_CAPACITY);
+        assert!(
+            app.stages
+                .iter()
+                .all(|s| s.stage_type() == StageType::Level)
+        );
+        assert!(calls(&app).is_empty());
+        assert_eq!(app.collapsed_stages.len(), DEFAULT_CHAIN_CAPACITY);
+        assert_eq!(app.nam_browser.focused_stage(&app.stages), None);
+    }
+
+    #[test]
+    fn a_pending_slider_edit_is_sent_before_the_insert_shifts_indices() {
+        let mut app = app(vec![stage(StageType::Level), stage(StageType::Delay)]);
+        app.dirty_params.insert((1, "feedback"), 0.5);
+        click(&mut app, "a");
+        assert_eq!(
+            calls(&app),
+            [Call::SetParameter(1, "feedback"), Call::AddStage(1)]
+        );
+        assert!(app.dirty_params.is_empty());
+    }
+
+    #[test]
+    fn removing_the_selected_nam_stage_selects_the_first_remaining_one() {
+        let mut app = app(vec![
+            nam(Some("a")),
+            stage(StageType::Level),
+            nam(Some("b")),
+        ]);
+        app.update(Message::Nam(NamTabMessage::StageFocused(2)));
+        app.update(Message::RemoveStage(2));
+        assert_eq!(app.nam_browser.focused_stage(&app.stages), Some(0));
+    }
+
+    #[test]
+    fn removing_an_earlier_stage_keeps_the_same_nam_stage_selected() {
+        let mut app = app(vec![
+            stage(StageType::Level),
+            nam(Some("a")),
+            nam(Some("b")),
+        ]);
+        app.update(Message::Nam(NamTabMessage::StageFocused(2)));
+        app.update(Message::RemoveStage(0));
+        assert_eq!(app.nam_browser.focused_stage(&app.stages), Some(1));
+        assert_eq!(model_at(&app, 1), Some("b"));
+    }
+
+    #[test]
+    fn moving_the_selected_nam_stage_keeps_it_selected() {
+        let mut app = app(vec![nam(Some("a")), nam(Some("b"))]);
+        app.update(Message::Nam(NamTabMessage::StageFocused(1)));
+        app.update(Message::MoveStageUp(1));
+        assert_eq!(app.nam_browser.focused_stage(&app.stages), Some(0));
+        assert_eq!(model_at(&app, 0), Some("b"));
+    }
+
+    #[test]
+    fn the_stage_shown_when_the_nam_tab_opens_stays_shown_after_a_reorder() {
+        let mut app = app(vec![nam(Some("a")), nam(Some("b"))]);
+        app.update(Message::TabSelected(Tab::Nam));
+        app.update(Message::TabSelected(Tab::Amp));
+        app.update(Message::MoveStageUp(1));
+        let shown = app
+            .nam_browser
+            .focused_stage(&app.stages)
+            .expect("a NAM stage is selected");
+        assert_eq!(model_at(&app, shown), Some("a"));
+    }
+
+    #[test]
+    fn moving_the_selected_nam_stage_down_keeps_it_selected() {
+        let mut app = app(vec![nam(Some("a")), nam(Some("b"))]);
+        app.update(Message::Nam(NamTabMessage::StageFocused(0)));
+        app.update(Message::MoveStageDown(0));
+        assert_eq!(app.nam_browser.focused_stage(&app.stages), Some(1));
+        assert_eq!(model_at(&app, 1), Some("a"));
+    }
+
+    #[test]
+    fn loading_a_preset_selects_its_first_nam_stage() {
+        let mut app = app(vec![
+            stage(StageType::Level),
+            stage(StageType::Level),
+            nam(Some("a")),
+        ]);
+        app.update(Message::Nam(NamTabMessage::StageFocused(2)));
+        app.update(Message::SetStages(vec![
+            stage(StageType::Level),
+            nam(Some("c")),
+            nam(Some("d")),
+        ]));
+        assert_eq!(app.nam_browser.focused_stage(&app.stages), Some(1));
+    }
+
+    #[test]
+    fn open_stage_selects_it_and_switches_to_the_nam_tab() {
+        let mut app = app(vec![nam(Some("a")), nam(Some("b"))]);
+        app.update(Message::Nam(NamTabMessage::OpenStage(1)));
+        assert_eq!(app.active_tab, Tab::Nam);
+        assert_eq!(app.nam_browser.focused_stage(&app.stages), Some(1));
+    }
+
+    #[test]
+    fn rescan_works_with_no_nam_stage_and_rebuilds_the_live_ones() {
+        let mut empty = app(Vec::new());
+        empty.update(Message::Nam(NamTabMessage::Rescan));
+        assert_eq!(calls(&empty), [Call::Rescan]);
+
+        let mut two = app(vec![nam(Some("a")), stage(StageType::Level), nam(None)]);
+        two.update(Message::Nam(NamTabMessage::Rescan));
+        assert_eq!(
+            calls(&two),
+            [Call::Rescan, Call::RebuildStage(0), Call::RebuildStage(2)]
+        );
+    }
+
+    #[test]
+    fn add_stage_still_adds_an_empty_nam_stage_from_the_amp_tab() {
+        let mut app = app(vec![stage(StageType::Level)]);
+        app.update(Message::StageTypeSelected(StageType::Nam));
+        app.update(Message::AddStage);
+        assert_eq!(model_at(&app, 1), None);
+        assert_eq!(calls(&app), [Call::AddStage(1)]);
     }
 }

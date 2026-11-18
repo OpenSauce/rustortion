@@ -10,6 +10,7 @@ use crate::params::RustortionParams;
 use rustortion_ui::app::{SharedApp, UpdateResult};
 use rustortion_ui::backend::ParamBackend;
 use rustortion_ui::components::ir_cabinet_control::IrCabinetControl;
+use rustortion_ui::components::nam_browser::NamBrowser;
 use rustortion_ui::components::peak_meter::PeakMeterDisplay;
 use rustortion_ui::components::pitch_shift_control::PitchShiftControl;
 use rustortion_ui::handlers::hotkey::HotkeyHandler;
@@ -150,7 +151,7 @@ impl iced_baseview::Application for PluginApp {
         let factory_presets = crate::factory::load_factory_presets();
         let mut preset_handler = PresetHandler::new_from_presets(factory_presets);
 
-        // Seeded from the params rather than `default()`: the NAM card renders the IR
+        // Seeded from the params rather than `default()`: the NAM tab renders the IR
         // state as a coloured verdict about the signal chain, so a stale `false` here
         // means reopening a project with the IR bypassed shows a warning that the
         // audio contradicts — and the button offered to fix it would write the value
@@ -210,6 +211,7 @@ impl iced_baseview::Application for PluginApp {
             input_filter_config: params.input_filters(),
             oversampling_factor,
             is_recording: false,
+            nam_browser: NamBrowser::default(),
         };
 
         // If we have stored stages, restore them directly.

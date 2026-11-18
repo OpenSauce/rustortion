@@ -4,12 +4,14 @@ use rustortion_core::preset::InputFilterConfig;
 
 pub mod hotkey;
 pub mod midi;
+pub mod nam;
 pub mod preset;
 pub mod settings;
 pub mod tuner;
 
 pub use hotkey::*;
 pub use midi::*;
+pub use nam::*;
 pub use preset::*;
 pub use settings::*;
 pub use tuner::*;
@@ -66,6 +68,9 @@ pub enum Message {
 
     // Stage-specific messages
     Stage(usize, StageMessage),
+
+    // NAM tab messages
+    Nam(NamTabMessage),
 
     // Tuner messages
     Tuner(TunerMessage),

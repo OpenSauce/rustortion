@@ -331,7 +331,7 @@ mod tests {
             assert_eq!(info.includes_cab, None, "{name} must not read as a cab");
         }
         // The dangerous class: names that mention a cab in order to say there
-        // isn't one. Reading these as "cab included" makes the card advise
+        // isn't one. Reading these as "cab included" makes the NAM tab advise
         // bypassing the IR, leaving the signal with no cab at all. Note that the
         // `-`/`_` normalization is what turns "cab-less" into a bare `cab` token,
         // so this is a trap the normalization itself creates.

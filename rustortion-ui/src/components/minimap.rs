@@ -1,9 +1,9 @@
 use iced::widget::{button, container, row, text};
 use iced::{Alignment, Element, Length};
 
-use crate::messages::Message;
-use crate::stages::{StageCategory, StageConfig};
-use crate::tabs::Tab;
+use crate::messages::{Message, NamTabMessage};
+use crate::stages::StageConfig;
+use crate::tabs::{Tab, tab_for_stage};
 use rustortion_core::preset::InputFilterConfig;
 
 const fn stage_abbreviation(cfg: &StageConfig) -> &'static str {
@@ -127,19 +127,21 @@ pub fn view<'a>(
     );
 
     // Stage blocks
-    for stage in stages {
+    for (idx, stage) in stages.iter().enumerate() {
         chain = chain.push(text("\u{2192}").size(11));
         let abbr = stage_abbreviation(stage);
-        let cat = stage.category();
-        let tab = match cat {
-            StageCategory::Amp => Tab::Amp,
-            StageCategory::Effect => Tab::Effects,
-        };
+        let tab = tab_for_stage(stage);
         let is_active = active_tab == tab;
         let bypassed = stage.bypassed();
+        // A NAM block opens its own stage; the rest just switch tabs.
+        let on_press = if matches!(stage, StageConfig::Nam(_)) {
+            Message::Nam(NamTabMessage::OpenStage(idx))
+        } else {
+            Message::TabSelected(tab)
+        };
         chain = chain.push(
             button(text(abbr).size(11))
-                .on_press(Message::TabSelected(tab))
+                .on_press(on_press)
                 .style(block_style(is_active, bypassed))
                 .padding([2, 6]),
         );

@@ -1,7 +1,7 @@
 use crate::messages::Message;
 use crate::tr;
 use iced::widget::{
-    button, column, container, pick_list, row, rule, slider, text, tooltip, vertical_slider,
+    Space, button, column, container, pick_list, row, rule, slider, text, tooltip, vertical_slider,
 };
 use iced::{Alignment, Color, Element, Length};
 
@@ -104,18 +104,6 @@ pub struct StageViewState {
     pub can_move_up: bool,
     pub can_move_down: bool,
     pub bypassed: bool,
-    /// Effective engine sample rate in Hz — the device rate times the oversampling
-    /// factor, i.e. the rate stages are actually built and run at. Used by stages
-    /// (e.g. NAM) to detect rate mismatches, so it must match what `to_stage` sees.
-    pub engine_sample_rate: u32,
-    /// NAM-specific: directory the NAM stage loads `.nam` models from, shown on
-    /// the NAM stage card so users know where to drop model files. `None` if the
-    /// backend has no NAM directory. Ignored by all other stage views.
-    pub nam_models_dir: Option<std::path::PathBuf>,
-    /// Whether the IR cabinet is bypassed. NAM reads it to tell a cab-inclusive
-    /// model apart from a double-cab: the same model is fine with the IR bypassed
-    /// and wrong without. Ignored by all other stage views.
-    pub ir_bypassed: bool,
 }
 
 fn stage_header<'a>(
@@ -132,6 +120,18 @@ fn stage_header<'a>(
         iced::widget::button::secondary,
     );
 
+    row![
+        collapse_btn,
+        stage_action_buttons(idx, state),
+        text(header_text)
+    ]
+    .spacing(SPACING_TIGHT)
+    .align_y(Alignment::Center)
+    .into()
+}
+
+/// The move up, move down, remove and bypass buttons shared by every stage row.
+fn stage_action_buttons<'a>(idx: usize, state: &StageViewState) -> Element<'a, Message> {
     let move_up_btn = if state.can_move_up {
         icon_button(
             "↑",
@@ -172,17 +172,46 @@ fn stage_header<'a>(
         iced::widget::tooltip::Position::Bottom,
     );
 
-    row![
-        collapse_btn,
-        move_up_btn,
-        move_down_btn,
-        remove_btn,
-        bypass_btn,
-        text(header_text)
+    row![move_up_btn, move_down_btn, remove_btn, bypass_btn]
+        .spacing(SPACING_TIGHT)
+        .align_y(Alignment::Center)
+        .into()
+}
+
+/// A stage drawn as one row with no body: the usual move/remove/bypass buttons, a label,
+/// and a button that opens its editor elsewhere.
+pub fn stage_link_row<'a>(
+    label: String,
+    idx: usize,
+    state: &StageViewState,
+    open_label: &'a str,
+    on_open: Message,
+) -> Element<'a, Message> {
+    let content = row![
+        Space::new().width(ICON_BUTTON_WIDTH),
+        stage_action_buttons(idx, state),
+        text(label)
+            .width(Length::Fill)
+            .wrapping(iced::widget::text::Wrapping::WordOrGlyph),
+        button(text(open_label))
+            .on_press(on_open)
+            .style(iced::widget::button::secondary),
     ]
     .spacing(SPACING_TIGHT)
     .align_y(Alignment::Center)
-    .into()
+    .padding(PADDING_SMALL);
+
+    let opacity = if state.bypassed { 0.5 } else { 1.0 };
+
+    container(content)
+        .width(Length::Fill)
+        .style(move |theme: &iced::Theme| {
+            let bg = theme.palette().background;
+            container::Style::default()
+                .background(iced::Color::from_rgba(bg.r, bg.g, bg.b, opacity))
+                .border(iced::Border::default().rounded(BORDER_RADIUS_CARD))
+        })
+        .into()
 }
 
 pub fn stage_card<'a>(

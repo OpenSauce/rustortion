@@ -83,6 +83,8 @@ Nothing to add in `rustortion-plugin/src/params.rs` — stage parameters are not
   (REV-7 remainder).
 - **NAM models** (`.nam`, WaveNet + LSTM via `nam-rs`) load from a user folder with rescan, into a
   process-global registry; stages resolve them **by name**. No rfd file-picker — rfd/gtk3 breaks CI.
+  The NAM tab (`rustortion-ui/src/components/nam_browser/`) is a view over the `StageConfig::Nam`
+  stages in the chain; there is no separate NAM slot, and the Amp tab shows each NAM stage as a link row.
 - **IR files** live in `impulse_responses/` and `~/.config/rustortion/impulse_responses/`; loading
   is async, off the RT thread. Keep convolver type configurable — FIR beat FFT on the Pi in real
   testing, and the TwoStage tail math is numerically wrong until REV-2 lands.
