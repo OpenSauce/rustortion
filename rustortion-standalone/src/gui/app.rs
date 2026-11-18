@@ -25,7 +25,6 @@ use rustortion_ui::messages::{
     HotkeyMessage, Message, MidiMessage, NamTabMessage, PresetMessage, TunerMessage,
 };
 use rustortion_ui::stages::StageType;
-use rustortion_ui::tabs::Tab;
 
 const TUNER_POLL_INTERVAL: Duration = Duration::from_millis(20);
 const MIDI_POLL_INTERVAL: Duration = Duration::from_millis(10);
@@ -142,7 +141,7 @@ impl AmplifierApp {
             stages: preset.stages,
             collapsed_stages,
             dirty_params: HashMap::new(),
-            active_tab: Tab::default(),
+            active_tab: settings.active_tab,
             selected_stage_type: StageType::default(),
             ir_cabinet_control,
             pitch_shift_control,
@@ -271,6 +270,11 @@ impl AmplifierApp {
 
         if needs_hotkey_save {
             self.settings.hotkeys = self.shared.hotkey_handler.settings().clone();
+            self.save_settings();
+        }
+
+        if self.shared.active_tab != self.settings.active_tab {
+            self.settings.active_tab = self.shared.active_tab;
             self.save_settings();
         }
 

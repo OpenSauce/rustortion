@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use crate::i18n::Language;
 use crate::midi::MidiMapping;
 use rustortion_ui::hotkey::HotkeySettings;
+use rustortion_ui::tabs::Tab;
 
 impl std::fmt::Display for AudioSettings {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -93,6 +94,9 @@ pub struct Settings {
     pub hotkeys: HotkeySettings,
     #[serde(default)]
     pub collapsed_stages: HashMap<String, Vec<bool>>,
+    /// Tab the window was last on, reopened on next launch.
+    #[serde(default)]
+    pub active_tab: Tab,
 }
 
 impl std::fmt::Display for Settings {
@@ -138,6 +142,7 @@ impl Default for Settings {
             language: Language::default(),
             hotkeys: HotkeySettings::default(),
             collapsed_stages: HashMap::new(),
+            active_tab: Tab::default(),
         }
     }
 }
