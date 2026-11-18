@@ -16,7 +16,7 @@ path = "src/bin/gui.rs"
 [dependencies]
 rustortion-core = { path = "../rustortion-core" }
 rustortion-ui = { path = "../rustortion-ui" }
-jack = "0.13"
+jack = "0.14"
 hound = "3.5"
 ctrlc = { version = "3.5", features = ["termination"] }
 chrono = "0.4"
