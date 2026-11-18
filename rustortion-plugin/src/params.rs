@@ -1,6 +1,7 @@
 use nih_plug::prelude::*;
 use rustortion_core::preset::InputFilterConfig;
 use rustortion_core::preset::stage_config::StageConfig;
+use rustortion_ui::tabs::Tab;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicU32;
@@ -56,6 +57,10 @@ pub struct RustortionParams {
     /// modifications (add/remove/reorder stages) survive save/restore.
     #[persist = "chain_state"]
     pub chain_state: Arc<Mutex<Option<Vec<StageConfig>>>>,
+
+    /// Editor tab, so reopening the editor (or the project) lands where it closed.
+    #[persist = "active_tab"]
+    pub active_tab: Arc<Mutex<Tab>>,
 }
 
 impl RustortionParams {
@@ -145,6 +150,7 @@ impl Default for RustortionParams {
             oversampling_factor: Arc::new(AtomicU32::new(1)), // 1 = 1x (no oversampling)
             ir_name: Arc::new(Mutex::new(None)),
             chain_state: Arc::new(Mutex::new(None)),
+            active_tab: Arc::new(Mutex::new(Tab::default())),
         }
     }
 }
