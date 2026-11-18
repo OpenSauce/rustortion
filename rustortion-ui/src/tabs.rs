@@ -1,6 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::stages::{StageCategory, StageConfig};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum Tab {
     #[default]
     Amp,

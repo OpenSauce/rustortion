@@ -127,6 +127,7 @@ struct PluginAppFlags {
 
 struct PluginApp {
     shared: SharedApp<PluginBackend>,
+    params: Arc<RustortionParams>,
 }
 
 impl iced_baseview::Application for PluginApp {
@@ -201,7 +202,10 @@ impl iced_baseview::Application for PluginApp {
             stages: Vec::new(),
             collapsed_stages: Vec::new(),
             dirty_params: HashMap::new(),
-            active_tab: Tab::Amp,
+            active_tab: params
+                .active_tab
+                .lock()
+                .map_or_else(|_| Tab::default(), |t| *t),
             selected_stage_type: StageType::ALL.first().copied().unwrap_or(StageType::Preamp),
             ir_cabinet_control: ir_cabinet,
             pitch_shift_control: PitchShiftControl::new(params.pitch_shift.value()),
@@ -227,18 +231,22 @@ impl iced_baseview::Application for PluginApp {
             |stages| iced_baseview::Task::done(Message::SetStages(stages)),
         );
 
-        (Self { shared }, init_task)
+        (Self { shared, params }, init_task)
     }
 
     fn update(&mut self, message: Self::Message) -> iced_baseview::Task<Self::Message> {
-        match self.shared.update(message) {
+        let task = match self.shared.update(message) {
             UpdateResult::Handled(task) => task,
             UpdateResult::Unhandled(_msg) => {
                 // Standalone-only messages (Settings, Midi, Tuner, Recording)
                 // are silently dropped in plugin mode.
                 iced_baseview::Task::none()
             }
+        };
+        if let Ok(mut tab) = self.params.active_tab.lock() {
+            *tab = self.shared.active_tab;
         }
+        task
     }
 
     fn view(
