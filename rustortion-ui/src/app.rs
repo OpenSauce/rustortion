@@ -593,7 +593,8 @@ impl<B: ParamBackend> SharedApp<B> {
     fn view_nam_tab(&self) -> Element<'_, Message> {
         let ctx = NamViewContext {
             stages: &self.stages,
-            engine_sample_rate: self.backend.sample_rate() * self.backend.oversampling_factor(),
+            device_sample_rate: self.backend.sample_rate(),
+            oversampling: self.backend.oversampling_factor(),
             models_dir: self.backend.nam_models_dir(),
             ir_bypassed: self.ir_cabinet_control.is_bypassed(),
             chain_full: self.stages.len() >= DEFAULT_CHAIN_CAPACITY,
