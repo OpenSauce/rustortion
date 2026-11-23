@@ -15,8 +15,8 @@ use super::tree::{ListRow, leaf_label, model_tree, visible_rows};
 use crate::app::{tab_button_active, tab_button_inactive};
 use crate::components::widgets::common::{
     BORDER_RADIUS_CARD, COLOR_MUTED, COLOR_SUBTLE, COLOR_WARNING, PADDING_NORMAL, PADDING_SMALL,
-    SPACING_NORMAL, SPACING_TIGHT, TEXT_SIZE_SECTION_TITLE, TEXT_SIZE_SMALL, icon_button,
-    labeled_slider, section_container,
+    SPACING_NORMAL, SPACING_TIGHT, TEXT_SIZE_LABEL, TEXT_SIZE_SECTION_TITLE, TEXT_SIZE_SMALL,
+    icon_button, labeled_slider, section_container,
 };
 use crate::messages::{Message, NamTabMessage};
 use crate::stages::{NamMessage, StageConfig, StageMessage};
@@ -28,15 +28,24 @@ const INDENT_PER_LEVEL: f32 = 18.0;
 const LOADED_ROW_ALPHA: f32 = 0.22;
 /// Gap between list rows, so neighbouring hover highlights stay apart.
 const ROW_SPACING: f32 = 2.0;
+/// Opacity of the warning tint behind the rate-mismatch callout.
+const CALLOUT_TINT_ALPHA: f32 = 0.12;
 
 pub struct NamViewContext<'a> {
     pub stages: &'a [StageConfig],
-    /// Device rate × oversampling: the rate stages are built at.
-    pub engine_sample_rate: u32,
+    pub device_sample_rate: u32,
+    pub oversampling: u32,
     pub models_dir: Option<PathBuf>,
     pub ir_bypassed: bool,
     /// The chain is at `DEFAULT_CHAIN_CAPACITY`.
     pub chain_full: bool,
+}
+
+impl NamViewContext<'_> {
+    /// Device rate × oversampling: the rate stages are built at.
+    const fn engine_sample_rate(&self) -> u32 {
+        self.device_sample_rate * self.oversampling
+    }
 }
 
 impl NamBrowser {
@@ -87,7 +96,7 @@ impl NamBrowser {
                 loaded,
             )
             .into_iter()
-            .map(|r| list_row(r, loaded, ctx.engine_sample_rate, models_clickable));
+            .map(|r| list_row(r, loaded, ctx.engine_sample_rate(), models_clickable));
             scrollable(column(rows).spacing(ROW_SPACING).width(Length::Fill))
                 .spacing(SPACING_TIGHT)
                 .height(Length::Fill)
@@ -254,7 +263,13 @@ fn model_row<'a>(
         .spacing(SPACING_NORMAL)
         .align_y(Alignment::Center);
     if rate_mismatch {
-        content = content.push(text(format_khz(rate_hz)).style(text_color(COLOR_WARNING)));
+        content = content.push(tooltip(
+            text(format_khz(rate_hz)).style(text_color(COLOR_WARNING)),
+            container(text(tr!(nam_rate_mismatch_tooltip)).size(TEXT_SIZE_SMALL))
+                .padding(PADDING_SMALL)
+                .style(container::bordered_box),
+            tooltip::Position::Left,
+        ));
     }
 
     list_button(content, depth, is_loaded)
@@ -349,18 +364,14 @@ fn stage_pane<'a>(ctx: &NamViewContext<'a>, pane: &PaneState) -> Element<'a, Mes
     if matches!(pane, PaneState::Missing { .. }) {
         content = content.push(text(tr!(nam_model_not_found)).style(text_color(COLOR_WARNING)));
     }
-    // A mismatched model is bypassed (dry passthrough, no resampling): show both rates.
     if let Some(native) = native_rate
-        && native.abs_diff(ctx.engine_sample_rate) > 1
+        && native.abs_diff(ctx.engine_sample_rate()) > 1
     {
-        content = content.push(
-            text(format!(
-                "{}: {native} Hz · {} Hz",
-                tr!(nam_rate_mismatch_bypassed),
-                ctx.engine_sample_rate
-            ))
-            .style(text_color(COLOR_WARNING)),
-        );
+        content = content.push(rate_mismatch_callout(
+            native,
+            ctx.device_sample_rate,
+            ctx.oversampling,
+        ));
     }
     content = content
         .push(rule::horizontal(1))
@@ -377,6 +388,70 @@ fn stage_pane<'a>(ctx: &NamViewContext<'a>, pane: &PaneState) -> Element<'a, Mes
         .spacing(SPACING_TIGHT)
         .height(Length::Fill)
         .into()
+}
+
+/// The engine passes a mismatched model through dry (no resampling): say so loudly,
+/// with both rates and the setting that would make it run.
+fn rate_mismatch_callout<'a>(
+    native: u32,
+    device_rate: u32,
+    oversampling: u32,
+) -> Element<'a, Message> {
+    let engine = if oversampling > 1 {
+        format!(
+            "{} ({} × {oversampling})",
+            format_khz(device_rate * oversampling),
+            format_khz(device_rate)
+        )
+    } else {
+        format_khz(device_rate)
+    };
+    let line = |label: &str, value: String| text(format!("{label}: {value}")).size(TEXT_SIZE_SMALL);
+    container(
+        column![
+            text(tr!(nam_rate_mismatch_title))
+                .size(TEXT_SIZE_LABEL)
+                .style(text_color(COLOR_WARNING)),
+            line(tr!(nam_rate_model), format_khz(native)),
+            line(tr!(nam_rate_engine), engine),
+            text(tr!(nam_rate_mismatch_explain))
+                .size(TEXT_SIZE_SMALL)
+                .style(text_color(COLOR_SUBTLE)),
+            text(rate_fix(native, device_rate, oversampling)).size(TEXT_SIZE_SMALL),
+        ]
+        .spacing(SPACING_TIGHT),
+    )
+    .width(Length::Fill)
+    .padding(PADDING_NORMAL)
+    .style(|_| {
+        container::Style::default()
+            .background(Color {
+                a: CALLOUT_TINT_ALPHA,
+                ..COLOR_WARNING
+            })
+            .border(
+                Border::default()
+                    .color(COLOR_WARNING)
+                    .width(1.0)
+                    .rounded(BORDER_RADIUS_CARD),
+            )
+    })
+    .into()
+}
+
+/// The settings change that makes `native` the engine rate.
+fn rate_fix(native: u32, device_rate: u32, oversampling: u32) -> String {
+    let device = format!("{} {}", tr!(nam_rate_fix_device), format_khz(native));
+    let fix = match (oversampling > 1, native.abs_diff(device_rate) <= 1) {
+        (true, true) => tr!(nam_rate_fix_oversampling).to_owned(),
+        (true, false) => format!(
+            "{device}{}{}",
+            tr!(nam_rate_fix_and),
+            tr!(nam_rate_fix_oversampling)
+        ),
+        (false, _) => device,
+    };
+    format!("{}{fix}", tr!(nam_rate_fix_prefix))
 }
 
 fn no_stage_message<'a>(chain_full: bool) -> Element<'a, Message> {
@@ -591,6 +666,21 @@ fn detail_rows<'a>(info: Option<&ModelInfo>, native_rate: u32) -> Element<'a, Me
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rate_fix_names_the_setting_that_is_off() {
+        let fix = |n, d, o| rate_fix(n, d, o);
+        // Oversampling alone pushed a matching device past the model's rate.
+        assert!(fix(48_000, 48_000, 2).contains(tr!(nam_rate_fix_oversampling)));
+        assert!(!fix(48_000, 48_000, 2).contains(tr!(nam_rate_fix_device)));
+        // No oversampling: only the device rate is wrong.
+        let device_only = fix(44_100, 48_000, 1);
+        assert!(device_only.contains("44.1 kHz"));
+        assert!(!device_only.contains(tr!(nam_rate_fix_oversampling)));
+        // Both are wrong.
+        let both = fix(44_100, 48_000, 2);
+        assert!(both.contains("44.1 kHz") && both.contains(tr!(nam_rate_fix_oversampling)));
+    }
 
     #[test]
     fn rates_are_shown_in_khz_without_trailing_zeros() {
